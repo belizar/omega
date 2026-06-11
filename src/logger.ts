@@ -20,7 +20,7 @@ class Logger {
     this.#level = level;
   }
 
-  private #log(level: LogLevel, levelName: string, message: string, data?: unknown) {
+  #log(level: LogLevel, levelName: string, message: string, data?: unknown) {
     if (level >= this.#level) {
       const entry: LogEntry = {
         timestamp: new Date().toISOString(),

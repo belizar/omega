@@ -1,7 +1,7 @@
 import { AgentConfig } from "./agent-config.js";
+import { logger } from "./logger.js";
 import { Message, ToolMessage } from "./message.js";
 import { LLMProvider } from "./providers/llm-provider.js";
-import { logger } from "./logger.js";
 
 type RunnerConstructorProps = {
   llmProvider: LLMProvider;
@@ -23,7 +23,11 @@ class Runner {
   #agentConfig: AgentConfig;
   #maxSteps: number;
 
-  constructor({ llmProvider, agentConfig, maxSteps = 15 }: RunnerConstructorProps) {
+  constructor({
+    llmProvider,
+    agentConfig,
+    maxSteps = 15,
+  }: RunnerConstructorProps) {
     this.#llmProvider = llmProvider;
     this.#agentConfig = agentConfig;
     this.#maxSteps = maxSteps;

@@ -8,10 +8,15 @@ import { EditTool } from "./tools/edit.js";
 import { ReadTool } from "./tools/read.js";
 import { WriteTool } from "./tools/write.js";
 import { REPL } from "./transport.js";
+import { validateEnv } from "./config.js";
+import { logger } from "./logger.js";
 
 dotenv.config();
 
+const config = validateEnv();
+
 const main = async () => {
+  logger.info("Omega agent starting");
   const repl = new REPL();
   const session = new Session();
 
@@ -37,8 +42,8 @@ const main = async () => {
                     - Respondé siempre en español.
                     - Sé conciso: explicá brevemente qué hiciste y por qué, sin resúmenes largos.
                     - Texto plano. Sin emojis ni formato decorativo.`,
-    model: "claude-haiku-4-5-20251001",
-    maxTokens: 1024,
+    model: config.model,
+    maxTokens: config.maxTokens,
   });
 
   haikuAgent
@@ -47,17 +52,19 @@ const main = async () => {
     .addTool(new EditTool())
     .addTool(new WriteTool());
 
-  const anthropic = new AnthropicProvider();
+  const anthropic = new AnthropicProvider(config.anthropicApiKey);
 
   const runner = new Runner({
     llmProvider: anthropic,
     agentConfig: haikuAgent,
+    maxSteps: config.maxSteps,
   });
 
   while (true) {
     const input = await repl.input();
     if (input === "exit") {
       repl.close();
+      logger.info("Omega agent stopped");
       break;
     }
 
@@ -86,4 +93,7 @@ const main = async () => {
   }
 };
 
-main();
+main().catch((err) => {
+  logger.error("Fatal error", err);
+  process.exit(1);
+});
