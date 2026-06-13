@@ -1,7 +1,7 @@
 import { AgentConfig } from "../agent-config.js";
+import { logger } from "../logger.js";
 import { Message } from "../message.js";
 import { LLMProvider } from "./llm-provider.js";
-import { logger } from "../logger.js";
 
 const TIMEOUT_MS = 60000; // 60 segundos
 const MAX_RETRIES = 3;
@@ -42,7 +42,7 @@ class AnthropicProvider extends LLMProvider {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
+      const response = await fetch(this.url(), {
         method: "POST",
         headers,
         body: JSON.stringify(body),
@@ -67,7 +67,9 @@ class AnthropicProvider extends LLMProvider {
       if (response.status === 429 || response.status === 529) {
         if (attempt < MAX_RETRIES) {
           const backoffMs = INITIAL_BACKOFF_MS * Math.pow(2, attempt - 1);
-          logger.warn(`Rate limited. Retrying in ${backoffMs}ms (attempt ${attempt}/${MAX_RETRIES})`);
+          logger.warn(
+            `Rate limited. Retrying in ${backoffMs}ms (attempt ${attempt}/${MAX_RETRIES})`,
+          );
           await this.sleep(backoffMs);
           return this.callWithRetry(messages, agent, attempt + 1);
         }
@@ -75,7 +77,9 @@ class AnthropicProvider extends LLMProvider {
 
       const errorData = await response.json();
       logger.error(`API error (${response.status})`, errorData);
-      throw new Error(`Anthropic API error: ${response.status} - ${JSON.stringify(errorData)}`);
+      throw new Error(
+        `Anthropic API error: ${response.status} - ${JSON.stringify(errorData)}`,
+      );
     } catch (err: any) {
       if (err.name === "AbortError") {
         logger.error("API request timeout");

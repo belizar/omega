@@ -1,4 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { readFileSync, rmSync, existsSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 import { Logger, LogLevel } from "../logger.js";
 
 describe("Logger", () => {
@@ -6,7 +9,8 @@ describe("Logger", () => {
   let consoleSpy: any;
 
   beforeEach(() => {
-    logger = new Logger(LogLevel.DEBUG);
+    // toConsole: true para poder verificar la salida a consola
+    logger = new Logger({ level: LogLevel.DEBUG, toConsole: true });
     consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
   });
 
@@ -18,7 +22,6 @@ describe("Logger", () => {
     logger.debug("Debug message");
     expect(consoleSpy).toHaveBeenCalledWith(
       expect.stringContaining("DEBUG: Debug message"),
-      "",
     );
   });
 
@@ -26,7 +29,6 @@ describe("Logger", () => {
     logger.info("Info message");
     expect(consoleSpy).toHaveBeenCalledWith(
       expect.stringContaining("INFO: Info message"),
-      "",
     );
   });
 
@@ -34,7 +36,6 @@ describe("Logger", () => {
     logger.warn("Warning message");
     expect(consoleSpy).toHaveBeenCalledWith(
       expect.stringContaining("WARN: Warning message"),
-      "",
     );
   });
 
@@ -42,8 +43,15 @@ describe("Logger", () => {
     logger.error("Error message");
     expect(consoleSpy).toHaveBeenCalledWith(
       expect.stringContaining("ERROR: Error message"),
-      "",
     );
+  });
+
+  it("should NOT log to console by default (REPL stays clean)", () => {
+    const silent = new Logger({ level: LogLevel.DEBUG });
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+    silent.info("Should not reach console");
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
   });
 
   it("should include data in log output", () => {
@@ -69,7 +77,7 @@ describe("Logger", () => {
   });
 
   it("should respect log level filtering", () => {
-    const infoLogger = new Logger(LogLevel.INFO);
+    const infoLogger = new Logger({ level: LogLevel.INFO, toConsole: true });
     const consoleSpy2 = vi.spyOn(console, "log").mockImplementation(() => {});
     infoLogger.debug("Debug message");
     expect(consoleSpy2).not.toHaveBeenCalled();
@@ -80,5 +88,24 @@ describe("Logger", () => {
     logger.info("Timestamped message");
     const logs = logger.getLogs();
     expect(logs[0].timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  it("should write logs to a file when configured", () => {
+    const path = join(tmpdir(), `omega-test-${process.pid}.log`);
+    if (existsSync(path)) rmSync(path);
+    try {
+      const fileLogger = new Logger({ level: LogLevel.INFO, logFile: path });
+      fileLogger.info("Persisted line", { n: 1 });
+      fileLogger.error("Another line");
+
+      const contents = readFileSync(path, "utf-8");
+      expect(contents).toContain("INFO: Persisted line");
+      expect(contents).toContain('{"n":1}');
+      expect(contents).toContain("ERROR: Another line");
+      // dos llamadas => dos lineas
+      expect(contents.trim().split("\n")).toHaveLength(2);
+    } finally {
+      if (existsSync(path)) rmSync(path);
+    }
   });
 });

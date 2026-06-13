@@ -1,4 +1,5 @@
 import { AgentConfig } from "./agent-config.js";
+import { truncate } from "./context-management.js";
 import { logger } from "./logger.js";
 import { Message, ToolMessage } from "./message.js";
 import { LLMProvider } from "./providers/llm-provider.js";
@@ -22,6 +23,12 @@ class Runner {
   #llmProvider: LLMProvider;
   #agentConfig: AgentConfig;
   #maxSteps: number;
+  #metrics: {
+    totalInputTokens: number;
+    totalOutputTokens: number;
+    totalToolCalls: number;
+    startTime: number;
+  };
 
   constructor({
     llmProvider,
@@ -31,6 +38,12 @@ class Runner {
     this.#llmProvider = llmProvider;
     this.#agentConfig = agentConfig;
     this.#maxSteps = maxSteps;
+    this.#metrics = {
+      totalInputTokens: 0,
+      totalOutputTokens: 0,
+      totalToolCalls: 0,
+      startTime: Date.now(),
+    };
   }
 
   async *run(incomingContext: readonly Message[]): AsyncGenerator<RunnerEvent> {
@@ -43,6 +56,16 @@ class Runner {
         workingContext,
         this.#agentConfig,
       );
+
+      // Track tokens
+      if (data.usage) {
+        this.#metrics.totalInputTokens += data.usage.input_tokens || 0;
+        this.#metrics.totalOutputTokens += data.usage.output_tokens || 0;
+        logger.debug("Token usage", {
+          input: data.usage.input_tokens,
+          output: data.usage.output_tokens,
+        });
+      }
 
       const assistantMessage: Message = {
         role: "assistant",
@@ -57,15 +80,45 @@ class Runner {
           yield { type: "text", text: block.text };
         }
         if (block.type === "tool_use") {
+          this.#metrics.totalToolCalls++;
+
           const tool = this.#agentConfig.getTool(block.name);
+          if (!tool) {
+            const output = `Error: unknown tool "${block.name}"`;
+            logger.error(output);
+            yield { type: "tool_result", output };
+            toolResults.push({
+              type: "tool_result",
+              tool_use_id: block.id,
+              content: output,
+              is_error: true,
+            });
+            continue;
+          }
+
           yield { type: "text", text: `Usando tool: ${tool.name}` };
-          const toolResult = tool.execute(block.input);
-          yield { type: "tool_result", output: toolResult as string };
+
+          let output: string;
+          let isError = false;
+          try {
+            output = tool.execute(block.input) as string;
+          } catch (err: any) {
+            isError = true;
+            output = `Error executing tool "${tool.name}": ${err?.message ?? String(err)}`;
+            logger.error("Tool execution threw", {
+              tool: tool.name,
+              error: output,
+            });
+          }
+
+          const shown = truncate(output, 200);
+
+          yield { type: "tool_result", output: shown };
           toolResults.push({
             type: "tool_result",
             tool_use_id: block.id,
-            content: toolResult,
-            is_error: false,
+            content: shown,
+            is_error: isError,
           });
         }
       }
@@ -74,6 +127,15 @@ class Runner {
         const toolMessage: Message = { role: "user", content: toolResults };
         workingContext.push(toolMessage);
         yield { type: "state", message: toolMessage };
+      }
+
+      if (data.stop_reason === "max_tokens") {
+        logger.warn("Respuesta cortada por max_tokens");
+        yield {
+          type: "text",
+          text: "⚠ La respuesta se cortó (max_tokens). Subí el límite o pedí algo más chico.",
+        };
+        break;
       }
 
       if (data.stop_reason === "end_turn") {
@@ -85,6 +147,22 @@ class Runner {
         logger.warn(`Max steps reached (${this.#maxSteps})`);
       }
     }
+  }
+
+  getMetrics() {
+    return {
+      ...this.#metrics,
+      durationMs: Date.now() - this.#metrics.startTime,
+    };
+  }
+
+  resetMetrics() {
+    this.#metrics = {
+      totalInputTokens: 0,
+      totalOutputTokens: 0,
+      totalToolCalls: 0,
+      startTime: Date.now(),
+    };
   }
 }
 

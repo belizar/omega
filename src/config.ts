@@ -2,6 +2,7 @@ import { logger } from "./logger.js";
 
 interface Config {
   anthropicApiKey: string;
+  openrouterApiKey?: string;
   model: string;
   maxTokens: number;
   maxSteps: number;
@@ -17,6 +18,8 @@ function validateEnv(): Config {
     throw new Error("ANTHROPIC_API_KEY environment variable is required");
   }
 
+  const openrouterApiKey = process.env.OPENROUTER_API_KEY;
+
   const model = process.env.MODEL || "claude-haiku-4-5-20251001";
   const maxTokens = parseInt(process.env.MAX_TOKENS || "1024", 10);
   const maxSteps = parseInt(process.env.MAX_STEPS || "15", 10);
@@ -24,13 +27,19 @@ function validateEnv(): Config {
 
   const config: Config = {
     anthropicApiKey: apiKey,
+    openrouterApiKey,
     model,
     maxTokens,
     maxSteps,
     nodeEnv,
   };
 
-  logger.info("Config loaded successfully", { model, maxTokens, maxSteps, nodeEnv });
+  logger.info("Config loaded successfully", {
+    model,
+    maxTokens,
+    maxSteps,
+    nodeEnv,
+  });
   return config;
 }
 
