@@ -48,8 +48,8 @@ export class WriteTool extends Tool<WriteInput, string> {
       writeFileSync(path, content, "utf-8");
       logger.info("File written successfully", { path });
       return `Escrito ${path} correctamente.`;
-    } catch (err: any) {
-      const errorMsg = `Error writing file: ${err.message}`;
+    } catch (err: unknown) {
+      const errorMsg = `Error writing file: ${err instanceof Error ? err.message : String(err)}`;
       logger.error(errorMsg, { error: err });
       return errorMsg;
     }

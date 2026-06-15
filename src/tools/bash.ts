@@ -61,13 +61,14 @@ export class BashTool extends Tool<BashInput, string> {
       });
       logger.info("Command executed successfully");
       return result;
-    } catch (err: any) {
-      if (err.code === "ETIMEDOUT" || err.signal === "SIGTERM") {
+    } catch (err: unknown) {
+      const error = err as { code?: string; signal?: string; stderr?: string; stdout?: string; message?: string };
+      if (error.code === "ETIMEDOUT" || error.signal === "SIGTERM") {
         const msg = `Error: command timed out after ${TIMEOUT_MS}ms`;
         logger.warn("Bash command timed out", { command });
         return msg;
       }
-      const errorMsg = err.stderr || err.stdout || err.message;
+      const errorMsg = error.stderr || error.stdout || error.message || String(err);
       logger.error("Bash command failed", { command, error: errorMsg });
       return errorMsg;
     }

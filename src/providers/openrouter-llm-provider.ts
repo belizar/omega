@@ -1,7 +1,7 @@
 import { AgentConfig } from "../agent-config.js";
 import { logger } from "../logger.js";
 import { Message, ToolMessage } from "../message.js";
-import { LLMProvider } from "./llm-provider.js";
+import { Block, LLMProvider, LLMResponse, TextBlock, ToolUseBlock } from "./llm-provider.js";
 
 const TIMEOUT_MS = 60000;
 const MAX_RETRIES = 3;
@@ -28,18 +28,6 @@ type OpenAIMessage =
 type OpenAITool = {
   type: "function";
   function: { name: string; description: string; parameters: unknown };
-};
-
-// ── Tipo de respuesta que el Runner espera ────────────────────────────────────
-
-type TextBlock = { type: "text"; text: string };
-type ToolUseBlock = { type: "tool_use"; id: string; name: string; input: unknown };
-type Block = TextBlock | ToolUseBlock;
-
-type ProviderResponse = {
-  content: Block[];
-  stop_reason: "end_turn" | "tool_use";
-  usage: { input_tokens: number; output_tokens: number };
 };
 
 // ── Helpers de traducción ─────────────────────────────────────────────────────
@@ -138,16 +126,18 @@ function translateTools(agent: AgentConfig): OpenAITool[] {
   });
 }
 
-function parseResponse(data: any): ProviderResponse {
-  const msg = data.choices[0].message;
+function parseResponse(data: Record<string, unknown>): LLMResponse {
+  const choice = (data.choices as Record<string, unknown>[])[0];
+  const msg = choice.message as Record<string, unknown>;
   const content: Block[] = [];
 
   if (typeof msg.content === "string" && msg.content.length > 0) {
     content.push({ type: "text", text: msg.content });
   }
 
-  if (Array.isArray(msg.tool_calls)) {
-    for (const tc of msg.tool_calls as OpenAIToolCall[]) {
+  const toolCalls = msg.tool_calls as OpenAIToolCall[] | undefined;
+  if (Array.isArray(toolCalls)) {
+    for (const tc of toolCalls) {
       content.push({
         type: "tool_use",
         id: tc.id,
@@ -157,15 +147,20 @@ function parseResponse(data: any): ProviderResponse {
     }
   }
 
-  const stop_reason: "end_turn" | "tool_use" =
-    data.choices[0].finish_reason === "tool_calls" ? "tool_use" : "end_turn";
+  const finishReason = choice.finish_reason as string;
+  const stop_reason: LLMResponse["stop_reason"] =
+    finishReason === "tool_calls" ? "tool_use" : finishReason === "max_tokens" ? "max_tokens" : "end_turn";
 
-  const usage = {
-    input_tokens: data.usage.prompt_tokens as number,
-    output_tokens: data.usage.completion_tokens as number,
+  const usageData = data.usage as Record<string, number>;
+
+  return {
+    content,
+    stop_reason,
+    usage: {
+      input_tokens: usageData.prompt_tokens,
+      output_tokens: usageData.completion_tokens,
+    },
   };
-
-  return { content, stop_reason, usage };
 }
 
 // ── Provider ──────────────────────────────────────────────────────────────────
@@ -186,7 +181,7 @@ class OpenRouterProvider extends LLMProvider {
     messages: Message[],
     agent: AgentConfig,
     attempt: number = 1,
-  ): Promise<ProviderResponse> {
+  ): Promise<LLMResponse> {
     const headers: Record<string, string> = {
       Authorization: `Bearer ${this.apiKey()}`,
       "Content-Type": "application/json",
@@ -240,8 +235,8 @@ class OpenRouterProvider extends LLMProvider {
       throw new Error(
         `OpenRouter API error: ${response.status} - ${JSON.stringify(errorData)}`,
       );
-    } catch (err: any) {
-      if (err.name === "AbortError") {
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === "AbortError") {
         logger.error("OpenRouter request timeout");
         throw new Error(`Request timeout after ${TIMEOUT_MS}ms`);
       }
@@ -249,7 +244,7 @@ class OpenRouterProvider extends LLMProvider {
     }
   }
 
-  async call(messages: Message[], agent: AgentConfig): Promise<ProviderResponse> {
+  async call(messages: Message[], agent: AgentConfig): Promise<LLMResponse> {
     logger.info("Making API call to OpenRouter");
     return this.callWithRetry(messages, agent);
   }

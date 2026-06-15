@@ -33,9 +33,9 @@ class Session {
           id: this.#id,
           messageCount: this.#messages.length,
         });
-      } catch (err: any) {
+      } catch (err: unknown) {
         logger.warn("Failed to load session file, starting fresh", {
-          error: err.message,
+          error: err instanceof Error ? err.message : String(err),
         });
       }
     }
@@ -101,8 +101,8 @@ class Session {
         ),
         "utf-8",
       );
-    } catch (err: any) {
-      logger.error("Failed to save session", { error: err.message });
+    } catch (err: unknown) {
+      logger.error("Failed to save session", { error: err instanceof Error ? err.message : String(err) });
     }
   }
 }

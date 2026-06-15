@@ -2,7 +2,7 @@ import { AgentConfig } from "./agent-config.js";
 import { truncate } from "./context-management.js";
 import { logger } from "./logger.js";
 import { Message, ToolMessage } from "./message.js";
-import { LLMProvider } from "./providers/llm-provider.js";
+import { LLMProvider, LLMResponse } from "./providers/llm-provider.js";
 
 type RunnerConstructorProps = {
   llmProvider: LLMProvider;
@@ -52,24 +52,22 @@ class Runner {
 
     let steps = this.#maxSteps;
     while (steps > 0) {
-      const data: any = await this.#llmProvider.call(
+      const data: LLMResponse = await this.#llmProvider.call(
         workingContext,
         this.#agentConfig,
       );
 
       // Track tokens
-      if (data.usage) {
-        this.#metrics.totalInputTokens += data.usage.input_tokens || 0;
-        this.#metrics.totalOutputTokens += data.usage.output_tokens || 0;
-        logger.debug("Token usage", {
-          input: data.usage.input_tokens,
-          output: data.usage.output_tokens,
-        });
-      }
+      this.#metrics.totalInputTokens += data.usage.input_tokens;
+      this.#metrics.totalOutputTokens += data.usage.output_tokens;
+      logger.debug("Token usage", {
+        input: data.usage.input_tokens,
+        output: data.usage.output_tokens,
+      });
 
       const assistantMessage: Message = {
         role: "assistant",
-        content: data.content,
+        content: data.content as Message["content"],
       };
       workingContext.push(assistantMessage);
       yield { type: "state", message: assistantMessage };
@@ -96,15 +94,15 @@ class Runner {
             continue;
           }
 
-          yield { type: "text", text: `Usando tool: ${tool.name}` };
+          yield { type: "tool_use", name: tool.name, input: block.input };
 
           let output: string;
           let isError = false;
           try {
             output = tool.execute(block.input) as string;
-          } catch (err: any) {
+          } catch (err: unknown) {
             isError = true;
-            output = `Error executing tool "${tool.name}": ${err?.message ?? String(err)}`;
+            output = `Error executing tool "${tool.name}": ${err instanceof Error ? err.message : String(err)}`;
             logger.error("Tool execution threw", {
               tool: tool.name,
               error: output,

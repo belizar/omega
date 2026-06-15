@@ -1,11 +1,24 @@
 import { AgentConfig } from "../agent-config.js";
 import { logger } from "../logger.js";
 import { Message } from "../message.js";
-import { LLMProvider } from "./llm-provider.js";
+import { Block, LLMProvider, LLMResponse } from "./llm-provider.js";
 
-const TIMEOUT_MS = 60000; // 60 segundos
+const TIMEOUT_MS = 60000;
 const MAX_RETRIES = 3;
 const INITIAL_BACKOFF_MS = 1000;
+
+type AnthropicContentBlock =
+  | { type: "text"; text: string }
+  | { type: "tool_use"; id: string; name: string; input: unknown };
+
+type AnthropicResponse = {
+  id: string;
+  type: "message";
+  role: "assistant";
+  content: AnthropicContentBlock[];
+  stop_reason: "end_turn" | "max_tokens" | "tool_use";
+  usage: { input_tokens: number; output_tokens: number };
+};
 
 class AnthropicProvider extends LLMProvider {
   constructor(apiKey: string) {
@@ -19,18 +32,41 @@ class AnthropicProvider extends LLMProvider {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+  private parseResponse(data: AnthropicResponse): LLMResponse {
+    const content: Block[] = data.content.map((block) => {
+      if (block.type === "text") {
+        return { type: "text", text: block.text };
+      }
+      return {
+        type: "tool_use",
+        id: block.id,
+        name: block.name,
+        input: block.input,
+      };
+    });
+
+    return {
+      content,
+      stop_reason: data.stop_reason === "tool_use" ? "tool_use" : data.stop_reason,
+      usage: {
+        input_tokens: data.usage.input_tokens,
+        output_tokens: data.usage.output_tokens,
+      },
+    };
+  }
+
   private async callWithRetry(
     messages: Message[],
     agent: AgentConfig,
     attempt: number = 1,
-  ): Promise<unknown> {
-    const headers = {
+  ): Promise<LLMResponse> {
+    const headers: Record<string, string> = {
       "x-api-key": this.apiKey(),
       "anthropic-version": "2023-06-01",
       "content-type": "application/json",
     };
 
-    const body = {
+    const body: Record<string, unknown> = {
       model: agent.model,
       system: agent.systemPrompt,
       max_tokens: agent.maxTokens,
@@ -52,14 +88,13 @@ class AnthropicProvider extends LLMProvider {
       clearTimeout(timeoutId);
 
       if (response.ok) {
-        const data = await response.json();
+        const data = (await response.json()) as AnthropicResponse;
         logger.info("API call successful");
-        return data;
+        return this.parseResponse(data);
       }
 
-      // Handle specific error codes
       if (response.status === 401) {
-        const error = `Invalid API key`;
+        const error = "Invalid API key";
         logger.error(error);
         throw new Error(error);
       }
@@ -80,8 +115,8 @@ class AnthropicProvider extends LLMProvider {
       throw new Error(
         `Anthropic API error: ${response.status} - ${JSON.stringify(errorData)}`,
       );
-    } catch (err: any) {
-      if (err.name === "AbortError") {
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === "AbortError") {
         logger.error("API request timeout");
         throw new Error(`Request timeout after ${TIMEOUT_MS}ms`);
       }
@@ -89,7 +124,7 @@ class AnthropicProvider extends LLMProvider {
     }
   }
 
-  async call(messages: Message[], agent: AgentConfig): Promise<unknown> {
+  async call(messages: Message[], agent: AgentConfig): Promise<LLMResponse> {
     logger.info("Making API call to Anthropic");
     return this.callWithRetry(messages, agent);
   }

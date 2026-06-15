@@ -45,8 +45,8 @@ export class EditTool extends Tool<EditInput, string> {
       let content: string;
       try {
         content = readFileSync(path, "utf-8");
-      } catch (err: any) {
-        throw new Error(`Could not read ${path}: ${err.message}`);
+      } catch (err: unknown) {
+        throw new Error(`Could not read ${path}: ${err instanceof Error ? err.message : String(err)}`);
       }
 
       const occurrences = content.split(oldText).length - 1;
@@ -64,14 +64,14 @@ export class EditTool extends Tool<EditInput, string> {
       const updated = content.replace(oldText, newText);
       try {
         writeFileSync(path, updated, "utf-8");
-      } catch (err: any) {
-        throw new Error(`Could not write ${path}: ${err.message}`);
+      } catch (err: unknown) {
+        throw new Error(`Could not write ${path}: ${err instanceof Error ? err.message : String(err)}`);
       }
 
       logger.info("File edited successfully", { path });
       return `Editado ${path} correctamente.`;
-    } catch (err: any) {
-      const errorMsg = err.message || `Unknown error editing file`;
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : `Unknown error editing file`;
       logger.error(errorMsg, { error: err });
       return `Error: ${errorMsg}`;
     }

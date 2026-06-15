@@ -6,6 +6,20 @@ type LLMProviderConstructorProps = {
   url: string;
 };
 
+// ── Tipos compartidos entre providers ────────────────────────────────────────
+
+type TextBlock = { type: "text"; text: string };
+type ToolUseBlock = { type: "tool_use"; id: string; name: string; input: unknown };
+type Block = TextBlock | ToolUseBlock;
+
+type LLMResponse = {
+  content: Block[];
+  stop_reason: "end_turn" | "tool_use" | "max_tokens";
+  usage: { input_tokens: number; output_tokens: number };
+};
+
+// ── Provider abstracto ───────────────────────────────────────────────────────
+
 abstract class LLMProvider {
   #apiKey: string;
   #url: string;
@@ -23,7 +37,7 @@ abstract class LLMProvider {
     return this.#url;
   }
 
-  abstract call(messages: Message[], agent: AgentConfig): Promise<unknown>;
+  abstract call(messages: Message[], agent: AgentConfig): Promise<LLMResponse>;
 }
 
-export { LLMProvider };
+export { Block, LLMProvider, LLMResponse, TextBlock, ToolUseBlock };
