@@ -1,19 +1,33 @@
-edit
+# Bug: duplicación visual en editor multilínea con Shift+Enter
 
-Editado src/index.ts correctamente.
+## Síntoma
 
-Ahora cambio la línea de métricas para usar los datos de sesión en vez de la variable local, y llamar a `session.addUsage()`
+Al insertar un salto de línea en el editor (Shift+Enter), el render se corrompe: el contenido se duplica o se superpone al anterior.
 
-edit
+## Causa raíz
 
-Editado src/index.ts correctamente.
+`src/tui/render.ts`, función `draw()`:
 
-⠹ PensandoSyntaxError: Unterminated string in JSON at position 149 (line 1 column 150)
-at JSON.parse (<anonymous>)
-at parseResponse (file:///Users/benjaminlizarraga/Workspace/omega/dist/providers/openrouter-llm-provider.js:110:29)
-at OpenRouterProvider.callWithRetry (file:///Users/benjaminlizarraga/Workspace/omega/dist/providers/openrouter-llm-provider.js:161:24)
-at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
-at async Runner.run (file:///Users/benjaminlizarraga/Workspace/omega/dist/runner.js:24:26)
-at async main (file:///Users/benjaminlizarraga/Workspace/omega/dist/index.js:101:20)
-error Command failed with exit code 1.
-info Visit https://yarnpkg.com/en/docs/cli/run for documentation about this command.
+```ts
+stdout.write(out.replace(/\n/g, "\r\n"));  // ANTES
+```
+
+En modo raw, cada `\r` reinicia la columna a 0. Eso descuadra el tracking de `getCursorPosition()`, que cuenta columnas asumiendo que cada `\n` es un salto simple sin modificar la columna. Al descuadrarse la columna, `\x1b8` (DECRC) restauraba a una coordenada incorrecta y `\x1b[0J` limpiaba desde ahí, dejando restos del frame anterior visibles (el efecto "duplicación").
+
+## Fix
+
+Quitar el `\r` del output del render:
+
+```ts
+stdout.write(out);  // AHORA: solo \n, sin \r
+```
+
+El `\r` solo se usa al posicionar el cursor explícitamente (`\r\x1b[{n}C`), donde sí es necesario para anclar la columna 0 antes de avanzar.
+
+## Archivos modificados
+
+- `src/tui/render.ts`: línea `stdout.write(out.replace(/\n/g, "\r\n"))` → `stdout.write(out)`.
+
+## Fecha
+
+2025-01-XX

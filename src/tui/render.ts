@@ -18,7 +18,11 @@ async function run<T>(component: InputComponent<T>): Promise<T> {
     stdout.write("\x1b[0J"); // borrar de acá hacia abajo
 
     const out = component.render();
-    stdout.write(out.replace(/\n/g, "\r\n"));
+    // En modo raw el terminal NO agrega carriage return automático.
+    // Escribimos solo \n: el cursor baja una línea y mantiene la columna,
+    // lo cual es consistente con getCursorPosition() que cuenta columnas
+    // como si cada \n fuera un salto simple (sin \r).
+    stdout.write(out);
 
     renderedRows = out.split("\n").length;
 
@@ -26,6 +30,7 @@ async function run<T>(component: InputComponent<T>): Promise<T> {
     if (cursorPos) {
       const up = renderedRows - 1 - cursorPos.row;
       if (up > 0) stdout.write(`\x1b[${up}A`);
+      // \r asegura columna 0 antes de avanzar a la columna deseada
       stdout.write(`\r\x1b[${cursorPos.col}C`);
     }
   };
