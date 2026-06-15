@@ -1,25 +1,35 @@
 import dotenv from "dotenv";
 import { AgentConfig } from "./agent-config.js";
+import { Context } from "./app-context.js";
+import { dispatchCommand } from "./commands/index.js";
 import { validateEnv } from "./config.js";
 import { logger } from "./logger.js";
-import { AnthropicProvider } from "./providers/anthropic-llm-provider.js";
+import { OpenRouterProvider } from "./providers/openrouter-llm-provider.js";
 import { Runner } from "./runner.js";
 import { Session } from "./session.js";
 import { BashTool } from "./tools/bash.js";
 import { EditTool } from "./tools/edit.js";
 import { ReadTool } from "./tools/read.js";
 import { WriteTool } from "./tools/write.js";
-import { REPL } from "./transport.js";
+import {
+  DisplayAssistantText,
+  DisplayToolCall,
+  DisplayToolResult,
+} from "./tui/components/display-text.js";
+import { LineEditor } from "./tui/components/line-editor.js";
+import { Spinner } from "./tui/components/spinner.js";
+import { run } from "./tui/render.js";
+import { enableRawMode } from "./tui/terminal.js";
 
 dotenv.config();
 
 const main = async () => {
+  enableRawMode();
   const session = new Session({ dir: ".omega/sessions" });
   logger.setLogFile(`.omega/logs/${session.id}.log`);
   logger.info("Omega agent starting", { session: session.id });
 
   const config = validateEnv();
-  const repl = new REPL();
 
   const haikuAgent = new AgentConfig({
     systemPrompt: `Sos omega, un asistente de coding que trabaja en el proyecto del usuario.
@@ -53,7 +63,7 @@ Estilo:
     .addTool(new EditTool())
     .addTool(new WriteTool());
 
-  const llmprovider = new AnthropicProvider(config.anthropicApiKey!);
+  const llmprovider = new OpenRouterProvider(config.openrouterApiKey!);
 
   const runner = new Runner({
     llmProvider: llmprovider,
@@ -61,8 +71,20 @@ Estilo:
     maxSteps: config.maxSteps,
   });
 
+  const spinner = new Spinner();
+  const assistantText = new DisplayAssistantText();
+  const toolCallText = new DisplayToolCall();
+  const toolResultText = new DisplayToolResult();
+
+  const ctx = new Context({ session, agentConfig: haikuAgent, runner });
+
   while (true) {
-    const input = await repl.input();
+    const input = await run<string>(new LineEditor());
+
+    if (await dispatchCommand(input, ctx)) {
+      continue;
+    }
+
     if (input === "exit") {
       logger.info("Omega agent stopped");
       break;
@@ -72,32 +94,38 @@ Estilo:
 
     const iterator = runner.run(session.messages);
 
-    const stopSpinner = repl.startSpinner();
+    spinner.start();
     let item = await iterator.next();
-    stopSpinner();
+    spinner.stop();
+
     while (!item.done) {
       const { value } = item;
 
       if (value.type === "text") {
-        repl.printAssistant(value.text);
+        assistantText.display(value.text);
+      }
+
+      if (value.type === "tool_use") {
+        toolCallText.display(value.name);
       }
 
       if (value.type === "tool_result") {
-        repl.printToolResult(value.output);
+        toolResultText.display(value.output);
       }
 
       if (value.type === "state") {
         session.addMessage(value.message);
       }
 
-      const stopSpinner = repl.startSpinner();
+      spinner.start();
       item = await iterator.next();
-      stopSpinner();
+      spinner.stop();
     }
   }
 };
 
 main().catch((err) => {
+  console.log(err);
   logger.error("Fatal error", err);
   process.exit(1);
 });
