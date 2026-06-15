@@ -306,4 +306,93 @@ describe("LineEditor", () => {
     editor.handleKey(down); // debería intentar historial, pero está vacío
     expect(editor.render()).toBe("> linea1\nlinea2"); // sin cambios
   });
+
+  // ---- Integridad del buffer en multilínea (regresión) ----
+
+  it("newline + tipeo no duplica el buffer", () => {
+    // Reproduce el escenario: escribir, insertar newline, seguir escribiendo.
+    // El buffer debe reflejar exactamente lo tipeado, sin duplicaciones.
+    typeChars(editor, "Primero");
+    expect(editor.render()).toBe("> Primero");
+    expect(editor.getResult()).toBe("Primero");
+
+    editor.handleKey(newline);
+    // Después del newline: buffer = "Primero\n", cursor al final
+    expect(editor.render()).toBe("> Primero\n");
+    expect(editor.getCursorPosition().row).toBe(1);
+    expect(editor.getCursorPosition().col).toBe(0);
+
+    typeChars(editor, "Segundo");
+    // Buffer: "Primero\nSegundo"
+    expect(editor.render()).toBe("> Primero\nSegundo");
+    expect(editor.getCursorPosition()).toEqual({ row: 1, col: 7 });
+
+    // Insertar otro newline y más texto
+    editor.handleKey(newline);
+    typeChars(editor, "Tercero");
+    expect(editor.render()).toBe("> Primero\nSegundo\nTercero");
+
+    // Commit y verificar getResult
+    editor.handleKey(enter);
+    expect(editor.getResult()).toBe("Primero\nSegundo\nTercero");
+  });
+
+  it("newline + tipeo + backspace mantiene integridad", () => {
+    typeChars(editor, "linea1");
+    editor.handleKey(newline);
+    typeChars(editor, "linea2");
+    editor.handleKey(newline);
+    typeChars(editor, "linea3");
+
+    // backspace hasta borrar "linea3"
+    for (let i = 0; i < 6; i++) editor.handleKey(backspace);
+    expect(editor.render()).toBe("> linea1\nlinea2\n");
+
+    // Borrar el newline entre linea1 y linea2
+    editor.handleKey(up); // subir a linea2
+    editor.handleKey(home); // inicio de linea2
+    editor.handleKey(backspace); // borrar el \n, uniendo linea1 y linea2
+    expect(editor.render()).toBe("> linea1linea2\n");
+  });
+
+  it("newline + navegación con up/down no corrompe buffer", () => {
+    typeChars(editor, "a");
+    editor.handleKey(newline);
+    typeChars(editor, "b");
+    editor.handleKey(newline);
+    typeChars(editor, "c");
+
+    // Navegar hacia arriba y abajo varias veces
+    editor.handleKey(up);
+    expect(editor.getCursorPosition().row).toBe(1);
+    editor.handleKey(up);
+    expect(editor.getCursorPosition().row).toBe(0);
+    editor.handleKey(down);
+    expect(editor.getCursorPosition().row).toBe(1);
+    editor.handleKey(down);
+    expect(editor.getCursorPosition().row).toBe(2);
+
+    // El buffer no debería haber cambiado
+    expect(editor.render()).toBe("> a\nb\nc");
+  });
+
+  it("reset después de multilínea limpia correctamente", () => {
+    typeChars(editor, "linea1");
+    editor.handleKey(newline);
+    typeChars(editor, "linea2");
+    editor.handleKey(enter);
+
+    const result = editor.getResult();
+    expect(result).toBe("linea1\nlinea2");
+    editor.addToHistory(result);
+
+    editor.reset();
+    expect(editor.render()).toBe("> ");
+    expect(editor.getCursorPosition()).toEqual({ row: 0, col: 2 });
+    expect(editor.isDone()).toBe(false);
+
+    // El historial debe conservar el comando multilínea
+    editor.handleKey(up);
+    expect(editor.render()).toBe("> linea1\nlinea2");
+  });
 });
