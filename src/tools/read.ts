@@ -54,8 +54,11 @@ export class ReadTool extends Tool<ReadInput, string> {
       const result = lines.slice(start, end).join("\n");
       logger.info("File slice read successfully", { path, start, end });
       return result;
-    } catch (err: any) {
-      const errorMsg = `Error reading ${input}: ${err.message}`;
+    } catch (err: unknown) {
+      const pathName = input !== null && typeof input === "object" && "path" in (input as object)
+        ? String((input as ReadInput).path)
+        : String(input);
+      const errorMsg = `Error reading ${pathName}: ${err instanceof Error ? err.message : String(err)}`;
       logger.error(errorMsg);
       return errorMsg;
     }
