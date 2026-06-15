@@ -33,11 +33,22 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
 };
 
 function calculateCost(model: string, inputTokens: number, outputTokens: number): number {
-  // Intentar match exacto primero, después por prefijo
   let pricing = MODEL_PRICING[model];
   if (!pricing) {
-    for (const [prefix, p] of Object.entries(MODEL_PRICING)) {
-      if (model.startsWith(prefix)) {
+    for (const [key, p] of Object.entries(MODEL_PRICING)) {
+      // Match exacto de la clave completa
+      if (model === key) {
+        pricing = p;
+        break;
+      }
+      // Match por prefijo: el modelo empieza con la clave (ej: "anthropic/claude-...")
+      if (model.startsWith(key)) {
+        pricing = p;
+        break;
+      }
+      // Match sin el prefijo del proveedor: "claude-haiku-4-5" vs "anthropic/claude-haiku-4-5"
+      const afterSlash = key.includes("/") ? key.split("/").slice(1).join("/") : key;
+      if (model.startsWith(afterSlash)) {
         pricing = p;
         break;
       }
