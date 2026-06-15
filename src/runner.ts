@@ -1,5 +1,5 @@
 import { AgentConfig } from "./agent-config.js";
-import { truncate } from "./context-management.js";
+import { pruneContext, truncate } from "./context-management.js";
 import { logger } from "./logger.js";
 import { Message, ToolMessage } from "./message.js";
 import { LLMProvider, LLMResponse } from "./providers/llm-provider.js";
@@ -8,6 +8,7 @@ type RunnerConstructorProps = {
   llmProvider: LLMProvider;
   agentConfig: AgentConfig;
   maxSteps?: number;
+  maxContextTokens?: number;
 };
 
 type RunnerEvent =
@@ -23,6 +24,7 @@ class Runner {
   #llmProvider: LLMProvider;
   #agentConfig: AgentConfig;
   #maxSteps: number;
+  #maxContextTokens: number;
   #metrics: {
     totalInputTokens: number;
     totalOutputTokens: number;
@@ -35,10 +37,12 @@ class Runner {
     llmProvider,
     agentConfig,
     maxSteps = 15,
+    maxContextTokens = 100_000,
   }: RunnerConstructorProps) {
     this.#llmProvider = llmProvider;
     this.#agentConfig = agentConfig;
     this.#maxSteps = maxSteps;
+    this.#maxContextTokens = maxContextTokens;
     this.#metrics = {
       totalInputTokens: 0,
       totalOutputTokens: 0,
@@ -54,8 +58,10 @@ class Runner {
 
     let steps = this.#maxSteps;
     while (steps > 0) {
+      // Podar workingContext antes de cada call para no pasarnos de la ventana
+      const prunedContext = pruneContext(workingContext, this.#maxContextTokens);
       const data: LLMResponse = await this.#llmProvider.call(
-        workingContext,
+        prunedContext,
         this.#agentConfig,
       );
 

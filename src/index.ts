@@ -73,6 +73,7 @@ Estilo:
     llmProvider: llmprovider,
     agentConfig: haikuAgent,
     maxSteps: config.maxSteps,
+    maxContextTokens: config.maxContextTokens,
   });
 
   const spinner = new Spinner();
