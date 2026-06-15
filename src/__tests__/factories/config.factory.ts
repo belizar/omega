@@ -9,6 +9,7 @@ export class ConfigFactory {
       maxTokens: overrides?.maxTokens || faker.number.int({ min: 512, max: 4096 }),
       maxSteps: overrides?.maxSteps || faker.number.int({ min: 5, max: 20 }),
       maxContextMessages: overrides?.maxContextMessages ?? 50,
+      maxContextTokens: overrides?.maxContextTokens ?? 100_000,
       nodeEnv: overrides?.nodeEnv || "test",
     };
   }

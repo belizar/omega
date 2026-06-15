@@ -7,6 +7,7 @@ interface Config {
   maxTokens: number;
   maxSteps: number;
   maxContextMessages: number;
+  maxContextTokens: number;
   nodeEnv: string;
 }
 
@@ -25,6 +26,7 @@ function validateEnv(): Config {
   const maxTokens = parseInt(process.env.MAX_TOKENS || "1024", 10);
   const maxSteps = parseInt(process.env.MAX_STEPS || "15", 10);
   const maxContextMessages = parseInt(process.env.MAX_CONTEXT_MESSAGES || "50", 10);
+  const maxContextTokens = parseInt(process.env.MAX_CONTEXT_TOKENS || "100000", 10);
   const nodeEnv = process.env.NODE_ENV || "development";
 
   const config: Config = {
@@ -34,6 +36,7 @@ function validateEnv(): Config {
     maxTokens,
     maxSteps,
     maxContextMessages,
+    maxContextTokens,
     nodeEnv,
   };
 

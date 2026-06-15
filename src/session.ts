@@ -3,15 +3,15 @@ import { writeFileSync, readFileSync, existsSync, mkdirSync, readdirSync, statSy
 import { dirname, join, basename } from "path";
 import { randomUUID } from "crypto";
 import { logger } from "./logger.js";
+import { estimateMessagesTokens, pruneContext } from "./context-management.js";
 
 type SessionOptions = {
   id?: string;
   // Si se setea, la sesión se persiste en <dir>/<id>.json.
   // Sin dir, la sesión vive solo en memoria (útil para tests).
   dir?: string;
-  // Máximo de mensajes a exponer al modelo (sliding window).
-  // Por defecto 50. El historial completo se guarda en disco igual.
-  maxMessages?: number;
+  /** Máximo de tokens de contexto a exponer al modelo (default 100000). */
+  maxContextTokens?: number;
 };
 
 class Session {
@@ -19,7 +19,7 @@ class Session {
   #id: string;
   #name: string;
   #sessionPath?: string;
-  #maxMessages: number;
+  #maxContextTokens: number;
   #totalCost: number;
   #totalTokens: { input: number; output: number };
 
@@ -27,7 +27,7 @@ class Session {
     this.#id = options.id ?? randomUUID();
     this.#name = "";
     this.#messages = [];
-    this.#maxMessages = options.maxMessages ?? 50;
+    this.#maxContextTokens = options.maxContextTokens ?? 100_000;
     this.#totalCost = 0;
     this.#totalTokens = { input: 0, output: 0 };
     this.#sessionPath = options.dir
@@ -85,18 +85,25 @@ class Session {
     this.#save();
   }
 
-  /** Devuelve los últimos N mensajes (sliding window).
-   * El historial completo se guarda en disco. */
-  get messages() {
-    if (this.#messages.length <= this.#maxMessages) {
-      return this.#messages;
-    }
-    return this.#messages.slice(this.#messages.length - this.#maxMessages);
+  /** Devuelve los mensajes podados por presupuesto de tokens.
+   * El historial completo se guarda en disco igual. */
+  get messages(): readonly Message[] {
+    return pruneContext(this.#messages, this.#maxContextTokens);
   }
 
   /** Devuelve el historial completo sin truncar */
-  get allMessages() {
+  get allMessages(): readonly Message[] {
     return this.#messages;
+  }
+
+  /** Tokens estimados que ocuparía el contexto actual enviado al modelo */
+  get contextTokens(): number {
+    return estimateMessagesTokens(this.messages);
+  }
+
+  /** Presupuesto máximo de tokens de contexto configurado */
+  get maxContextTokens(): number {
+    return this.#maxContextTokens;
   }
 
   /**
@@ -117,10 +124,6 @@ class Session {
 
   get totalTokens() {
     return this.#totalTokens;
-  }
-
-  get maxMessages() {
-    return this.#maxMessages;
   }
 
   /**

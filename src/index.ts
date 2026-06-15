@@ -30,7 +30,7 @@ const main = async () => {
   const config = validateEnv();
   const session = new Session({
     dir: ".omega/sessions",
-    maxMessages: config.maxContextMessages,
+    maxContextTokens: config.maxContextTokens,
   });
   logger.setLogFile(`.omega/logs/${session.id}.log`);
   logger.info("Omega agent starting", { session: session.id });
@@ -141,7 +141,7 @@ Estilo:
       ? "<$0.01"
       : `${metrics.totalCost.toFixed(2)}`;
     const runningStr = session.totalCost < 0.01 ? "<$0.01" : `${session.totalCost.toFixed(2)}`;
-    const metricsLine = `~ ${metrics.totalToolCalls} tools · in: ${metrics.totalInputTokens} · out: ${metrics.totalOutputTokens} tokens · ${durationSec}s · ${costStr} (total: ${runningStr})`;
+    const metricsLine = `~ ctx: ${session.contextTokens} tk · ${metrics.totalToolCalls} tools · in: ${metrics.totalInputTokens} · out: ${metrics.totalOutputTokens} tokens · ${durationSec}s · ${costStr} (total: ${runningStr})`;
     stdout.write(`\n ${dim(metricsLine)}\n`);
     runner.resetMetrics();
   }

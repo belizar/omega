@@ -75,7 +75,7 @@ class ResumeCommand implements Command<void> {
     const resumedSession = new Session({
       id: sessionId,
       dir,
-      maxMessages: ctx.session.maxMessages,
+      maxContextTokens: ctx.session.maxContextTokens,
     });
 
     const info = resumedSession.info();
