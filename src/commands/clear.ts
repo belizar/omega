@@ -5,7 +5,7 @@ import { Command } from "./command.js";
 class ClearCommand implements Command<void> {
   description = "Limpia la conversación actual";
 
-  handler(ctx: Context): void {
+  handler(ctx: Context, _args: string[]): void {
     ctx.session.clear();
     new DisplayAssistantText().display("Conversacion limpia");
   }

@@ -1,7 +1,7 @@
 import { AgentConfig } from "../agent-config.js";
 import { logger } from "../logger.js";
 import { Message } from "../message.js";
-import { Block, LLMProvider, LLMResponse } from "./llm-provider.js";
+import { Block, calculateCost, LLMProvider, LLMResponse } from "./llm-provider.js";
 
 const TIMEOUT_MS = 60000;
 const MAX_RETRIES = 3;
@@ -32,7 +32,7 @@ class AnthropicProvider extends LLMProvider {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  private parseResponse(data: AnthropicResponse): LLMResponse {
+  private parseResponse(data: AnthropicResponse, model: string): LLMResponse {
     const content: Block[] = data.content.map((block) => {
       if (block.type === "text") {
         return { type: "text", text: block.text };
@@ -52,6 +52,7 @@ class AnthropicProvider extends LLMProvider {
         input_tokens: data.usage.input_tokens,
         output_tokens: data.usage.output_tokens,
       },
+      cost: calculateCost(model, data.usage.input_tokens, data.usage.output_tokens),
     };
   }
 
@@ -90,7 +91,7 @@ class AnthropicProvider extends LLMProvider {
       if (response.ok) {
         const data = (await response.json()) as AnthropicResponse;
         logger.info("API call successful");
-        return this.parseResponse(data);
+        return this.parseResponse(data, agent.model);
       }
 
       if (response.status === 401) {

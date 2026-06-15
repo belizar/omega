@@ -2,6 +2,7 @@ import { writeFileSync, mkdirSync } from "fs";
 import { dirname } from "path";
 import { Tool } from "./tool.js";
 import { logger } from "../logger.js";
+import { isEnvFile, ENV_BLOCK_MESSAGE } from "./env-guard.js";
 
 type WriteInput = { path: string; content: string };
 
@@ -41,6 +42,11 @@ export class WriteTool extends Tool<WriteInput, string> {
 
       if (!path.trim()) {
         throw new Error("path cannot be empty");
+      }
+
+      if (isEnvFile(path)) {
+        logger.warn("Blocked write to env file", { path });
+        return ENV_BLOCK_MESSAGE;
       }
 
       logger.info("Writing file", { path, size: content.length });

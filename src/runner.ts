@@ -27,6 +27,7 @@ class Runner {
     totalInputTokens: number;
     totalOutputTokens: number;
     totalToolCalls: number;
+    totalCost: number;
     startTime: number;
   };
 
@@ -42,6 +43,7 @@ class Runner {
       totalInputTokens: 0,
       totalOutputTokens: 0,
       totalToolCalls: 0,
+      totalCost: 0,
       startTime: Date.now(),
     };
   }
@@ -57,9 +59,10 @@ class Runner {
         this.#agentConfig,
       );
 
-      // Track tokens
+      // Track tokens and cost
       this.#metrics.totalInputTokens += data.usage.input_tokens;
       this.#metrics.totalOutputTokens += data.usage.output_tokens;
+      this.#metrics.totalCost += data.cost;
       logger.debug("Token usage", {
         input: data.usage.input_tokens,
         output: data.usage.output_tokens,
@@ -159,6 +162,7 @@ class Runner {
       totalInputTokens: 0,
       totalOutputTokens: 0,
       totalToolCalls: 0,
+      totalCost: 0,
       startTime: Date.now(),
     };
   }

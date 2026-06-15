@@ -1,7 +1,7 @@
 import { AgentConfig } from "../agent-config.js";
 import { logger } from "../logger.js";
 import { Message, ToolMessage } from "../message.js";
-import { Block, LLMProvider, LLMResponse, TextBlock, ToolUseBlock } from "./llm-provider.js";
+import { Block, calculateCost, LLMProvider, LLMResponse, TextBlock, ToolUseBlock } from "./llm-provider.js";
 
 const TIMEOUT_MS = 60000;
 const MAX_RETRIES = 3;
@@ -126,7 +126,7 @@ function translateTools(agent: AgentConfig): OpenAITool[] {
   });
 }
 
-function parseResponse(data: Record<string, unknown>): LLMResponse {
+function parseResponse(data: Record<string, unknown>, model: string): LLMResponse {
   const choice = (data.choices as Record<string, unknown>[])[0];
   const msg = choice.message as Record<string, unknown>;
   const content: Block[] = [];
@@ -138,11 +138,24 @@ function parseResponse(data: Record<string, unknown>): LLMResponse {
   const toolCalls = msg.tool_calls as OpenAIToolCall[] | undefined;
   if (Array.isArray(toolCalls)) {
     for (const tc of toolCalls) {
+      let input: unknown;
+      try {
+        // Si arguments ya es un objeto (puede pasar según el provider), usarlo directo
+        input = typeof tc.function.arguments === "string"
+          ? JSON.parse(tc.function.arguments)
+          : tc.function.arguments;
+      } catch {
+        logger.warn("Malformed tool call arguments from LLM, using empty object", {
+          tool: tc.function.name,
+          arguments: tc.function.arguments,
+        });
+        input = {};
+      }
       content.push({
         type: "tool_use",
         id: tc.id,
         name: tc.function.name,
-        input: JSON.parse(tc.function.arguments),
+        input,
       });
     }
   }
@@ -160,6 +173,7 @@ function parseResponse(data: Record<string, unknown>): LLMResponse {
       input_tokens: usageData.prompt_tokens,
       output_tokens: usageData.completion_tokens,
     },
+    cost: calculateCost(model, usageData.prompt_tokens, usageData.completion_tokens),
   };
 }
 
@@ -210,7 +224,7 @@ class OpenRouterProvider extends LLMProvider {
       if (response.ok) {
         const data = await response.json();
         logger.info("OpenRouter API call successful");
-        return parseResponse(data);
+        return parseResponse(data, agent.model);
       }
 
       if (response.status === 401) {

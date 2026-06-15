@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from "fs";
 import { Tool } from "./tool.js";
 import { logger } from "../logger.js";
+import { isEnvFile, ENV_BLOCK_MESSAGE } from "./env-guard.js";
 
 type EditInput = { path: string; oldText: string; newText: string };
 
@@ -38,6 +39,11 @@ export class EditTool extends Tool<EditInput, string> {
 
       if (typeof path !== "string" || typeof oldText !== "string" || typeof newText !== "string") {
         throw new Error("path, oldText, and newText must be strings");
+      }
+
+      if (isEnvFile(path)) {
+        logger.warn("Blocked edit of env file", { path });
+        return ENV_BLOCK_MESSAGE;
       }
 
       logger.info("Editing file", { path, oldTextLength: oldText.length, newTextLength: newText.length });

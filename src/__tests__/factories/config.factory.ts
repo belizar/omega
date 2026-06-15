@@ -8,6 +8,7 @@ export class ConfigFactory {
       model: overrides?.model || "claude-haiku-4-5-20251001",
       maxTokens: overrides?.maxTokens || faker.number.int({ min: 512, max: 4096 }),
       maxSteps: overrides?.maxSteps || faker.number.int({ min: 5, max: 20 }),
+      maxContextMessages: overrides?.maxContextMessages ?? 50,
       nodeEnv: overrides?.nodeEnv || "test",
     };
   }

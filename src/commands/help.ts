@@ -10,7 +10,7 @@ class HelpCommand implements Command<void> {
     this.#commandsMap = commandsMap;
   }
 
-  handler(_ctx: Context): void {
+  handler(_ctx: Context, _args: string[]): void {
     const entries = Object.entries(this.#commandsMap);
 
     if (entries.length === 0) {

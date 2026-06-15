@@ -19,6 +19,18 @@ const BLOCKED_PATTERNS = [
   /\b(shutdown|reboot|halt|poweroff)\b/i, // apagar/reiniciar la máquina
 ];
 
+// Patrones que involucran archivos .env (lectura o escritura)
+const ENV_ACCESS_PATTERNS = [
+  /(^|[|&;`\s])(cat|head|tail|less|more|bat|nl|od|strings)\s+.*\.env\b/i,
+  /(^|[|&;`\s])(cp|mv)\s+.*\.env\b/i,
+  /(^|[|&;`\s])(cp|mv)\s+\S+\s+.*\.env\b/i,
+  />>>?\s*.*\.env\b/i,        // > .env, >> .env
+  /(^|[|&;`\s])echo\s+.*>>>?\s*.*\.env\b/i,
+  /(^|[|&;`\s])tee\s+.*\.env\b/i,
+  /(^|[|&;`\s])(grep|rg|awk|sed|cut|sort|uniq|diff|comm|join|paste)\s+.*\.env\b/i,
+  /\.env[\s'"]*$/i,            // cualquier comando cuyo último arg sea .env
+];
+
 export class BashTool extends Tool<BashInput, string> {
   constructor() {
     super({
@@ -38,7 +50,8 @@ export class BashTool extends Tool<BashInput, string> {
   }
 
   private isCommandBlocked(command: string): boolean {
-    return BLOCKED_PATTERNS.some((pattern) => pattern.test(command));
+    return BLOCKED_PATTERNS.some((pattern) => pattern.test(command))
+      || ENV_ACCESS_PATTERNS.some((pattern) => pattern.test(command));
   }
 
   execute({ command }: BashInput): string {

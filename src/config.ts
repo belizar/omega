@@ -6,6 +6,7 @@ interface Config {
   model: string;
   maxTokens: number;
   maxSteps: number;
+  maxContextMessages: number;
   nodeEnv: string;
 }
 
@@ -23,6 +24,7 @@ function validateEnv(): Config {
   const model = process.env.MODEL || "claude-haiku-4-5-20251001";
   const maxTokens = parseInt(process.env.MAX_TOKENS || "1024", 10);
   const maxSteps = parseInt(process.env.MAX_STEPS || "15", 10);
+  const maxContextMessages = parseInt(process.env.MAX_CONTEXT_MESSAGES || "50", 10);
   const nodeEnv = process.env.NODE_ENV || "development";
 
   const config: Config = {
@@ -31,6 +33,7 @@ function validateEnv(): Config {
     model,
     maxTokens,
     maxSteps,
+    maxContextMessages,
     nodeEnv,
   };
 

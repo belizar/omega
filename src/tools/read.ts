@@ -1,6 +1,7 @@
 import { readFileSync } from "fs";
 import { Tool } from "./tool.js";
 import { logger } from "../logger.js";
+import { isEnvFile, ENV_BLOCK_MESSAGE } from "./env-guard.js";
 
 type ReadInput = { path: string; offset?: number; limit?: number };
 
@@ -37,6 +38,11 @@ export class ReadTool extends Tool<ReadInput, string> {
 
       if (typeof path !== "string" || !path.trim()) {
         throw new Error("path must be a non-empty string");
+      }
+
+      if (isEnvFile(path)) {
+        logger.warn("Blocked read of env file", { path });
+        return ENV_BLOCK_MESSAGE;
       }
 
       logger.info("Reading file", { path, offset, limit });

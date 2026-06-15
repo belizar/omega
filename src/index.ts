@@ -1,4 +1,5 @@
 import dotenv from "dotenv";
+import { stdout } from "process";
 import { AgentConfig } from "./agent-config.js";
 import { Context } from "./app-context.js";
 import { dispatchCommand } from "./commands/index.js";
@@ -19,17 +20,20 @@ import {
 import { LineEditor } from "./tui/components/line-editor.js";
 import { Spinner } from "./tui/components/spinner.js";
 import { run } from "./tui/render.js";
-import { enableRawMode } from "./tui/terminal.js";
+import { disableRawMode, enableRawMode } from "./tui/terminal.js";
+import { dim } from "./tui/theme.js";
 
 dotenv.config();
 
 const main = async () => {
   enableRawMode();
-  const session = new Session({ dir: ".omega/sessions" });
+  const config = validateEnv();
+  const session = new Session({
+    dir: ".omega/sessions",
+    maxMessages: config.maxContextMessages,
+  });
   logger.setLogFile(`.omega/logs/${session.id}.log`);
   logger.info("Omega agent starting", { session: session.id });
-
-  const config = validateEnv();
 
   const haikuAgent = new AgentConfig({
     systemPrompt: `Sos omega, un asistente de coding que trabaja en el proyecto del usuario.
@@ -78,8 +82,15 @@ Estilo:
 
   const ctx = new Context({ session, agentConfig: haikuAgent, runner });
 
+  const lineEditor = new LineEditor();
+
   while (true) {
-    const input = await run<string>(new LineEditor());
+    const input = await run<string>(lineEditor);
+    lineEditor.reset();
+
+    if (input.trim() !== "") {
+      lineEditor.addToHistory(input);
+    }
 
     if (await dispatchCommand(input, ctx)) {
       continue;
@@ -121,10 +132,23 @@ Estilo:
       item = await iterator.next();
       spinner.stop();
     }
+
+    // Mostrar métricas de la iteración
+    const metrics = runner.getMetrics();
+    session.addUsage(metrics.totalInputTokens, metrics.totalOutputTokens, metrics.totalCost);
+    const durationSec = (metrics.durationMs / 1000).toFixed(1);
+    const costStr = metrics.totalCost < 0.01
+      ? "<$0.01"
+      : `${metrics.totalCost.toFixed(2)}`;
+    const runningStr = session.totalCost < 0.01 ? "<$0.01" : `${session.totalCost.toFixed(2)}`;
+    const metricsLine = `~ ${metrics.totalToolCalls} tools · in: ${metrics.totalInputTokens} · out: ${metrics.totalOutputTokens} tokens · ${durationSec}s · ${costStr} (total: ${runningStr})`;
+    stdout.write(`\n ${dim(metricsLine)}\n`);
+    runner.resetMetrics();
   }
 };
 
 main().catch((err) => {
+  disableRawMode();
   console.log(err);
   logger.error("Fatal error", err);
   process.exit(1);

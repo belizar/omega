@@ -16,7 +16,39 @@ type LLMResponse = {
   content: Block[];
   stop_reason: "end_turn" | "tool_use" | "max_tokens";
   usage: { input_tokens: number; output_tokens: number };
+  cost: number; // USD
 };
+
+// ── Precios OpenRouter por millón de tokens (USD) ────────────────────────────
+
+const MODEL_PRICING: Record<string, { input: number; output: number }> = {
+  // Claude 4 / 4.5
+  "anthropic/claude-haiku-4-5": { input: 0.80, output: 4.00 },
+  "anthropic/claude-sonnet-4": { input: 3.00, output: 15.00 },
+  "anthropic/claude-opus-4": { input: 15.00, output: 75.00 },
+  // Claude 3.5
+  "anthropic/claude-3.5-haiku": { input: 0.80, output: 4.00 },
+  "anthropic/claude-3.5-sonnet": { input: 3.00, output: 15.00 },
+  "anthropic/claude-3-opus": { input: 15.00, output: 75.00 },
+};
+
+function calculateCost(model: string, inputTokens: number, outputTokens: number): number {
+  // Intentar match exacto primero, después por prefijo
+  let pricing = MODEL_PRICING[model];
+  if (!pricing) {
+    for (const [prefix, p] of Object.entries(MODEL_PRICING)) {
+      if (model.startsWith(prefix)) {
+        pricing = p;
+        break;
+      }
+    }
+  }
+  if (!pricing) return 0; // modelo desconocido, no estimamos
+
+  const inputCost = (inputTokens / 1_000_000) * pricing.input;
+  const outputCost = (outputTokens / 1_000_000) * pricing.output;
+  return inputCost + outputCost;
+}
 
 // ── Provider abstracto ───────────────────────────────────────────────────────
 
@@ -40,4 +72,4 @@ abstract class LLMProvider {
   abstract call(messages: Message[], agent: AgentConfig): Promise<LLMResponse>;
 }
 
-export { Block, LLMProvider, LLMResponse, TextBlock, ToolUseBlock };
+export { Block, LLMProvider, LLMResponse, TextBlock, ToolUseBlock, calculateCost };

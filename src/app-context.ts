@@ -23,6 +23,11 @@ class Context {
     return this.#session;
   }
 
+  /** Reemplaza la sesión activa (ej: al resumir otra sesión) */
+  setSession(session: Session): void {
+    this.#session = session;
+  }
+
   get agentConfig() {
     return this.#agentConfig;
   }
