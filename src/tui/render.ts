@@ -34,8 +34,11 @@ async function run<T>(component: InputComponent<T>): Promise<T> {
     // Guardar posición actual (inicio del editor) antes de dibujar
     stdout.write("\x1b7");
 
-    const onData = (raw: string) => {
-      const key = decodeKey(raw);
+    // Buffer para acumular chunks de paste bracketed
+    let pasteBuffer: string | null = null;
+
+    const processKey = (keyStr: string) => {
+      const key = decodeKey(keyStr);
       if (key.type === "ctrl" && key.key === "c") {
         stdin.removeListener("data", onData);
         disableRawMode();
@@ -62,6 +65,46 @@ async function run<T>(component: InputComponent<T>): Promise<T> {
         stdin.removeListener("data", onData);
         resolve(component.getResult());
       }
+    };
+
+    const onData = (raw: string) => {
+      // Si estamos acumulando un paste bracketed
+      if (pasteBuffer !== null) {
+        pasteBuffer += raw;
+        if (pasteBuffer.includes("\x1b[201~")) {
+          // Fin del paste: extraer el contenido entre start y end
+          const text = pasteBuffer
+            .replace(/^\x1b\[200~/, "")
+            .replace(/\x1b\[201~$/, "");
+          pasteBuffer = null;
+          processKey(text);
+        }
+        // si no llegó el end, seguimos acumulando
+        return;
+      }
+
+      // Detectar inicio de paste bracketed (puede venir solo o pegado a contenido)
+      if (raw.includes("\x1b[200~")) {
+        const idx = raw.indexOf("\x1b[200~");
+        // Si hay data antes del inicio del paste, procesarla primero
+        if (idx > 0) {
+          processKey(raw.slice(0, idx));
+        }
+        // Empezar a acumular desde el inicio del paste
+        pasteBuffer = raw.slice(idx);
+        // Si ya contiene el fin, procesarlo completo
+        if (pasteBuffer.includes("\x1b[201~")) {
+          const text = pasteBuffer
+            .replace(/^\x1b\[200~/, "")
+            .replace(/\x1b\[201~$/, "");
+          pasteBuffer = null;
+          processKey(text);
+        }
+        return;
+      }
+
+      // Dato normal (sin paste bracketed en progreso)
+      processKey(raw);
     };
     stdin.on("data", onData);
     draw();
