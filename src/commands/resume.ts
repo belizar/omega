@@ -72,17 +72,21 @@ class ResumeCommand implements Command<void> {
     }
 
     // Crear nueva sesión con el mismo ID para que cargue del disco
-    const resumedSession = new Session({
-      id: sessionId,
-      dir,
-      maxContextTokens: ctx.session.maxContextTokens,
-    });
+    try {
+      const resumedSession = new Session({
+        id: sessionId,
+        dir,
+        maxContextTokens: ctx.session.maxContextTokens,
+      });
 
-    const info = resumedSession.info();
-    ctx.setSession(resumedSession);
+      const info = resumedSession.info();
+      ctx.setSession(resumedSession);
 
-    const label = info.name ? `${green(info.name)} (${info.id})` : green(info.id);
-    display.display(`Sesión ${label} retomada (${info.messageCount} mensajes, ${info.totalCost < 0.01 ? "<$0.01" : "$" + info.totalCost.toFixed(2)}).`);
+      const label = info.name ? `${green(info.name)} (${info.id})` : green(info.id);
+      display.display(`Sesión ${label} retomada (${info.messageCount} mensajes, ${info.totalCost < 0.01 ? "<$0.01" : "$" + info.totalCost.toFixed(2)}).`);
+    } catch {
+      display.display(`No se pudo cargar la sesión "${sessionId}". El archivo puede estar corrupto.`);
+    }
   }
 }
 
