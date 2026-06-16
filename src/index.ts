@@ -1,3 +1,4 @@
+import { existsSync, readFileSync } from "fs";
 import dotenv from "dotenv";
 import { AgentConfig } from "./agent-config.js";
 import { Context } from "./app-context.js";
@@ -25,18 +26,7 @@ import { dim } from "./tui/theme.js";
 
 dotenv.config();
 
-const main = async () => {
-  enableRawMode();
-  const config = validateEnv();
-  const session = new Session({
-    dir: ".omega/sessions",
-    maxContextTokens: config.maxContextTokens,
-  });
-  logger.setLogFile(`.omega/logs/${session.id}.log`);
-  logger.info("Omega agent starting", { session: session.id });
-
-  const haikuAgent = new AgentConfig({
-    systemPrompt: `Sos omega, un asistente de coding que trabaja en el proyecto del usuario.
+const SYSTEM_PROMPT = `Sos omega, un asistente de coding que trabaja en el proyecto del usuario.
 Tenés tools para leer, escribir, editar y ejecutar comandos.
 
 Tools:
@@ -56,7 +46,30 @@ Cómo trabajás:
 Estilo:
 - Respondé siempre en español.
 - Sé conciso: explicá brevemente qué hiciste y por qué, sin resúmenes largos.
-- Texto plano. Sin emojis ni formato decorativo.`,
+- Texto plano. Sin emojis ni formato decorativo.`;
+
+function loadProjectContext(): string {
+  const path = "AGENT.md";
+  if (!existsSync(path)) return "";
+  const content = readFileSync(path, "utf-8").trim();
+  if (!content) return "";
+  return `\n\n## Contexto del proyecto (${path})\n\n${content}`;
+}
+
+const main = async () => {
+  enableRawMode();
+  const config = validateEnv();
+  const session = new Session({
+    dir: ".omega/sessions",
+    maxContextTokens: config.maxContextTokens,
+  });
+  logger.setLogFile(`.omega/logs/${session.id}.log`);
+  logger.info("Omega agent starting", { session: session.id });
+
+  const fullSystemPrompt = SYSTEM_PROMPT + loadProjectContext();
+
+  const haikuAgent = new AgentConfig({
+    systemPrompt: fullSystemPrompt,
     model: config.model,
     maxTokens: config.maxTokens,
   });
