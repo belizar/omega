@@ -30,7 +30,7 @@ class ResumeCommand implements Command<void> {
       stdout.write(`\n Sesiones disponibles (${dir}):\n\n`);
       for (let i = 0; i < sessions.length; i++) {
         const s = sessions[i];
-        const costStr = s.totalCost < 0.01 ? "<$0.01" : `${s.totalCost.toFixed(2)}`;
+        const costStr = s.totalCost < 0.01 ? "<$0.01" : `$${s.totalCost.toFixed(2)}`;
         const dateStr = s.savedAt ? new Date(s.savedAt).toLocaleString() : "?";
         const nameStr = s.name ? ` ${cyan(s.name)} ` : " ";
         stdout.write(`  ${green(`[${i + 1}]`)}${nameStr}${bold(s.id.slice(0, 8))}...  ${s.messageCount} msgs  ${costStr}  ${dim(dateStr)}\n`);
