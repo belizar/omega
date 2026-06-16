@@ -1,5 +1,7 @@
+import { stdout } from "process";
 import { CursorPosition, InputComponent } from "../component.js";
 import { Key } from "../decodeKey.js";
+import { dim } from "../theme.js";
 
 class LineEditor implements InputComponent<string> {
   #buffer: string;
@@ -166,15 +168,42 @@ class LineEditor implements InputComponent<string> {
   }
 
   render(): string {
-    return this.#promptStr + this.#buffer;
+    const W = this.#boxWidth();
+    const innerW = W - 4; // espacio entre bordes │ ... │
+    const horizontal = "─".repeat(W - 2);
+    const top = dim(`╭${horizontal}╮`);
+    const bottom = dim(`╰${horizontal}╯`);
+
+    const promptLen = this.#promptStr.length;
+    const indent = " ".repeat(promptLen);
+
+    const lines = this.#buffer.split("\n");
+    const content: string[] = [top];
+
+    for (let i = 0; i < lines.length; i++) {
+      const prefix = i === 0 ? this.#promptStr : indent;
+      const lineContent = prefix + lines[i];
+      const paddingLen = Math.max(0, innerW - lineContent.length);
+      const padding = " ".repeat(paddingLen);
+      content.push(`${dim("│")} ${lineContent}${padding} ${dim("│")}`);
+    }
+
+    content.push(bottom);
+    return content.join("\n");
   }
 
   getCursorPosition(): CursorPosition {
+    const promptLen = this.#promptStr.length;
     const line = this.#cursorLine();
-    const col = line === 0
-      ? this.#promptStr.length + this.#cursorCol()
-      : this.#cursorCol();
-    return { row: line, col };
+    // +1 por el borde superior; col = "│ " + prompt/indent + cursorCol
+    const col = 2 + promptLen + this.#cursorCol();
+    return { row: line + 1, col };
+  }
+
+  /** Ancho de la caja: usa el ancho del terminal, con tope en 120. */
+  #boxWidth(): number {
+    const termWidth = stdout.columns || 80;
+    return Math.min(termWidth, 120);
   }
 
   // ---- privados ----
