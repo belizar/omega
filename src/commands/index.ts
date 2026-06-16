@@ -14,7 +14,7 @@ const commandsMap: Record<string, Command<unknown>> = {
 
 commandsMap["/help"] = new HelpCommand(commandsMap);
 
-const dispatchCommand = async <Tin>(
+const dispatchCommand = async (
   cmd: string,
   ctx: Context,
 ): Promise<boolean> => {
@@ -25,7 +25,7 @@ const dispatchCommand = async <Tin>(
       stdout.write(`Comando no reconocido: ${commandName}. Usá /help para ver los disponibles.\n`);
       return true;
     }
-    command.handler(ctx, args);
+    await command.handler(ctx, args);
     return true;
   }
 
