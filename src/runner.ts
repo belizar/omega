@@ -127,7 +127,8 @@ class Runner {
           toolResults.push({
             type: "tool_result",
             tool_use_id: block.id,
-            content: shown,
+            // El modelo recibe el output completo; solo truncamos para display.
+            content: output,
             is_error: isError,
           });
         }
