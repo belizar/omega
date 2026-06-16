@@ -6,29 +6,15 @@ import { disableRawMode } from "./terminal.js";
 async function run<T>(component: InputComponent<T>): Promise<T> {
   let renderedRows = 0;
 
-  // Estrategia de redibujo:
-  //
-  // A) Con cursor (LineEditor): \x1b7 / \x1b8 (DEC save/restore).
-  //    El render es chico (3 líneas), nunca scrollea el terminal, así que
-  //    save/restore es 100% confiable y el cursor se posiciona exactamente.
-  //
-  // B) Sin cursor (SelectList, etc.): movimiento explícito \x1b[N}A.
-  //    El render puede tener muchas líneas y causar scroll, lo cual rompe
-  //    \x1b7/\x1b8. Pero como el cursor siempre queda al final del render
-  //    (nadie llama a getCursorPosition), renderedRows es exacto y podemos
-  //    subir limpiamente.
-
   const hasCursor = typeof component.getCursorPosition === "function";
 
   const draw = () => {
     if (hasCursor) {
-      stdout.write("\x1b8");
-      stdout.write("\x1b[0J");
+      stdout.write("\x1b8");       // restaurar cursor al inicio del componente
+      stdout.write("\x1b[0J");     // limpiar hacia abajo
     } else {
-      if (renderedRows > 0) {
-        stdout.write(`\x1b[${renderedRows}A`);
-      }
-      stdout.write("\x1b[0J");
+      stdout.write("\x1b[H");      // ir a home (alternate screen)
+      stdout.write("\x1b[J");      // limpiar desde cursor hacia abajo
     }
 
     const out = component.render();
@@ -46,6 +32,11 @@ async function run<T>(component: InputComponent<T>): Promise<T> {
   return new Promise((resolve) => {
     if (hasCursor) {
       stdout.write("\x1b7"); // guardar posición inicial del componente
+    } else {
+      // Alternate screen buffer: evita problemas de scroll cuando la
+      // lista es mas larga que el espacio disponible en el viewport.
+      stdout.write("\x1b[?1049h"); // entrar a alternate screen
+      stdout.write("\x1b[?25l");   // ocultar cursor
     }
 
     let pasteBuffer: string | null = null;
@@ -53,6 +44,11 @@ async function run<T>(component: InputComponent<T>): Promise<T> {
     const processKey = (keyStr: string) => {
       const key = decodeKey(keyStr);
       if (key.type === "ctrl" && key.key === "c") {
+        // Si estamos en alternate screen, salir antes de matar
+        if (!hasCursor) {
+          stdout.write("\x1b[?25h");
+          stdout.write("\x1b[?1049l");
+        }
         stdin.removeListener("data", onData);
         disableRawMode();
         process.exit(0);
@@ -71,11 +67,9 @@ async function run<T>(component: InputComponent<T>): Promise<T> {
           if (colDiff > 0) stdout.write(`\x1b[${colDiff}C`);
           stdout.write("\r\n");
         } else {
-          // Sin cursor: limpiar output y volver arriba
-          if (renderedRows > 0) {
-            stdout.write(`\x1b[${renderedRows}A`);
-          }
-          stdout.write("\x1b[0J");
+          // Salir del alternate screen, volver al buffer principal
+          stdout.write("\x1b[?25h");   // mostrar cursor
+          stdout.write("\x1b[?1049l"); // salir de alternate screen
         }
 
         stdin.removeListener("data", onData);
