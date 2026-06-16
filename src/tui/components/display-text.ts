@@ -12,9 +12,29 @@ interface DisplayText {
  */
 class DisplayAssistantText implements DisplayText {
   #screen: Screen;
+  #streamingBuffer = "";
+  #streaming = false;
+
   constructor(screen: Screen) {
     this.#screen = screen;
   }
+
+  /** Muestra un chunk de texto (modo streaming). Acumula en buffer y
+   * va imprimiendo incrementalmente sin LF. */
+  displayStream(chunk: string): void {
+    this.#streaming = true;
+    this.#streamingBuffer += chunk;
+    this.#screen.printAboveRaw(dim(this.#streamingBuffer));
+  }
+
+  /** Cierra el bloque de streaming: imprime un LF final y limpia el buffer. */
+  endStream(): void {
+    if (!this.#streaming) return;
+    this.#streaming = false;
+    this.#streamingBuffer = "";
+    this.#screen.printAboveRaw("\n");
+  }
+
   display(text: string): void {
     this.#screen.printAbove(dim(text));
   }

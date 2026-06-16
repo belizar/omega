@@ -1,7 +1,7 @@
 import { AgentConfig } from "../agent-config.js";
 import { logger } from "../logger.js";
 import { Message, ToolMessage } from "../message.js";
-import { Block, calculateCost, LLMProvider, LLMResponse, TextBlock, ToolUseBlock } from "./llm-provider.js";
+import { Block, calculateCost, LLMProvider, LLMResponse, StreamEvent, TextBlock, ToolUseBlock } from "./llm-provider.js";
 
 const TIMEOUT_MS = 60000;
 const MAX_RETRIES = 3;
@@ -275,6 +275,165 @@ class OpenRouterProvider extends LLMProvider {
   async call(messages: Message[], agent: AgentConfig): Promise<LLMResponse> {
     logger.info("Making API call to OpenRouter");
     return this.callWithRetry(messages, agent);
+  }
+
+  async *callStream(
+    messages: Message[],
+    agent: AgentConfig,
+  ): AsyncGenerator<StreamEvent> {
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${this.apiKey()}`,
+      "Content-Type": "application/json",
+    };
+
+    const body = {
+      model: agent.model,
+      messages: translateMessages(messages, agent.systemPrompt),
+      tools: translateTools(agent),
+      max_tokens: agent.maxTokens,
+      stream: true,
+    };
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS * 2);
+
+    let response: Response;
+    try {
+      response = await fetch(this.url(), {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+    } catch (err: unknown) {
+      clearTimeout(timeoutId);
+      if (err instanceof Error && err.name === "AbortError") {
+        throw new Error(`Stream request timeout after ${TIMEOUT_MS * 2}ms`);
+      }
+      throw err;
+    }
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(
+        `OpenRouter stream error: ${response.status} - ${JSON.stringify(errorData)}`,
+      );
+    }
+
+    if (!response.body) {
+      throw new Error("No response body for stream");
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    const toolCalls: Map<
+      number,
+      { id: string; name: string; args: string }
+    > = new Map();
+    let finishReason: string | null = null;
+    let inputTokens = 0;
+    let outputTokens = 0;
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        // La última línea puede estar incompleta
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || !trimmed.startsWith("data: ")) continue;
+          const data = trimmed.slice(6);
+          if (data === "[DONE]") {
+            finishReason = finishReason ?? "stop";
+            continue;
+          }
+
+          let parsed: Record<string, unknown>;
+          try {
+            parsed = JSON.parse(data);
+          } catch {
+            continue;
+          }
+
+          // Acumular usage si viene en el chunk
+          const usage = parsed.usage as Record<string, number> | undefined;
+          if (usage) {
+            inputTokens = usage.prompt_tokens ?? inputTokens;
+            outputTokens = usage.completion_tokens ?? outputTokens;
+          }
+
+          const choices = parsed.choices as Array<Record<string, unknown>> | undefined;
+          if (!choices || choices.length === 0) continue;
+
+          const delta = choices[0].delta as Record<string, unknown> | undefined;
+          if (!delta) continue;
+
+          const finish = choices[0].finish_reason as string | undefined;
+          if (finish) finishReason = finish;
+
+          // Texto
+          if (delta.content && typeof delta.content === "string") {
+            yield { type: "text", text: delta.content };
+          }
+
+          // Tool calls en delta
+          const tc = delta.tool_calls as Array<Record<string, unknown>> | undefined;
+          if (Array.isArray(tc)) {
+            for (const t of tc) {
+              const idx = t.index as number;
+              if (!toolCalls.has(idx)) {
+                toolCalls.set(idx, {
+                  id: (t.id as string) ?? "",
+                  name: (t.function as Record<string, string>)?.name ?? "",
+                  args: "",
+                });
+              }
+              const entry = toolCalls.get(idx)!;
+              if (t.id) entry.id = t.id as string;
+              const fn = t.function as Record<string, string> | undefined;
+              if (fn?.name) entry.name = fn.name;
+              if (fn?.arguments) entry.args += fn.arguments;
+            }
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    // Después del stream, emitir tool_use completos
+    for (const [, tc] of toolCalls) {
+      let input: unknown = {};
+      try {
+        input = tc.args ? JSON.parse(tc.args) : {};
+      } catch {
+        logger.warn("Malformed stream tool call arguments", { args: tc.args });
+      }
+      yield { type: "tool_use", id: tc.id, name: tc.name, input };
+    }
+
+    const stopReason: "end_turn" | "tool_use" | "max_tokens" =
+      finishReason === "tool_calls"
+        ? "tool_use"
+        : finishReason === "length"
+          ? "max_tokens"
+          : "end_turn";
+
+    const cost = calculateCost("", inputTokens, outputTokens);
+
+    yield {
+      type: "done",
+      stop_reason: stopReason,
+      usage: { input_tokens: inputTokens, output_tokens: outputTokens },
+      cost,
+    };
   }
 }
 

@@ -1,7 +1,7 @@
 import { AgentConfig } from "../agent-config.js";
 import { logger } from "../logger.js";
 import { Message } from "../message.js";
-import { Block, calculateCost, LLMProvider, LLMResponse } from "./llm-provider.js";
+import { Block, calculateCost, LLMProvider, LLMResponse, StreamEvent } from "./llm-provider.js";
 
 const TIMEOUT_MS = 60000;
 const MAX_RETRIES = 3;
@@ -128,6 +128,13 @@ class AnthropicProvider extends LLMProvider {
   async call(messages: Message[], agent: AgentConfig): Promise<LLMResponse> {
     logger.info("Making API call to Anthropic");
     return this.callWithRetry(messages, agent);
+  }
+
+  async *callStream(
+    _messages: Message[],
+    _agent: AgentConfig,
+  ): AsyncGenerator<StreamEvent> {
+    throw new Error("AnthropicProvider does not support streaming yet");
   }
 }
 

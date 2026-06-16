@@ -4,8 +4,12 @@
   "description": "",
   "main": "dist/index.js",
   "type": "module",
+  "bin": {
+    "omega": "./dist/index.js"
+  },
   "scripts": {
     "build": "tsc",
+    "build:watch": "tsc --watch",
     "start": "node dist/index.js",
     "dev": "node --watch src/index.ts",
     "test": "vitest",

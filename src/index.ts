@@ -1,4 +1,7 @@
+#!/usr/bin/env node
 import { existsSync, readFileSync } from "fs";
+import { homedir } from "os";
+import { join } from "path";
 import dotenv from "dotenv";
 import { AgentConfig } from "./agent-config.js";
 import { Context } from "./app-context.js";
@@ -24,7 +27,11 @@ import { Screen } from "./tui/screen.js";
 import { disableRawMode, enableRawMode } from "./tui/terminal.js";
 import { dim } from "./tui/theme.js";
 
+// Carga la .env del cwd (overrides por proyecto) y, como fallback, la global
+// ~/.omega/.env. dotenv NO pisa vars ya seteadas, así que el cwd gana y la
+// global completa el resto (tu API key) → `omega` anda desde cualquier carpeta.
 dotenv.config();
+dotenv.config({ path: join(homedir(), ".omega", ".env") });
 
 const SYSTEM_PROMPT = `Sos omega, un asistente de coding que trabaja en el proyecto del usuario.
 Tenés tools para leer, escribir, editar y ejecutar comandos.
@@ -160,6 +167,14 @@ const main = async () => {
 
     while (!item.done) {
       const { value } = item;
+
+      if (value.type === "text_stream") {
+        assistantText.displayStream(value.text);
+      }
+
+      if (value.type === "text_stream_end") {
+        assistantText.endStream();
+      }
 
       if (value.type === "text") {
         assistantText.display(value.text);

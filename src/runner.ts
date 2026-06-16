@@ -13,6 +13,8 @@ type RunnerConstructorProps = {
 
 type RunnerEvent =
   | { type: "text"; text: string }
+  | { type: "text_stream"; text: string }
+  | { type: "text_stream_end" }
   | { type: "state"; message: Message }
   | { type: "tool_use"; name: string; input: unknown }
   | {
@@ -61,77 +63,121 @@ class Runner {
 
     let steps = this.#maxSteps;
     while (steps > 0) {
-      // Podar workingContext antes de cada call para no pasarnos de la ventana
       const prunedContext = pruneContext(workingContext, this.#maxContextTokens);
-      const data: LLMResponse = await this.#llmProvider.call(
-        prunedContext,
-        this.#agentConfig,
-      );
 
-      // Track tokens and cost
-      this.#metrics.totalInputTokens += data.usage.input_tokens;
-      this.#metrics.totalOutputTokens += data.usage.output_tokens;
-      this.#metrics.totalCost += data.cost;
-      logger.debug("Token usage", {
-        input: data.usage.input_tokens,
-        output: data.usage.output_tokens,
-      });
+      // Usamos streaming si el provider lo soporta
+      const hasStream = typeof this.#llmProvider.callStream === "function";
+      const toolBlocks: Array<{ id: string; name: string; input: unknown }> = [];
+      const textParts: string[] = [];
+      let stopReason: "end_turn" | "tool_use" | "max_tokens" = "end_turn";
+
+      if (hasStream) {
+        const stream = this.#llmProvider.callStream(prunedContext, this.#agentConfig);
+
+        for await (const event of stream) {
+          if (event.type === "text") {
+            textParts.push(event.text);
+            yield { type: "text_stream", text: event.text };
+          } else if (event.type === "tool_use") {
+            toolBlocks.push({ id: event.id, name: event.name, input: event.input });
+          } else if (event.type === "done") {
+            stopReason = event.stop_reason;
+            this.#metrics.totalInputTokens += event.usage.input_tokens;
+            this.#metrics.totalOutputTokens += event.usage.output_tokens;
+            this.#metrics.totalCost += event.cost;
+          }
+        }
+
+        if (textParts.length > 0) {
+          yield { type: "text_stream_end" };
+        }
+      } else {
+        const data: LLMResponse = await this.#llmProvider.call(
+          prunedContext,
+          this.#agentConfig,
+        );
+
+        this.#metrics.totalInputTokens += data.usage.input_tokens;
+        this.#metrics.totalOutputTokens += data.usage.output_tokens;
+        this.#metrics.totalCost += data.cost;
+
+        for (const block of data.content) {
+          if (block.type === "text") {
+            textParts.push(block.text);
+            yield { type: "text", text: block.text };
+          }
+          if (block.type === "tool_use") {
+            toolBlocks.push({ id: block.id, name: block.name, input: block.input });
+          }
+        }
+
+        stopReason = data.stop_reason;
+      }
+
+      // Construir el mensaje assistant completo
+      const assistantContent: Message["content"] = [];
+      if (textParts.length > 0) {
+        assistantContent.push({ type: "text", text: textParts.join("") });
+      }
+      for (const tb of toolBlocks) {
+        assistantContent.push({
+          type: "tool_use",
+          id: tb.id,
+          name: tb.name,
+          input: tb.input,
+        });
+      }
 
       const assistantMessage: Message = {
         role: "assistant",
-        content: data.content as Message["content"],
+        content: assistantContent,
       };
       workingContext.push(assistantMessage);
       yield { type: "state", message: assistantMessage };
 
+      // Ejecutar tools
       const toolResults: ToolMessage[] = [];
-      for (const block of data.content) {
-        if (block.type === "text") {
-          yield { type: "text", text: block.text };
-        }
-        if (block.type === "tool_use") {
-          this.#metrics.totalToolCalls++;
+      for (const block of toolBlocks) {
+        this.#metrics.totalToolCalls++;
 
-          const tool = this.#agentConfig.getTool(block.name);
-          if (!tool) {
-            const output = `Error: unknown tool "${block.name}"`;
-            logger.error(output);
-            yield { type: "tool_result", output };
-            toolResults.push({
-              type: "tool_result",
-              tool_use_id: block.id,
-              content: output,
-              is_error: true,
-            });
-            continue;
-          }
-
-          yield { type: "tool_use", name: tool.name, input: block.input };
-
-          let output: string;
-          let isError = false;
-          try {
-            output = tool.execute(block.input) as string;
-          } catch (err: unknown) {
-            isError = true;
-            output = `Error executing tool "${tool.name}": ${err instanceof Error ? err.message : String(err)}`;
-            logger.error("Tool execution threw", {
-              tool: tool.name,
-              error: output,
-            });
-          }
-
-          const shown = truncate(output, 200);
-
-          yield { type: "tool_result", output: shown };
+        const tool = this.#agentConfig.getTool(block.name);
+        if (!tool) {
+          const output = `Error: unknown tool "${block.name}"`;
+          logger.error(output);
+          yield { type: "tool_result", output };
           toolResults.push({
             type: "tool_result",
             tool_use_id: block.id,
-            // El modelo recibe el output completo; solo truncamos para display.
             content: output,
-            is_error: isError,
+            is_error: true,
+          });
+          continue;
+        }
+
+        yield { type: "tool_use", name: tool.name, input: block.input };
+
+        let output: string;
+        let isError = false;
+        try {
+          output = tool.execute(block.input) as string;
+        } catch (err: unknown) {
+          isError = true;
+          output = `Error executing tool "${tool.name}": ${err instanceof Error ? err.message : String(err)}`;
+          logger.error("Tool execution threw", {
+            tool: tool.name,
+            error: output,
           });
         }
+
+        const shown = truncate(output, 200);
+
+        yield { type: "tool_result", output: shown };
+        toolResults.push({
+          type: "tool_result",
+          tool_use_id: block.id,
+          content: output,
+          is_error: isError,
+        });
       }
 
       if (toolResults.length > 0) {
@@ -140,7 +186,7 @@ class Runner {
         yield { type: "state", message: toolMessage };
       }
 
-      if (data.stop_reason === "max_tokens") {
+      if (stopReason === "max_tokens") {
         logger.warn("Respuesta cortada por max_tokens");
         yield {
           type: "text",
@@ -149,7 +195,7 @@ class Runner {
         break;
       }
 
-      if (data.stop_reason === "end_turn") {
+      if (stopReason === "end_turn") {
         logger.info("Agent finished (end_turn)");
         break;
       }

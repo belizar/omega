@@ -20,7 +20,6 @@ function assistantText(text: string): Message {
 function assistantToolUse(blocks: Array<{ id: string; name: string; input: unknown }>): Message {
   return {
     role: "assistant",
-    // @ts-expect-error -- tool_use blocks don't match MessageContent discriminant union
     content: blocks.map((b) => ({ type: "tool_use" as const, ...b })),
   };
 }

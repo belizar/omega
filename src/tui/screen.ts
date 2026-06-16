@@ -66,6 +66,18 @@ class Screen {
     this.#renderLive();
   }
 
+  /**
+   * Igual que printAbove pero no fuerza LF al final. Para streaming de texto,
+   * donde el contenido va llegando de a chunks y queremos que quede pegado.
+   */
+  printAboveRaw(text: string): void {
+    this.#clearLive();
+    if (text.length > 0) {
+      stdout.write(text);
+    }
+    this.#renderLive();
+  }
+
   /** Setea (o limpia con null) la línea de estado encima del editor. */
   setStatus(text: string | null): void {
     this.#status = text;

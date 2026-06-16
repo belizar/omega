@@ -5,6 +5,13 @@ type ToolMessage = {
   is_error: boolean;
 };
 
+type ToolUseMessage = {
+  type: "tool_use";
+  id: string;
+  name: string;
+  input: unknown;
+};
+
 type TextMessage =
   | {
       type: "text";
@@ -12,11 +19,11 @@ type TextMessage =
     }
   | string;
 
-type MessageContent = ToolMessage | TextMessage;
+type MessageContent = ToolMessage | ToolUseMessage | TextMessage;
 
 type Message = {
   role: "user" | "assistant";
   content: MessageContent | MessageContent[];
 };
 
-export { Message, TextMessage, ToolMessage };
+export { Message, TextMessage, ToolMessage, ToolUseMessage };

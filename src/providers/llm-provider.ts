@@ -19,6 +19,17 @@ type LLMResponse = {
   cost: number; // USD
 };
 
+/** Eventos que emite el stream de callStream */
+type StreamEvent =
+  | { type: "text"; text: string }
+  | { type: "tool_use"; id: string; name: string; input: unknown }
+  | {
+      type: "done";
+      stop_reason: "end_turn" | "tool_use" | "max_tokens";
+      usage: { input_tokens: number; output_tokens: number };
+      cost: number;
+    };
+
 // ── Precios OpenRouter por millón de tokens (USD) ────────────────────────────
 
 const MODEL_PRICING: Record<string, { input: number; output: number }> = {
@@ -81,6 +92,12 @@ abstract class LLMProvider {
   }
 
   abstract call(messages: Message[], agent: AgentConfig): Promise<LLMResponse>;
+
+  /** Versión streaming: devuelve un async generator de eventos. */
+  abstract callStream(
+    messages: Message[],
+    agent: AgentConfig,
+  ): AsyncGenerator<StreamEvent>;
 }
 
-export { Block, LLMProvider, LLMResponse, TextBlock, ToolUseBlock, calculateCost };
+export { Block, LLMProvider, LLMResponse, StreamEvent, TextBlock, ToolUseBlock, calculateCost };
