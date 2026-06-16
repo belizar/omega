@@ -1,44 +1,31 @@
-import { existsSync } from "fs";
-import { stdout } from "process";
 import { Context } from "../app-context.js";
 import { Session } from "../session.js";
 import { DisplayAssistantText } from "../tui/components/display-text.js";
-import { SelectList } from "../tui/components/select-list.js";
-import { run } from "../tui/render.js";
-import { bold, dim, green, cyan } from "../tui/theme.js";
 import { Command } from "./command.js";
-
-type SessionInfo = ReturnType<typeof Session.listSessions>[number];
+import { SESSIONS_DIR, resumeSession } from "./session-resume.js";
 
 class ResumeCommand implements Command<void> {
-  description = "Resume una sesión anterior. /resume [n|id|nombre]  (ej: /resume 3, /resume abc123, /resume bug)";
+  description =
+    "Resume una sesión anterior. Sin args abre un selector; o /resume <n|id|nombre> directo.";
 
-  async handler(ctx: Context, args: string[]): Promise<void> {
-    const display = new DisplayAssistantText();
-    const dir = ".omega/sessions";
-
-    if (!existsSync(dir)) {
-      display.display("No hay sesiones guardadas.");
-      return;
-    }
-
-    const sessions = Session.listSessions(dir);
+  handler(ctx: Context, args: string[]): void {
+    const display = new DisplayAssistantText(ctx.screen);
+    const sessions = Session.listSessions(SESSIONS_DIR);
 
     if (sessions.length === 0) {
       display.display("No hay sesiones guardadas.");
       return;
     }
 
-    // Sin argumentos: mostrar lista interactiva
+    // El /resume "pelado" lo intercepta el Prompt (selector modal).
+    // Acá solo llega la forma directa con argumento.
     if (args.length === 0) {
-      const selected = await this.#interactiveSelect(sessions, dir);
-      if (!selected) return; // Escape = cancelar
-
-      await this.#resumeSession(ctx, selected.id, dir, display);
+      display.display(
+        "Usá /resume y elegí de la lista, o /resume <n|id|nombre>.",
+      );
       return;
     }
 
-    // Con argumento: búsqueda directa (índice, id o nombre)
     const arg = args[0];
     let sessionId: string | undefined;
 
@@ -47,81 +34,20 @@ class ResumeCommand implements Command<void> {
       sessionId = sessions[index - 1].id;
     } else {
       const matchById = sessions.find((s) => s.id.startsWith(arg));
-      if (matchById) {
-        sessionId = matchById.id;
-      } else {
-        const lowerArg = arg.toLowerCase();
-        const matchByName = sessions.find(
-          (s) => s.name && s.name.toLowerCase().includes(lowerArg),
-        );
-        if (matchByName) {
-          sessionId = matchByName.id;
-        } else {
-          display.display(
-            `No se encontró sesión con id/nombre "${arg}". Usá /resume sin args para ver la lista.`,
-          );
-          return;
-        }
-      }
+      const matchByName = sessions.find(
+        (s) => s.name && s.name.toLowerCase().includes(arg.toLowerCase()),
+      );
+      sessionId = matchById?.id ?? matchByName?.id;
     }
 
     if (!sessionId) {
-      display.display("Error inesperado al buscar la sesión.");
+      display.display(
+        `No se encontró sesión con id/nombre "${arg}". Usá /resume para ver la lista.`,
+      );
       return;
     }
 
-    await this.#resumeSession(ctx, sessionId, dir, display);
-  }
-
-  // ── privados ──────────────────────────────────────────────────────────
-
-  async #interactiveSelect(
-    sessions: SessionInfo[],
-    _dir: string,
-  ): Promise<SessionInfo | null> {
-    // Dejar margen para el prompt + barras (~4 lineas). Tope 20.
-    const maxVisible = Math.max(5, Math.min(20, (stdout.rows || 24) - 4));
-    const list = new SelectList(sessions, (s, i, isSelected) => {
-      const prefix = isSelected ? `${green(">")} ` : "  ";
-      const num = green(`[${i + 1}]`);
-      const name = s.name ? ` ${cyan(s.name)} ` : " ";
-      const id = bold(s.id.slice(0, 8));
-      const cost = s.totalCost < 0.01 ? "<$0.01" : `$${s.totalCost.toFixed(2)}`;
-      const date = s.savedAt ? new Date(s.savedAt).toLocaleString() : "?";
-      const msgCount = `${s.messageCount} msgs`;
-      return `${prefix}${num}${name}${id}...  ${msgCount}  ${cost}  ${dim(date)}`;
-    });
-
-    return run(list);
-  }
-
-  async #resumeSession(
-    ctx: Context,
-    sessionId: string,
-    dir: string,
-    display: DisplayAssistantText,
-  ): Promise<void> {
-    try {
-      const resumedSession = new Session({
-        id: sessionId,
-        dir,
-        maxContextTokens: ctx.session.maxContextTokens,
-      });
-
-      const info = resumedSession.info();
-      ctx.setSession(resumedSession);
-
-      const label = info.name
-        ? `${green(info.name)} (${info.id})`
-        : green(info.id);
-      display.display(
-        `Sesión ${label} retomada (${info.messageCount} mensajes, ${info.totalCost < 0.01 ? "<$0.01" : "$" + info.totalCost.toFixed(2)}).`,
-      );
-    } catch {
-      display.display(
-        `No se pudo cargar la sesión "${sessionId}". El archivo puede estar corrupto.`,
-      );
-    }
+    display.display(resumeSession(ctx, sessionId));
   }
 }
 

@@ -7,7 +7,7 @@ class ClearCommand implements Command<void> {
 
   handler(ctx: Context, _args: string[]): void {
     ctx.session.clear();
-    new DisplayAssistantText().display("Conversacion limpia");
+    new DisplayAssistantText(ctx.screen).display("Conversación limpia.");
   }
 }
 

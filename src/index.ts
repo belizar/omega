@@ -1,8 +1,7 @@
 import dotenv from "dotenv";
-import { stdout } from "process";
 import { AgentConfig } from "./agent-config.js";
 import { Context } from "./app-context.js";
-import { dispatchCommand } from "./commands/index.js";
+import { dispatchCommand, modalCommandsMap } from "./commands/index.js";
 import { validateEnv } from "./config.js";
 import { logger } from "./logger.js";
 import { OpenRouterProvider } from "./providers/openrouter-llm-provider.js";
@@ -18,8 +17,9 @@ import {
   DisplayToolResult,
 } from "./tui/components/display-text.js";
 import { LineEditor } from "./tui/components/line-editor.js";
+import { Prompt } from "./tui/components/prompt.js";
 import { Spinner } from "./tui/components/spinner.js";
-import { run } from "./tui/render.js";
+import { Screen } from "./tui/screen.js";
 import { disableRawMode, enableRawMode } from "./tui/terminal.js";
 import { dim } from "./tui/theme.js";
 
@@ -76,22 +76,51 @@ Estilo:
     maxContextTokens: config.maxContextTokens,
   });
 
-  const spinner = new Spinner();
-  const assistantText = new DisplayAssistantText();
-  const toolCallText = new DisplayToolCall();
-  const toolResultText = new DisplayToolResult();
+  const screen = new Screen();
+  const spinner = new Spinner(screen);
+  const assistantText = new DisplayAssistantText(screen);
+  const toolCallText = new DisplayToolCall(screen);
+  const toolResultText = new DisplayToolResult(screen);
 
-  const ctx = new Context({ session, agentConfig: haikuAgent, runner });
+  const ctx = new Context({
+    session,
+    agentConfig: haikuAgent,
+    runner,
+    screen,
+  });
 
   const lineEditor = new LineEditor();
 
   while (true) {
-    const input = await run<string>(lineEditor);
-    lineEditor.reset();
+    const prompt = new Prompt({
+      editor: lineEditor,
+      ctx,
+      modals: modalCommandsMap,
+    });
+    const result = await screen.readLine(prompt);
 
-    if (input.trim() !== "") {
-      lineEditor.addToHistory(input);
+    // Historial: lo tipeado (incluye comandos).
+    const typed = lineEditor.getResult();
+    if (typed.trim() !== "") {
+      lineEditor.addToHistory(typed);
     }
+
+    // Un comando modal (ej: /resume) ya hizo su efecto dentro del Prompt.
+    // No ecoamos "> /resume"; solo mostramos la confirmación (si hay) y
+    // limpiamos el editor. printAbove("") limpia la lista sin imprimir nada.
+    if (result.kind === "modal") {
+      lineEditor.reset();
+      screen.printAbove(result.message ?? "");
+      continue;
+    }
+
+    const input = result.text;
+
+    // Eco del input arriba del editor (sin la caja, para que no parezca otro
+    // prompt), y limpiamos el buffer (siempre).
+    const echo = lineEditor.renderEcho();
+    lineEditor.reset();
+    screen.printAbove(echo);
 
     if (await dispatchCommand(input, ctx)) {
       continue;
@@ -99,8 +128,14 @@ Estilo:
 
     if (input === "exit") {
       logger.info("Omega agent stopped");
-      break;
+      // El listener de stdin del Screen mantiene vivo el event loop, así que
+      // un break dejaría el proceso colgado. Salimos explícito; el handler de
+      // process.on("exit") restaura la raw mode.
+      disableRawMode();
+      process.exit(0);
     }
+
+    const session = ctx.session;
 
     session.addUserMessage(input);
 
@@ -134,16 +169,20 @@ Estilo:
       spinner.stop();
     }
 
-    // Mostrar métricas de la iteración
+    // Métricas de la iteración
     const metrics = runner.getMetrics();
-    session.addUsage(metrics.totalInputTokens, metrics.totalOutputTokens, metrics.totalCost);
+    session.addUsage(
+      metrics.totalInputTokens,
+      metrics.totalOutputTokens,
+      metrics.totalCost,
+    );
     const durationSec = (metrics.durationMs / 1000).toFixed(1);
-    const costStr = metrics.totalCost < 0.01
-      ? "<$0.01"
-      : `${metrics.totalCost.toFixed(2)}`;
-    const runningStr = session.totalCost < 0.01 ? "<$0.01" : `${session.totalCost.toFixed(2)}`;
+    const costStr =
+      metrics.totalCost < 0.01 ? "<$0.01" : `${metrics.totalCost.toFixed(2)}`;
+    const runningStr =
+      session.totalCost < 0.01 ? "<$0.01" : `${session.totalCost.toFixed(2)}`;
     const metricsLine = `~ ctx: ${session.contextTokens} tk · ${metrics.totalToolCalls} tools · in: ${metrics.totalInputTokens} · out: ${metrics.totalOutputTokens} tokens · ${durationSec}s · ${costStr} (total: ${runningStr})`;
-    stdout.write(`\n ${dim(metricsLine)}\n`);
+    screen.printAbove(dim(metricsLine));
     runner.resetMetrics();
   }
 };

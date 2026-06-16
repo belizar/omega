@@ -1,4 +1,3 @@
-import { stdout } from "process";
 import { Command } from "./command.js";
 import { Context } from "../app-context.js";
 
@@ -10,19 +9,19 @@ class HelpCommand implements Command<void> {
     this.#commandsMap = commandsMap;
   }
 
-  handler(_ctx: Context, _args: string[]): void {
+  handler(ctx: Context, _args: string[]): void {
     const entries = Object.entries(this.#commandsMap);
 
     if (entries.length === 0) {
-      stdout.write("No hay comandos disponibles.\n");
+      ctx.screen.printAbove("No hay comandos disponibles.");
       return;
     }
 
-    stdout.write("\nComandos disponibles:\n\n");
+    const lines = ["Comandos disponibles:", ""];
     for (const [name, cmd] of entries) {
-      stdout.write(`  ${name.padEnd(12)} ${cmd.description}\n`);
+      lines.push(`  ${name.padEnd(12)} ${cmd.description}`);
     }
-    stdout.write("\n");
+    ctx.screen.printAbove(lines.join("\n"));
   }
 }
 

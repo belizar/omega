@@ -1,38 +1,41 @@
-import { stdout } from "process";
 import { color } from "../theme.js";
+import { Screen } from "../screen.js";
 
+/**
+ * Spinner como línea de estado: ya no escribe directo a stdout, sino que le
+ * pide al Screen que muestre/limpie una línea de estado justo encima del
+ * editor. Así no pelea con la región viva del prompt.
+ */
 class Spinner {
-  #stop: () => void;
+  #screen: Screen;
+  #timer: ReturnType<typeof setInterval> | null;
 
-  constructor() {
-    this.#stop = () => {};
+  constructor(screen: Screen) {
+    this.#screen = screen;
+    this.#timer = null;
   }
 
   start(): void {
+    if (this.#timer) return; // ya andando
+
     const colors = ["39", "38", "45", "51", "45", "38"];
     const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
     let i = 0;
 
-    // Ocultar cursor mientras gira
-    stdout.write("\x1b[?25l");
-
-    const timer = setInterval(() => {
+    this.#timer = setInterval(() => {
       const c = colors[i % colors.length];
       const f = frames[i % frames.length];
-      // \r nos posiciona al inicio de línea, sobrescribiendo el frame anterior
-      stdout.write(`\r${color(`${f} Pensando`, `38;5;${c}`)}`);
+      this.#screen.setStatus(color(`${f} Pensando`, `38;5;${c}`));
       i++;
     }, 100);
-
-    this.#stop = () => {
-      clearInterval(timer);
-      // Limpiar la línea del spinner y restaurar cursor
-      stdout.write("\r\x1b[K\x1b[?25h");
-    };
   }
 
   stop(): void {
-    this.#stop();
+    if (this.#timer) {
+      clearInterval(this.#timer);
+      this.#timer = null;
+    }
+    this.#screen.setStatus(null);
   }
 }
 

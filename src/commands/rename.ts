@@ -7,7 +7,7 @@ class RenameCommand implements Command<void> {
   description = "Renombra la sesión actual. /rename <nombre>";
 
   handler(ctx: Context, args: string[]): void {
-    const display = new DisplayAssistantText();
+    const display = new DisplayAssistantText(ctx.screen);
 
     if (args.length === 0) {
       const current = ctx.session.name || "(sin nombre)";
