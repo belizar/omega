@@ -6,22 +6,20 @@ import { disableRawMode } from "./terminal.js";
 async function run<T>(component: InputComponent<T>): Promise<T> {
   let renderedRows = 0;
 
-  // Guardamos la posición absoluta donde empieza el editor.
-  // \x1b7 = DECSC (save cursor), \x1b8 = DECRC (restore cursor).
-  // Esto es crítico: entre run() y run() el loop principal escribe output
-  // del asistente, así que un \x1b[A relativo no sabe dónde está el editor.
-  // Con save/restore, cada draw() vuelve exactamente al inicio del editor.
+  // Cada draw() sube las filas que ocupó el render anterior, limpia hacia
+  // abajo y vuelve a dibujar.  Usamos movimiento explícito (\x1b[N}A) en
+  // lugar de \x1b7/\x1b8 (DEC save/restore) porque estos últimos no son
+  // confiables en todos los terminales y se corrompen con llamadas anidadas
+  // (p.ej. un SelectList abierto desde un comando).
 
   const draw = () => {
-    // Restaurar cursor a la posición guardada (inicio del editor)
-    stdout.write("\x1b8");
+    // Subir hasta el inicio del render anterior y limpiar
+    if (renderedRows > 0) {
+      stdout.write(`\x1b[${renderedRows}A`);
+    }
     stdout.write("\x1b[0J"); // borrar de acá hacia abajo
 
     const out = component.render();
-    // En modo raw el terminal NO agrega carriage return automático.
-    // Escribimos solo \n: el cursor baja una línea y mantiene la columna,
-    // lo cual es consistente con getCursorPosition() que cuenta columnas
-    // como si cada \n fuera un salto simple (sin \r).
     stdout.write(out);
 
     renderedRows = out.split("\n").length;
@@ -30,15 +28,11 @@ async function run<T>(component: InputComponent<T>): Promise<T> {
     if (cursorPos) {
       const up = renderedRows - 1 - cursorPos.row;
       if (up > 0) stdout.write(`\x1b[${up}A`);
-      // \r asegura columna 0 antes de avanzar a la columna deseada
       stdout.write(`\r\x1b[${cursorPos.col}C`);
     }
   };
 
   return new Promise((resolve) => {
-    // Guardar posición actual (inicio del editor) antes de dibujar
-    stdout.write("\x1b7");
-
     // Buffer para acumular chunks de paste bracketed
     let pasteBuffer: string | null = null;
 
