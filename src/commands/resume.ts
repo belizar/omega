@@ -1,4 +1,5 @@
 import { existsSync } from "fs";
+import { stdout } from "process";
 import { Context } from "../app-context.js";
 import { Session } from "../session.js";
 import { DisplayAssistantText } from "../tui/components/display-text.js";
@@ -78,6 +79,8 @@ class ResumeCommand implements Command<void> {
     sessions: SessionInfo[],
     _dir: string,
   ): Promise<SessionInfo | null> {
+    // Dejar margen para el prompt + barras (~4 lineas). Tope 20.
+    const maxVisible = Math.max(5, Math.min(20, (stdout.rows || 24) - 4));
     const list = new SelectList(sessions, (s, i, isSelected) => {
       const prefix = isSelected ? `${green(">")} ` : "  ";
       const num = green(`[${i + 1}]`);
