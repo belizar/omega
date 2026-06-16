@@ -126,7 +126,11 @@ function translateTools(agent: AgentConfig): OpenAITool[] {
   });
 }
 
-function parseResponse(data: Record<string, unknown>, model: string): LLMResponse {
+function parseResponse(
+  data: Record<string, unknown>,
+  model: string,
+  openrouterCostHeader: string | null,
+): LLMResponse {
   const choice = (data.choices as Record<string, unknown>[])[0];
   const msg = choice.message as Record<string, unknown>;
   const content: Block[] = [];
@@ -166,6 +170,15 @@ function parseResponse(data: Record<string, unknown>, model: string): LLMRespons
 
   const usageData = data.usage as Record<string, number>;
 
+  // OpenRouter devuelve el costo real en headers; si está disponible lo usamos,
+  // si no, estimamos con nuestra tabla de precios.
+  let cost: number;
+  if (openrouterCostHeader !== null) {
+    cost = parseFloat(openrouterCostHeader);
+  } else {
+    cost = calculateCost(model, usageData.prompt_tokens, usageData.completion_tokens);
+  }
+
   return {
     content,
     stop_reason,
@@ -173,7 +186,7 @@ function parseResponse(data: Record<string, unknown>, model: string): LLMRespons
       input_tokens: usageData.prompt_tokens,
       output_tokens: usageData.completion_tokens,
     },
-    cost: calculateCost(model, usageData.prompt_tokens, usageData.completion_tokens),
+    cost,
   };
 }
 
@@ -223,8 +236,9 @@ class OpenRouterProvider extends LLMProvider {
 
       if (response.ok) {
         const data = await response.json();
-        logger.info("OpenRouter API call successful");
-        return parseResponse(data, agent.model);
+        const costHeader = response.headers.get("x-openrouter-cost");
+        logger.info("OpenRouter API call successful", { cost: costHeader });
+        return parseResponse(data, agent.model, costHeader);
       }
 
       if (response.status === 401) {
