@@ -185,10 +185,9 @@ class LineEditor implements InputComponent<string> {
     return { row: line + 1, col };
   }
 
-  /** Ancho de la barra horizontal: usa el ancho del terminal, con tope en 120. */
+  /** Ancho de la barra horizontal: usa el ancho completo del terminal. */
   #boxWidth(): number {
-    const termWidth = stdout.columns || 80;
-    return Math.min(termWidth, 120);
+    return stdout.columns || 80;
   }
 
   // ---- privados ----
