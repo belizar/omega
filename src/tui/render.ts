@@ -3,24 +3,28 @@ import { InputComponent } from "./component.js";
 import { decodeKey } from "./decodeKey.js";
 import { disableRawMode } from "./terminal.js";
 
-/** Profundidad de llamadas anidadas a run(). Solo la más externa usa \x1b7. */
-let runDepth = 0;
-
 async function run<T>(component: InputComponent<T>): Promise<T> {
-  const isOuter = runDepth === 0;
-  runDepth++;
-
   let renderedRows = 0;
 
+  // Estrategia de redibujo:
+  //
+  // A) Con cursor (LineEditor): \x1b7 / \x1b8 (DEC save/restore).
+  //    El render es chico (3 líneas), nunca scrollea el terminal, así que
+  //    save/restore es 100% confiable y el cursor se posiciona exactamente.
+  //
+  // B) Sin cursor (SelectList, etc.): movimiento explícito \x1b[N}A.
+  //    El render puede tener muchas líneas y causar scroll, lo cual rompe
+  //    \x1b7/\x1b8. Pero como el cursor siempre queda al final del render
+  //    (nadie llama a getCursorPosition), renderedRows es exacto y podemos
+  //    subir limpiamente.
+
+  const hasCursor = typeof component.getCursorPosition === "function";
+
   const draw = () => {
-    if (isOuter) {
-      // Modo externo (LineEditor): save/restore cursor
+    if (hasCursor) {
       stdout.write("\x1b8");
       stdout.write("\x1b[0J");
     } else {
-      // Modo anidado (SelectList): movimiento explícito.
-      // El cursor siempre está al final del render del componente
-      // (sin getCursorPosition no lo movemos).
       if (renderedRows > 0) {
         stdout.write(`\x1b[${renderedRows}A`);
       }
@@ -31,8 +35,8 @@ async function run<T>(component: InputComponent<T>): Promise<T> {
     stdout.write(out);
     renderedRows = out.split("\n").length;
 
-    const cp = component.getCursorPosition?.();
-    if (cp) {
+    if (hasCursor) {
+      const cp = component.getCursorPosition!();
       const up = renderedRows - 1 - cp.row;
       if (up > 0) stdout.write(`\x1b[${up}A`);
       stdout.write(`\r\x1b[${cp.col}C`);
@@ -40,8 +44,8 @@ async function run<T>(component: InputComponent<T>): Promise<T> {
   };
 
   return new Promise((resolve) => {
-    if (isOuter) {
-      stdout.write("\x1b7"); // guardar posición inicial
+    if (hasCursor) {
+      stdout.write("\x1b7"); // guardar posición inicial del componente
     }
 
     let pasteBuffer: string | null = null;
@@ -56,24 +60,18 @@ async function run<T>(component: InputComponent<T>): Promise<T> {
       component.handleKey(key);
       draw();
       if (component.isDone()) {
-        if (isOuter) {
-          // Limpiar y dejar cursor debajo
-          const cp = component.getCursorPosition?.();
-          if (cp) {
-            const finalOut = component.render();
-            const totalLines = finalOut.split("\n").length;
-            const down = totalLines - 1 - cp.row;
-            if (down > 0) stdout.write(`\x1b[${down}B`);
-            const lastLine = finalOut.split("\n")[totalLines - 1];
-            const colDiff = lastLine.length - cp.col;
-            if (colDiff > 0) stdout.write(`\x1b[${colDiff}C`);
-            stdout.write("\r\n");
-          } else {
-            stdout.write("\x1b8");
-            stdout.write("\x1b[0J");
-          }
+        if (hasCursor) {
+          const finalOut = component.render();
+          const totalLines = finalOut.split("\n").length;
+          const cp = component.getCursorPosition!();
+          const down = totalLines - 1 - cp.row;
+          if (down > 0) stdout.write(`\x1b[${down}B`);
+          const lastLine = finalOut.split("\n")[totalLines - 1];
+          const colDiff = lastLine.length - cp.col;
+          if (colDiff > 0) stdout.write(`\x1b[${colDiff}C`);
+          stdout.write("\r\n");
         } else {
-          // Anidado: limpiar area y restaurar
+          // Sin cursor: limpiar output y volver arriba
           if (renderedRows > 0) {
             stdout.write(`\x1b[${renderedRows}A`);
           }
@@ -81,7 +79,6 @@ async function run<T>(component: InputComponent<T>): Promise<T> {
         }
 
         stdin.removeListener("data", onData);
-        runDepth--;
         resolve(component.getResult());
       }
     };
