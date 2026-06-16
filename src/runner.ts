@@ -21,6 +21,9 @@ type RunnerEvent =
     };
 
 class Runner {
+  // Métricas de una sola corrida (se resetean con resetMetrics()).
+  // El acumulado histórico lo mantiene Session (addUsage), que es el
+  // único dueño persistente del costo total.
   #llmProvider: LLMProvider;
   #agentConfig: AgentConfig;
   #maxSteps: number;
