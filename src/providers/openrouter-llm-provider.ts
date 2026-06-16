@@ -166,8 +166,24 @@ function parseResponse(
   const msg = choice.message as Record<string, unknown>;
   const content: Block[] = [];
 
+  // content puede ser string o array de bloques
   if (typeof msg.content === "string" && msg.content.length > 0) {
     content.push({ type: "text", text: msg.content });
+  } else if (Array.isArray(msg.content)) {
+    for (const block of msg.content as Array<Record<string, unknown>>) {
+      if (block.type === "text" && typeof block.text === "string") {
+        content.push({ type: "text", text: block.text });
+      }
+      if (block.type === "tool_use") {
+        content.push({
+          type: "tool_use",
+          id: block.id as string,
+          name: block.name as string,
+          input: block.input,
+        });
+      }
+      // Ignorar bloques thinking, redacted_thinking, etc.
+    }
   }
 
   const toolCalls = msg.tool_calls as OpenAIToolCall[] | undefined;
@@ -408,6 +424,17 @@ class OpenRouterProvider extends LLMProvider {
 
           const finish = choices[0].finish_reason as string | undefined;
           if (finish) finishReason = finish;
+
+          // Ignorar deltas que no son ni texto ni tool_calls 
+          // (thinking, reasoning_content, redacted_thinking, etc.)
+          const deltaType = delta.type as string | undefined;
+          if (deltaType === "thinking" || deltaType === "redacted_thinking") {
+            continue;
+          }
+          if (!delta.content && !delta.tool_calls) {
+            // Podría ser reasoning_content u otro bloque no textual
+            continue;
+          }
 
           // Texto
           if (delta.content && typeof delta.content === "string") {

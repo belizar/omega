@@ -27,12 +27,12 @@ class DisplayAssistantText implements DisplayText {
     this.#screen.printAboveRaw(dim(this.#streamingBuffer));
   }
 
-  /** Cierra el bloque de streaming: imprime un LF final y limpia el buffer. */
+  /** Cierra el bloque de streaming. El último displayStream ya fijó el
+   * texto en el scrollback; solo limpiamos el buffer interno. */
   endStream(): void {
     if (!this.#streaming) return;
     this.#streaming = false;
     this.#streamingBuffer = "";
-    this.#screen.printAboveRaw("\n");
   }
 
   display(text: string): void {

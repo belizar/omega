@@ -67,13 +67,15 @@ class Screen {
   }
 
   /**
-   * Igual que printAbove pero no fuerza LF al final. Para streaming de texto,
-   * donde el contenido va llegando de a chunks y queremos que quede pegado.
+   * Imprime texto sin forzar LF para streaming typewriter.
+   * Cada llamada borra la versión anterior del texto y la reemplaza.
+   * El texto siempre queda en su propia línea, arriba del editor.
    */
   printAboveRaw(text: string): void {
-    this.#clearLive();
+    // Borramos el editor viejo + la línea de texto del chunk anterior
+    this.#clearLive(1);
     if (text.length > 0) {
-      stdout.write(text);
+      stdout.write(text + LF);
     }
     this.#renderLive();
   }
@@ -104,11 +106,13 @@ class Screen {
     return { out, cursorRow, cursorCol };
   }
 
-  /** Sube al tope de la región viva y limpia de ahí hacia abajo (relativo). */
-  #clearLive(): void {
-    if (this.#prevRows > 0 && this.#prevCursorRow > 0) {
-      stdout.write(CUU(this.#prevCursorRow));
-    }
+  /** Sube al tope de la región viva y limpia de ahí hacia abajo (relativo).
+   * @param extraRows líneas adicionales a borrar arriba de la región viva. */
+  #clearLive(extraRows = 0): void {
+    const up = (this.#prevRows > 0 && this.#prevCursorRow > 0)
+      ? this.#prevCursorRow + extraRows
+      : extraRows;
+    if (up > 0) stdout.write(CUU(up));
     stdout.write(CR);
     stdout.write(ED0);
   }
