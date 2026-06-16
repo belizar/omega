@@ -27,6 +27,7 @@ import { Spinner } from "./tui/components/spinner.js";
 import { Screen } from "./tui/screen.js";
 import { disableRawMode, enableRawMode } from "./tui/terminal.js";
 import { dim } from "./tui/theme.js";
+import { expandFileMentions } from "./file-mentions.js";
 
 // Carga la .env del cwd (overrides por proyecto) y, como fallback, la global
 // ~/.omega/.env. dotenv NO pisa vars ya seteadas, así que el cwd gana y la
@@ -159,7 +160,8 @@ const main = async () => {
 
     const session = ctx.session;
 
-    session.addUserMessage(input);
+    const resolvedInput = expandFileMentions(input);
+    session.addUserMessage(resolvedInput.text);
 
     const iterator = runner.run(session.messages);
 
