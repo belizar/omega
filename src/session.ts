@@ -72,11 +72,11 @@ class Session {
     this.#save();
   }
 
-  addUserMessage(msg: string) {
+  addUserMessage(msg: string | Message["content"]) {
     this.#messages.push({
       role: "user",
       content: msg,
-    });
+    } as Message);
     this.#save();
   }
 

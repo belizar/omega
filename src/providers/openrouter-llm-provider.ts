@@ -1,6 +1,6 @@
 import { AgentConfig } from "../agent-config.js";
 import { logger } from "../logger.js";
-import { Message, ToolMessage } from "../message.js";
+import { Message, ToolMessage, ImageMessage } from "../message.js";
 import { Block, calculateCost, LLMProvider, LLMResponse, StreamEvent, TextBlock, ToolUseBlock } from "./llm-provider.js";
 
 const TIMEOUT_MS = 60000;
@@ -17,7 +17,15 @@ type OpenAIToolCall = {
 
 type OpenAIMessage =
   | { role: "system"; content: string }
-  | { role: "user"; content: string }
+  | {
+      role: "user";
+      content:
+        | string
+        | Array<
+            | { type: "text"; text: string }
+            | { type: "image_url"; image_url: { url: string } }
+          >;
+    }
   | {
       role: "assistant";
       content: string | null;
@@ -58,11 +66,34 @@ function translateMessages(messages: Message[], systemPrompt: string): OpenAIMes
             });
           }
         } else {
-          // array de TextMessage — concatenar
-          const text = items
-            .map((b) => (typeof b === "string" ? b : (b as { text: string }).text ?? ""))
-            .join("");
-          result.push({ role: "user", content: text });
+          // Array de TextMessage e ImageMessage — puede ser texto simple o multimodal
+          const hasImages = items.some((b) => typeof b === "object" && (b as { type: string }).type === "image");
+          if (hasImages) {
+            // Formato multimodal: array de content parts
+            const contentParts: Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }> = [];
+            for (const item of items) {
+              if (typeof item === "string") {
+                contentParts.push({ type: "text", text: item });
+              } else if ((item as { type: string }).type === "text") {
+                contentParts.push({ type: "text", text: (item as { text: string }).text });
+              } else if ((item as { type: string }).type === "image") {
+                const img = item as ImageMessage;
+                contentParts.push({
+                  type: "image_url",
+                  image_url: {
+                    url: `data:${img.source.media_type};base64,${img.source.data}`,
+                  },
+                });
+              }
+            }
+            result.push({ role: "user", content: contentParts });
+          } else {
+            // array de TextMessage — concatenar
+            const text = items
+              .map((b) => (typeof b === "string" ? b : (b as { text: string }).text ?? ""))
+              .join("");
+            result.push({ role: "user", content: text });
+          }
         }
         continue;
       }

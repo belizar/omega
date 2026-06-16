@@ -19,11 +19,20 @@ type TextMessage =
     }
   | string;
 
-type MessageContent = ToolMessage | ToolUseMessage | TextMessage;
+type ImageMessage = {
+  type: "image";
+  source: {
+    type: "base64";
+    media_type: string;
+    data: string;
+  };
+};
+
+type MessageContent = ToolMessage | ToolUseMessage | TextMessage | ImageMessage;
 
 type Message = {
   role: "user" | "assistant";
   content: MessageContent | MessageContent[];
 };
 
-export { Message, TextMessage, ToolMessage, ToolUseMessage };
+export { ImageMessage, Message, TextMessage, ToolMessage, ToolUseMessage };

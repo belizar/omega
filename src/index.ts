@@ -10,6 +10,7 @@ import { validateEnv } from "./config.js";
 import { logger } from "./logger.js";
 import { OpenRouterProvider } from "./providers/openrouter-llm-provider.js";
 import { Runner } from "./runner.js";
+import { Message } from "./message.js";
 import { Session } from "./session.js";
 import { BashTool } from "./tools/bash.js";
 import { EditTool } from "./tools/edit.js";
@@ -161,7 +162,27 @@ const main = async () => {
     const session = ctx.session;
 
     const resolvedInput = expandFileMentions(input);
-    session.addUserMessage(resolvedInput.text);
+    const userContent: Message["content"] = [];
+    if (resolvedInput.text) {
+      userContent.push({ type: "text", text: resolvedInput.text });
+    }
+    for (const img of resolvedInput.images) {
+      userContent.push(img);
+    }
+
+    // Si solo hay texto, lo pasamos como string simple para mantener
+    // compatibilidad con el formato legacy
+    const firstItem = userContent[0];
+    if (
+      userContent.length === 1 &&
+      typeof firstItem === "object" &&
+      "type" in firstItem &&
+      firstItem.type === "text"
+    ) {
+      session.addUserMessage((firstItem as { type: "text"; text: string }).text);
+    } else {
+      session.addUserMessage(userContent);
+    }
 
     const iterator = runner.run(session.messages);
 
