@@ -2,12 +2,18 @@ import { Message } from "./message.js";
 
 // ── Truncado de outputs ──────────────────────────────────────────────────────
 
-function truncate(text: string, maxLines = 200): string {
-  const lines = text.split("\n");
+function truncate(text: string, maxLines = 200, maxChars = 8000): string {
+  // Cap por cantidad de caracteres primero
+  let t = text;
+  if (t.length > maxChars) {
+    const half = Math.floor(maxChars / 2);
+    t = t.slice(0, half) + `\n… [${t.length - maxChars} chars omitidos] …\n` + t.slice(-half);
+  }
+  const lines = t.split("\n");
 
-  if (lines.length <= maxLines) return text;
+  if (lines.length <= maxLines) return t;
 
-  const keep = Math.floor(maxLines / 2);
+  const keep = Math.max(1, Math.floor(maxLines / 2));
   const head = lines.slice(0, keep);
   const tail = lines.slice(-keep);
   const omitted = lines.length - keep * 2;
