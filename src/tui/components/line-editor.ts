@@ -23,6 +23,13 @@ class LineEditor implements InputComponent<string> {
     this.#draftCursor = 0;
   }
 
+  /** Vuelve a modo edición tras un commit, conservando buffer y cursor.
+   * Lo usa el Prompt cuando se cancela un modal y hay que seguir editando
+   * la misma línea (ej: tipeaste "/resume", se abrió el picker, apretaste Esc). */
+  reopen(): void {
+    this.#done = false;
+  }
+
   /** Reinicia el estado para un nuevo input (sin perder el historial). */
   reset(): void {
     this.#buffer = "";
@@ -177,6 +184,16 @@ class LineEditor implements InputComponent<string> {
     const content = lines.map((l, i) => (i === 0 ? this.#promptStr : indent) + l);
 
     return [bar, ...content, bar].join("\n");
+  }
+
+  /** Render del mensaje enviado SIN la caja (barras), para ecoarlo en el
+   * historial. Así el mensaje no se ve igual que el prompt de input de abajo. */
+  renderEcho(): string {
+    const indent = " ".repeat(this.#promptStr.length);
+    return this.#buffer
+      .split("\n")
+      .map((l, i) => (i === 0 ? this.#promptStr : indent) + l)
+      .join("\n");
   }
 
   getCursorPosition(): CursorPosition {
