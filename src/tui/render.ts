@@ -25,15 +25,18 @@ async function run<T>(component: InputComponent<T>): Promise<T> {
 
   return new Promise((resolve) => {
     // Guardar posicion actual como inicio del componente.
-    // Las llamadas a run() son secuenciales (LineEditor resuelve
-    // antes de que arranque SelectList), asi que \x1b7 no se pisa.
     stdout.write("\x1b7");
+
+    if (!hasCursor) {
+      stdout.write("\x1b[?25l"); // ocultar cursor en listas
+    }
 
     let pasteBuffer: string | null = null;
 
     const processKey = (keyStr: string) => {
       const key = decodeKey(keyStr);
       if (key.type === "ctrl" && key.key === "c") {
+        if (!hasCursor) stdout.write("\x1b[?25h");
         stdin.removeListener("data", onData);
         disableRawMode();
         process.exit(0);
@@ -53,9 +56,11 @@ async function run<T>(component: InputComponent<T>): Promise<T> {
           if (colDiff > 0) stdout.write(`\x1b[${colDiff}C`);
           stdout.write("\r\n");
         } else {
-          // Sin cursor: volver al inicio guardado y limpiar
-          stdout.write("\x1b8");
-          stdout.write("\x1b[0J");
+          // Sin cursor: mostrar cursor, dejar output en pantalla
+          // y bajar una linea para que el siguiente componente
+          // (LineEditor) arranque debajo.
+          stdout.write("\x1b[?25h");
+          stdout.write("\r\n");
         }
 
         stdin.removeListener("data", onData);
