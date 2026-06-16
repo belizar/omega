@@ -169,94 +169,23 @@ class LineEditor implements InputComponent<string> {
 
   render(): string {
     const W = this.#boxWidth();
-    const innerW = W - 4; // espacio entre bordes │ ... │
-    const horizontal = "─".repeat(W - 2);
-    const top = dim(`╭${horizontal}╮`);
-    const bottom = dim(`╰${horizontal}╯`);
-
+    const bar = dim("─".repeat(W));
     const promptLen = this.#promptStr.length;
     const indent = " ".repeat(promptLen);
 
-    const logicalLines = this.#buffer.split("\n");
-    const visualLines: string[] = [top];
+    const lines = this.#buffer.split("\n");
+    const content = lines.map((l, i) => (i === 0 ? this.#promptStr : indent) + l);
 
-    for (let i = 0; i < logicalLines.length; i++) {
-      const prefix = i === 0 ? this.#promptStr : indent;
-      const wrapped = this.#wrapLine(logicalLines[i], prefix, indent, innerW);
-      for (const w of wrapped) {
-        const paddingLen = Math.max(0, innerW - w.length);
-        const padding = " ".repeat(paddingLen);
-        visualLines.push(`${dim("│")} ${w}${padding} ${dim("│")}`);
-      }
-    }
-
-    visualLines.push(bottom);
-    return visualLines.join("\n");
+    return [bar, ...content, bar].join("\n");
   }
 
   getCursorPosition(): CursorPosition {
-    const W = this.#boxWidth();
-    const innerW = W - 4;
-    const promptLen = this.#promptStr.length;
-    const indentLen = promptLen;
-
-    const logicalLines = this.#buffer.split("\n");
-    const curLine = this.#cursorLine();
-    const curCol = this.#cursorCol();
-
-    const maxFirst = innerW - promptLen;
-    const maxCont = innerW - indentLen;
-
-    // Acumular filas visuales hasta la linea del cursor
-    let visRow = 1; // +1 por el borde superior
-    for (let i = 0; i < curLine; i++) {
-      const prefix = i === 0 ? this.#promptStr : " ".repeat(indentLen);
-      visRow += this.#wrapLine(logicalLines[i], prefix, " ".repeat(indentLen), innerW).length;
-    }
-
-    // Cursor en la primera sub-linea visual?
-    if (curCol <= maxFirst) {
-      const col = 2 + promptLen + curCol; // cap a innerW visual
-      return { row: visRow, col: Math.min(col, W - 1) };
-    }
-
-    // Cursor en una sub-linea de continuacion
-    const remaining = curCol - maxFirst;
-    const contIdx = Math.floor(remaining / maxCont);
-    const offsetInCont = remaining % maxCont;
-
-    return {
-      row: visRow + 1 + contIdx,
-      col: 2 + indentLen + offsetInCont,
-    };
+    const line = this.#cursorLine();
+    const col = (line === 0 ? this.#promptStr.length : 2) + this.#cursorCol();
+    return { row: line + 1, col };
   }
 
-  /**
-   * Parte una línea lógica en líneas visuales que caben en `innerW`.
-   * La primera usa `prefix`, las siguientes usan `contPrefix` (mismo ancho).
-   */
-  #wrapLine(line: string, prefix: string, contPrefix: string, innerW: number): string[] {
-    const maxFirst = innerW - prefix.length;
-    const maxCont = innerW - contPrefix.length;
-
-    if (line.length <= maxFirst) {
-      return [prefix + line];
-    }
-
-    const result: string[] = [];
-    result.push(prefix + line.slice(0, maxFirst));
-    let remaining = line.slice(maxFirst);
-    while (remaining.length > maxCont) {
-      result.push(contPrefix + remaining.slice(0, maxCont));
-      remaining = remaining.slice(maxCont);
-    }
-    if (remaining.length > 0) {
-      result.push(contPrefix + remaining);
-    }
-    return result;
-  }
-
-  /** Ancho de la caja: usa el ancho del terminal, con tope en 120. */
+  /** Ancho de la barra horizontal: usa el ancho del terminal, con tope en 120. */
   #boxWidth(): number {
     const termWidth = stdout.columns || 80;
     return Math.min(termWidth, 120);

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { LineEditor } from "../../tui/components/line-editor.js";
 import { Key } from "../../tui/decodeKey.js";
 
-// Helpers para simular teclas (lo que decodeKey devolvería)
+// Helpers para simular teclas
 const char = (value: string): Key => ({ type: "char", value });
 const enter: Key = { type: "enter" };
 const backspace: Key = { type: "backspace" };
@@ -21,50 +21,24 @@ function typeChars(editor: LineEditor, text: string): void {
   for (const c of text) editor.handleKey(char(c));
 }
 
-// ── Helpers para el formato caja ─────────────────────────────────────────
-// stdout.columns es undefined en tests → default 80.
+// ── Helpers: formato con barras horizontales ────────────────────────────
 
 const DIM = "\x1b[2m";
 const RST = "\x1b[0m";
 
-function box(buffer: string, width = 80): string {
-  const innerW = width - 4;
-  const h = "─".repeat(width - 2);
-  const top = `${DIM}╭${h}╮${RST}`;
-  const bottom = `${DIM}╰${h}╯${RST}`;
-
+/** Render esperado: barra superior + contenido + barra inferior. Ancho default 80. */
+function barContent(buffer: string, width = 80): string {
+  const bar = `${DIM}${"─".repeat(width)}${RST}`;
+  const promptLen = 2; // "> "
+  const indent = " ".repeat(promptLen);
   const lines = buffer.split("\n");
-  const content: string[] = [top];
-
-  for (let i = 0; i < lines.length; i++) {
-    const prefix = i === 0 ? "> " : "  ";
-    const line = prefix + lines[i];
-    const padding = " ".repeat(Math.max(0, innerW - line.length));
-    content.push(`${DIM}│${RST} ${line}${padding} ${DIM}│${RST}`);
-  }
-
-  content.push(bottom);
-  return content.join("\n");
+  const content = lines.map((l, i) => (i === 0 ? "> " : indent) + l);
+  return [bar, ...content, bar].join("\n");
 }
 
-/**
- * Posición del cursor en la caja.
- * - row siempre +1 (borde superior).
- * - col: +2 por "│ " + 2 por el prompt/indent = +4 sobre cursorCol.
- *
- * Para línea 0 (con prompt "> "):
- *   colNuevo = 4 + cursorCol
- *   colViejo = 2 + cursorCol  → delta = +2 respecto al test viejo.
- *
- * Para línea >0 (indent "  "):
- *   colNuevo = 4 + cursorCol
- *   colViejo = cursorCol      → delta = +4 respecto al test viejo.
- */
-function cposL0(col: number) {
-  return { row: 1, col: col + 2 };
-}
-function cposLn(row: number, col: number) {
-  return { row: row + 1, col: col + 4 };
+/** Posición del cursor: row = línea lógica + 1 (barra superior), col = 2 + cursorCol */
+function cpos(row: number, cursorCol: number) {
+  return { row: row + 1, col: 2 + cursorCol };
 }
 
 describe("LineEditor", () => {
@@ -77,15 +51,15 @@ describe("LineEditor", () => {
   // ---- Básico ----
 
   it("empieza vacío y no done", () => {
-    expect(editor.render()).toBe(box(""));
+    expect(editor.render()).toBe(barContent(""));
     expect(editor.isDone()).toBe(false);
-    expect(editor.getCursorPosition()).toEqual(cposL0(2));
+    expect(editor.getCursorPosition()).toEqual(cpos(0, 0));
   });
 
   it("escribe caracteres y hace commit con enter", () => {
     typeChars(editor, "hola");
-    expect(editor.render()).toBe(box("hola"));
-    expect(editor.getCursorPosition()).toEqual(cposL0(6));
+    expect(editor.render()).toBe(barContent("hola"));
+    expect(editor.getCursorPosition()).toEqual(cpos(0, 4));
     editor.handleKey(enter);
     expect(editor.isDone()).toBe(true);
     expect(editor.getResult()).toBe("hola");
@@ -94,7 +68,7 @@ describe("LineEditor", () => {
   it("render no incluye el \\n final de commit", () => {
     typeChars(editor, "test");
     editor.handleKey(enter);
-    expect(editor.render()).toBe(box("test"));
+    expect(editor.render()).toBe(barContent("test"));
     expect(editor.getResult()).toBe("test");
   });
 
@@ -108,38 +82,38 @@ describe("LineEditor", () => {
 
     editor.reset();
     expect(editor.isDone()).toBe(false);
-    expect(editor.render()).toBe(box(""));
-    expect(editor.getCursorPosition()).toEqual(cposL0(2));
+    expect(editor.render()).toBe(barContent(""));
+    expect(editor.getCursorPosition()).toEqual(cpos(0, 0));
   });
 
   // ---- Cursor y movimiento ----
 
   it("mueve cursor con left/right", () => {
     typeChars(editor, "ab");
-    expect(editor.getCursorPosition()).toEqual(cposL0(4));
+    expect(editor.getCursorPosition()).toEqual(cpos(0, 2));
     editor.handleKey(left);
-    expect(editor.getCursorPosition()).toEqual(cposL0(3));
+    expect(editor.getCursorPosition()).toEqual(cpos(0, 1));
     editor.handleKey(left);
-    expect(editor.getCursorPosition()).toEqual(cposL0(2));
+    expect(editor.getCursorPosition()).toEqual(cpos(0, 0));
     editor.handleKey(left);
-    expect(editor.getCursorPosition()).toEqual(cposL0(2)); // no pasa del prompt
+    expect(editor.getCursorPosition()).toEqual(cpos(0, 0)); // no pasa del prompt
     editor.handleKey(right);
-    expect(editor.getCursorPosition()).toEqual(cposL0(3));
+    expect(editor.getCursorPosition()).toEqual(cpos(0, 1));
   });
 
   it("left/right no se salen de los bordes", () => {
     editor.handleKey(left);
-    expect(editor.getCursorPosition()).toEqual(cposL0(2));
+    expect(editor.getCursorPosition()).toEqual(cpos(0, 0));
     editor.handleKey(right);
-    expect(editor.getCursorPosition()).toEqual(cposL0(2));
+    expect(editor.getCursorPosition()).toEqual(cpos(0, 0));
   });
 
   it("home/end", () => {
     typeChars(editor, "abc");
     editor.handleKey(home);
-    expect(editor.getCursorPosition()).toEqual(cposL0(2));
+    expect(editor.getCursorPosition()).toEqual(cpos(0, 0));
     editor.handleKey(end);
-    expect(editor.getCursorPosition()).toEqual(cposL0(5));
+    expect(editor.getCursorPosition()).toEqual(cpos(0, 3));
   });
 
   // ---- Inserción en medio ----
@@ -148,7 +122,7 @@ describe("LineEditor", () => {
     typeChars(editor, "ac");
     editor.handleKey(left);
     editor.handleKey(char("b"));
-    expect(editor.render()).toBe(box("abc"));
+    expect(editor.render()).toBe(barContent("abc"));
     expect(editor.getResult()).toBe("abc");
   });
 
@@ -157,10 +131,10 @@ describe("LineEditor", () => {
   it("backspace borra carácter anterior al cursor", () => {
     typeChars(editor, "abc");
     editor.handleKey(backspace);
-    expect(editor.render()).toBe(box("ab"));
+    expect(editor.render()).toBe(barContent("ab"));
     editor.handleKey(left);
     editor.handleKey(backspace);
-    expect(editor.render()).toBe(box("b"));
+    expect(editor.render()).toBe(barContent("b"));
   });
 
   it("delete borra carácter en el cursor", () => {
@@ -168,7 +142,7 @@ describe("LineEditor", () => {
     editor.handleKey(home);
     editor.handleKey(right);
     editor.handleKey(del);
-    expect(editor.render()).toBe(box("ac"));
+    expect(editor.render()).toBe(barContent("ac"));
   });
 
   // ---- Multilínea ----
@@ -177,23 +151,21 @@ describe("LineEditor", () => {
     typeChars(editor, "linea1");
     editor.handleKey(newline);
     typeChars(editor, "linea2");
-    expect(editor.render()).toBe(box("linea1\nlinea2"));
-    expect(editor.getCursorPosition()).toEqual(cposLn(1, 6));
+    expect(editor.render()).toBe(barContent("linea1\nlinea2"));
+    expect(editor.getCursorPosition()).toEqual(cpos(1, 6));
   });
 
   it("up/down mueven entre líneas en multilínea", () => {
     typeChars(editor, "aa");
     editor.handleKey(newline);
     typeChars(editor, "bbb");
-    expect(editor.getCursorPosition()).toEqual(cposLn(1, 3));
+    expect(editor.getCursorPosition()).toEqual(cpos(1, 3));
 
     editor.handleKey(up);
-    // sube a línea 0, col truncada a 2
-    expect(editor.getCursorPosition()).toEqual(cposL0(4));
+    expect(editor.getCursorPosition()).toEqual(cpos(0, 2));
 
     editor.handleKey(down);
-    // preserva col 2, truncada al largo de línea 1 (3) => 2
-    expect(editor.getCursorPosition()).toEqual(cposLn(1, 2));
+    expect(editor.getCursorPosition()).toEqual(cpos(1, 2));
   });
 
   it("home/end en multilínea operan sobre la línea actual", () => {
@@ -202,9 +174,9 @@ describe("LineEditor", () => {
     typeChars(editor, "bbb");
     editor.handleKey(up);
     editor.handleKey(home);
-    expect(editor.getCursorPosition()).toEqual(cposL0(2));
+    expect(editor.getCursorPosition()).toEqual(cpos(0, 0));
     editor.handleKey(end);
-    expect(editor.getCursorPosition()).toEqual(cposL0(4));
+    expect(editor.getCursorPosition()).toEqual(cpos(0, 2));
   });
 
   // ---- Historial ----
@@ -221,33 +193,33 @@ describe("LineEditor", () => {
     editor.reset();
 
     editor.handleKey(up);
-    expect(editor.render()).toBe(box("segundo"));
+    expect(editor.render()).toBe(barContent("segundo"));
 
     editor.handleKey(up);
-    expect(editor.render()).toBe(box("primer"));
+    expect(editor.render()).toBe(barContent("primer"));
 
     editor.handleKey(up);
-    expect(editor.render()).toBe(box("primer"));
+    expect(editor.render()).toBe(barContent("primer"));
 
     editor.handleKey(down);
-    expect(editor.render()).toBe(box("segundo"));
+    expect(editor.render()).toBe(barContent("segundo"));
 
     editor.handleKey(down);
-    expect(editor.render()).toBe(box(""));
+    expect(editor.render()).toBe(barContent(""));
   });
 
   it("historial preserva draft al navegar", () => {
     typeChars(editor, "borrador");
     editor.handleKey(up);
-    expect(editor.render()).toBe(box("borrador"));
+    expect(editor.render()).toBe(barContent("borrador"));
 
     editor.addToHistory("previo");
     editor.reset();
     typeChars(editor, "nuevo");
     editor.handleKey(up);
-    expect(editor.render()).toBe(box("previo"));
+    expect(editor.render()).toBe(barContent("previo"));
     editor.handleKey(down);
-    expect(editor.render()).toBe(box("nuevo"));
+    expect(editor.render()).toBe(barContent("nuevo"));
   });
 
   it("addToHistory no duplica consecutivos", () => {
@@ -257,9 +229,9 @@ describe("LineEditor", () => {
     editor.addToHistory("otro");
 
     editor.handleKey(up);
-    expect(editor.render()).toBe(box("otro"));
+    expect(editor.render()).toBe(barContent("otro"));
     editor.handleKey(up);
-    expect(editor.render()).toBe(box("cmd"));
+    expect(editor.render()).toBe(barContent("cmd"));
   });
 
   // ---- Atajos Ctrl ----
@@ -267,48 +239,47 @@ describe("LineEditor", () => {
   it("Ctrl+A va a inicio de línea", () => {
     typeChars(editor, "abc");
     editor.handleKey(ctrl("a"));
-    expect(editor.getCursorPosition()).toEqual(cposL0(2));
+    expect(editor.getCursorPosition()).toEqual(cpos(0, 0));
   });
 
   it("Ctrl+E va a fin de línea", () => {
     typeChars(editor, "abc");
     editor.handleKey(home);
     editor.handleKey(ctrl("e"));
-    expect(editor.getCursorPosition()).toEqual(cposL0(5));
+    expect(editor.getCursorPosition()).toEqual(cpos(0, 3));
   });
 
   it("Ctrl+U borra desde inicio de línea hasta cursor", () => {
     typeChars(editor, "abc");
-    editor.handleKey(left); // cursor entre 'b' y 'c'
-    expect(editor.render()).toBe(box("abc")); // mover cursor no cambia buffer
-    editor.handleKey(ctrl("u")); // borra "ab", deja "c"
-    expect(editor.render()).toBe(box("c"));
+    editor.handleKey(left);
+    expect(editor.render()).toBe(barContent("abc"));
+    editor.handleKey(ctrl("u"));
+    expect(editor.render()).toBe(barContent("c"));
   });
 
   it("Ctrl+K borra desde cursor hasta fin de línea", () => {
     typeChars(editor, "abc");
     editor.handleKey(left);
-    editor.handleKey(left); // cursor entre 'a' y 'b'
-    expect(editor.render()).toBe(box("abc"));
-    editor.handleKey(ctrl("k")); // borra "bc", deja "a"
-    expect(editor.render()).toBe(box("a"));
+    editor.handleKey(left);
+    expect(editor.render()).toBe(barContent("abc"));
+    editor.handleKey(ctrl("k"));
+    expect(editor.render()).toBe(barContent("a"));
   });
 
   it("Ctrl+W borra palabra hacia atrás", () => {
     typeChars(editor, "hola mundo");
     editor.handleKey(ctrl("w"));
-    expect(editor.render()).toBe(box("hola "));
+    expect(editor.render()).toBe(barContent("hola "));
     editor.handleKey(ctrl("w"));
-    expect(editor.render()).toBe(box(""));
+    expect(editor.render()).toBe(barContent(""));
   });
 
   // ---- Paste ----
 
   it("paste inserta texto multilínea", () => {
     editor.handleKey(paste("linea1\nlinea2\nlinea3"));
-    expect(editor.render()).toBe(box("linea1\nlinea2\nlinea3"));
-    // línea 2 (0-based), 6 chars
-    expect(editor.getCursorPosition()).toEqual(cposLn(2, 6));
+    expect(editor.render()).toBe(barContent("linea1\nlinea2\nlinea3"));
+    expect(editor.getCursorPosition()).toEqual(cpos(2, 6));
   });
 
   // ---- Historial con multilínea ----
@@ -320,9 +291,9 @@ describe("LineEditor", () => {
     typeChars(editor, "linea1");
     editor.handleKey(newline);
     typeChars(editor, "linea2");
-    editor.handleKey(up); // cursor a línea 0
-    editor.handleKey(up); // desde primera línea multilínea -> historial
-    expect(editor.render()).toBe(box("previo"));
+    editor.handleKey(up);
+    editor.handleKey(up);
+    expect(editor.render()).toBe(barContent("previo"));
   });
 
   it("down desde última línea multilínea navega historial (vacío -> nada)", () => {
@@ -330,28 +301,28 @@ describe("LineEditor", () => {
     editor.handleKey(newline);
     typeChars(editor, "linea2");
     editor.handleKey(down);
-    expect(editor.render()).toBe(box("linea1\nlinea2"));
+    expect(editor.render()).toBe(barContent("linea1\nlinea2"));
   });
 
   // ---- Integridad del buffer en multilínea (regresión) ----
 
   it("newline + tipeo no duplica el buffer", () => {
     typeChars(editor, "Primero");
-    expect(editor.render()).toBe(box("Primero"));
+    expect(editor.render()).toBe(barContent("Primero"));
     expect(editor.getResult()).toBe("Primero");
 
     editor.handleKey(newline);
-    expect(editor.render()).toBe(box("Primero\n"));
-    expect(editor.getCursorPosition().row).toBe(2); // línea 1 + borde
-    expect(editor.getCursorPosition().col).toBe(4); // 4 + 0
+    expect(editor.render()).toBe(barContent("Primero\n"));
+    expect(editor.getCursorPosition().row).toBe(2);
+    expect(editor.getCursorPosition().col).toBe(2);
 
     typeChars(editor, "Segundo");
-    expect(editor.render()).toBe(box("Primero\nSegundo"));
-    expect(editor.getCursorPosition()).toEqual(cposLn(1, 7));
+    expect(editor.render()).toBe(barContent("Primero\nSegundo"));
+    expect(editor.getCursorPosition()).toEqual(cpos(1, 7));
 
     editor.handleKey(newline);
     typeChars(editor, "Tercero");
-    expect(editor.render()).toBe(box("Primero\nSegundo\nTercero"));
+    expect(editor.render()).toBe(barContent("Primero\nSegundo\nTercero"));
 
     editor.handleKey(enter);
     expect(editor.getResult()).toBe("Primero\nSegundo\nTercero");
@@ -365,12 +336,12 @@ describe("LineEditor", () => {
     typeChars(editor, "linea3");
 
     for (let i = 0; i < 6; i++) editor.handleKey(backspace);
-    expect(editor.render()).toBe(box("linea1\nlinea2\n"));
+    expect(editor.render()).toBe(barContent("linea1\nlinea2\n"));
 
     editor.handleKey(up);
     editor.handleKey(home);
     editor.handleKey(backspace);
-    expect(editor.render()).toBe(box("linea1linea2\n"));
+    expect(editor.render()).toBe(barContent("linea1linea2\n"));
   });
 
   it("newline + navegación con up/down no corrompe buffer", () => {
@@ -381,15 +352,15 @@ describe("LineEditor", () => {
     typeChars(editor, "c");
 
     editor.handleKey(up);
-    expect(editor.getCursorPosition().row).toBe(2); // línea 1 + borde
+    expect(editor.getCursorPosition().row).toBe(2);
     editor.handleKey(up);
-    expect(editor.getCursorPosition().row).toBe(1); // línea 0 + borde
+    expect(editor.getCursorPosition().row).toBe(1);
     editor.handleKey(down);
     expect(editor.getCursorPosition().row).toBe(2);
     editor.handleKey(down);
-    expect(editor.getCursorPosition().row).toBe(3); // línea 2 + borde
+    expect(editor.getCursorPosition().row).toBe(3);
 
-    expect(editor.render()).toBe(box("a\nb\nc"));
+    expect(editor.render()).toBe(barContent("a\nb\nc"));
   });
 
   it("reset después de multilínea limpia correctamente", () => {
@@ -403,38 +374,11 @@ describe("LineEditor", () => {
     editor.addToHistory(result);
 
     editor.reset();
-    expect(editor.render()).toBe(box(""));
-    expect(editor.getCursorPosition()).toEqual(cposL0(2));
+    expect(editor.render()).toBe(barContent(""));
+    expect(editor.getCursorPosition()).toEqual(cpos(0, 0));
     expect(editor.isDone()).toBe(false);
 
     editor.handleKey(up);
-    expect(editor.render()).toBe(box("linea1\nlinea2"));
-  });
-
-  // ---- Wrapping visual ----
-
-  it("lineas largas hacen wrap visual dentro de la caja", () => {
-    // innerW = 76, maxFirst = 74 (con "> "), maxCont = 74 (con "  ")
-    // 80 chars con prompt: "> " + 78 chars = 80 → overflow en 74 → wrap a 6 en línea siguiente
-    const long = "a".repeat(78);
-    typeChars(editor, long);
-    const output = editor.render();
-    const lines = output.split("\n");
-
-    // 1 borde top, 2 líneas visuales, 1 borde bottom = 4 líneas
-    expect(lines.length).toBe(4);
-
-    // Primera línea visual: "│ > aaa... (74 a's)"
-    expect(lines[1]).toContain("> " + "a".repeat(74));
-    // Segunda línea visual: "│   aaaaaa  │" (4 a's restantes)
-    expect(lines[2]).toContain("  " + "a".repeat(4));
-  });
-
-  it("wrap visual actualiza la fila del cursor correctamente", () => {
-    // Escribir muchas letras para garantizar wrap sea cual sea el ancho
-    const long = "x".repeat(200);
-    typeChars(editor, long);
-    // El cursor debe quedar en una fila > 1 (wrap ocurrio)
-    expect(editor.getCursorPosition().row).toBeGreaterThan(1);
+    expect(editor.render()).toBe(barContent("linea1\nlinea2"));
   });
 });
