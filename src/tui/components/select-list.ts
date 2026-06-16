@@ -31,16 +31,32 @@ class SelectList<T> implements InputComponent<T | null> {
     this.#maxVisible = maxVisible;
   }
 
+  isEmpty(): boolean {
+    return this.#items.length === 0;
+  }
+
+  /** Inicio de la ventana visible (la que sigue al seleccionado). */
+  #windowStart(): number {
+    const total = this.#items.length;
+    const limit = Math.min(total, this.#maxVisible);
+    let start = this.#selectedIndex - Math.floor(limit / 2);
+    if (start < 0) start = 0;
+    if (start + limit > total) start = total - limit;
+    return start;
+  }
+
+  /** Fila (0-based) del seleccionado dentro de este render. La usa el Prompt
+   * para poner el cursor del terminal sobre la opción elegida. */
+  selectedRow(): number {
+    return this.#selectedIndex - this.#windowStart();
+  }
+
   render(): string {
     if (this.#items.length === 0) return "(vacio)";
 
     const total = this.#items.length;
     const limit = Math.min(total, this.#maxVisible);
-
-    // Calcular ventana: mantener el seleccionado visible
-    let start = this.#selectedIndex - Math.floor(limit / 2);
-    if (start < 0) start = 0;
-    if (start + limit > total) start = total - limit;
+    const start = this.#windowStart();
 
     const visible = this.#items.slice(start, start + limit);
     const lines = visible.map((item, i) => {
