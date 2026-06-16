@@ -410,4 +410,31 @@ describe("LineEditor", () => {
     editor.handleKey(up);
     expect(editor.render()).toBe(box("linea1\nlinea2"));
   });
+
+  // ---- Wrapping visual ----
+
+  it("lineas largas hacen wrap visual dentro de la caja", () => {
+    // innerW = 76, maxFirst = 74 (con "> "), maxCont = 74 (con "  ")
+    // 80 chars con prompt: "> " + 78 chars = 80 → overflow en 74 → wrap a 6 en línea siguiente
+    const long = "a".repeat(78);
+    typeChars(editor, long);
+    const output = editor.render();
+    const lines = output.split("\n");
+
+    // 1 borde top, 2 líneas visuales, 1 borde bottom = 4 líneas
+    expect(lines.length).toBe(4);
+
+    // Primera línea visual: "│ > aaa... (74 a's)"
+    expect(lines[1]).toContain("> " + "a".repeat(74));
+    // Segunda línea visual: "│   aaaaaa  │" (4 a's restantes)
+    expect(lines[2]).toContain("  " + "a".repeat(4));
+  });
+
+  it("wrap visual actualiza la fila del cursor correctamente", () => {
+    // Escribir muchas letras para garantizar wrap sea cual sea el ancho
+    const long = "x".repeat(200);
+    typeChars(editor, long);
+    // El cursor debe quedar en una fila > 1 (wrap ocurrio)
+    expect(editor.getCursorPosition().row).toBeGreaterThan(1);
+  });
 });
