@@ -13,6 +13,7 @@ import { Runner } from "./runner.js";
 import { Session } from "./session.js";
 import { BashTool } from "./tools/bash.js";
 import { EditTool } from "./tools/edit.js";
+import { GrepTool } from "./tools/grep.js";
 import { ReadTool } from "./tools/read.js";
 import { WriteTool } from "./tools/write.js";
 import {
@@ -83,6 +84,7 @@ const main = async () => {
 
   haikuAgent
     .addTool(new BashTool())
+    .addTool(new GrepTool())
     .addTool(new ReadTool())
     .addTool(new EditTool())
     .addTool(new WriteTool());
