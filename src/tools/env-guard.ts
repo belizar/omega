@@ -6,7 +6,7 @@ import { basename } from "path";
  */
 export function isEnvFile(path: string): boolean {
   const name = basename(path);
-  return name.startsWith(".env");
+  return name === ".env" || name.startsWith(".env.") || name === ".envrc";
 }
 
 export const ENV_BLOCK_MESSAGE = "Acceso bloqueado: los archivos .env contienen secretos y no pueden leerse ni modificarse.";
