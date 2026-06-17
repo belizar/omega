@@ -34,12 +34,12 @@ const PASTE_END = "\x1b[201~";
 class Screen {
   #live: InputComponent<unknown> | null = null;
   #status: string | null = null;
+  #ephemeral: string | null = null;
   #reading = false;
   #resolve: ((result: unknown) => void) | null = null;
 
   #prevRows = 0; // filas que ocupó la región viva en el último render
   #prevCursorRow = 0; // fila (0-based) donde quedó el cursor
-  #ephemeralLines = 0; // líneas visuales del texto efímero (writeEphemeral)
 
   #busy = false; // lock para evitar que setStatus redibuje durante printAbove
   #pasteBuffer: string | null = null;
@@ -73,13 +73,14 @@ class Screen {
     });
   }
 
-  /** Imprime text en el scrollback, por encima de la región viva. */
+  /** Imprime text en el scrollback, por encima de la región viva.
+   * El efímero no se pierde: se limpia momentáneamente y se redibuja
+   * abajo del texto commiteado. */
   printAbove(text: string): void {
     this.#lock();
-    // Limpiar texto efímero pendiente antes de escribir al scrollback
-    this.#clearLive(this.#ephemeralLines);
-    this.#ephemeralLines = 0;
-    if (text.length > 0) {
+    this.#clearLive();
+    // Considerar "vacío" después de strippear ANSI, no por text.length
+    if (stripAnsi(text).trim().length > 0) {
       stdout.write(text);
       if (!text.endsWith("\n")) stdout.write(LF);
     }
@@ -88,46 +89,24 @@ class Screen {
   }
 
   /**
-   * Texto efímero: se sobrescribe en cada llamada. Solo para 1-2 líneas
-   * visuales (la línea en progreso del streaming). No usar con texto que
-   * pueda crecer más que el viewport.
+   * Texto efímero: se sobrescribe en cada llamada. Truncado a 1 línea
+   * visual (stdout.columns), sin wrapping. Es parte de la región viva.
    */
   writeEphemeral(text: string): void {
     this.#lock();
-    this.#clearLive(this.#ephemeralLines);
-    if (text.length > 0) {
-      // CON LF: el efímero ocupa su propia línea, consistente con
-      // #ephemeralLines. Sin el LF se fusiona con la 1ª línea del editor y el
-      // conteo queda 1 de más → cada clear se come la línea commiteada de arriba.
-      stdout.write(text + LF);
-    }
-    this.#ephemeralLines = text.length > 0 ? this.#countVisualLines(text) : 0;
-    this.#renderLive();
+    this.#ephemeral = text.length > 0 && stripAnsi(text).trim().length > 0
+      ? truncateEphemeral(text)
+      : null;
+    this.#redraw();
     this.#unlock();
   }
 
   /** Limpia el texto efímero sin dejar rastro. */
   clearEphemeral(): void {
     this.#lock();
-    this.#clearLive(this.#ephemeralLines);
-    this.#ephemeralLines = 0;
-    this.#renderLive();
+    this.#ephemeral = null;
+    this.#redraw();
     this.#unlock();
-  }
-
-  // Cuenta cuántas líneas ocupa un texto en la terminal, considerando wrapping.
-  // Los códigos ANSI (color/dim) son zero-width: hay que sacarlos antes de
-  // medir, si no inflan el largo y el conteo da de más → clearLive sube una
-  // fila de más y se come la línea de arriba.
-  #countVisualLines(text: string): number {
-    const width = stdout.columns ?? 80;
-    // eslint-disable-next-line no-control-regex
-    const stripped = text.replace(/\x1b\[[0-9;]*m/g, "");
-    let lines = 0;
-    for (const line of stripped.split("\n")) {
-      lines += Math.max(1, Math.ceil(line.length / width));
-    }
-    return lines;
   }
 
   /** Redibuja la región viva en el lugar (útil tras escribir al scrollback).
@@ -147,31 +126,31 @@ class Screen {
 
   // ── interno ───────────────────────────────────────────────────────────
 
-  /** Render combinado: línea de estado (si hay) + componente vivo. */
+  /** Render combinado: efímero (si hay) + status (si hay) + editor. */
   #composeRender(): { out: string; cursorRow: number; cursorCol: number } {
     const lines: string[] = [];
+    const ephemeralRows = this.#ephemeral !== null ? 1 : 0;
     const statusRows = this.#status !== null ? 1 : 0;
+
+    if (ephemeralRows) lines.push(this.#ephemeral as string);
     if (statusRows) lines.push(this.#status as string);
     lines.push(this.#live ? this.#live.render() : "");
+
     const out = lines.join("\n");
 
     let cursorRow = out.split("\n").length - 1;
     let cursorCol = 0;
     if (this.#live?.getCursorPosition) {
       const cp = this.#live.getCursorPosition();
-      cursorRow = cp.row + statusRows;
+      cursorRow = cp.row + ephemeralRows + statusRows;
       cursorCol = cp.col;
     }
     return { out, cursorRow, cursorCol };
   }
 
-  /** Sube al tope de la región viva y limpia de ahí hacia abajo (relativo).
-   * @param extraRows líneas adicionales a borrar arriba de la región viva. */
-  #clearLive(extraRows = 0): void {
-    const up = (this.#prevRows > 0 && this.#prevCursorRow > 0)
-      ? this.#prevCursorRow + extraRows
-      : extraRows;
-    if (up > 0) stdout.write(CUU(up));
+  /** Sube al tope de la región viva y limpia de ahí hacia abajo (relativo). */
+  #clearLive(): void {
+    if (this.#prevCursorRow > 0) stdout.write(CUU(this.#prevCursorRow));
     stdout.write(CR);
     stdout.write(ED0);
   }
@@ -251,4 +230,35 @@ class Screen {
   }
 }
 
-export { Screen };
+// ── Helpers de ANSI ──────────────────────────────────────────────────────────
+
+// eslint-disable-next-line no-control-regex
+const ANSI_RE = /\x1b\[[0-9;]*m/g;
+
+function stripAnsi(text: string): string {
+  return text.replace(ANSI_RE, "");
+}
+
+/** Trunca text a stdout.columns caracteres visibles (ignorando ANSI),
+ *  para garantizar que el efímero nunca wrapee. */
+function truncateEphemeral(text: string): string {
+  const width = (stdout.columns ?? 80) - 1; // -1 por margen de seguridad
+  const stripped = stripAnsi(text);
+  if (stripped.length <= width) return text;
+
+  // Avanzar por el string original, salteando secuencias ANSI
+  let visible = 0;
+  let i = 0;
+  while (i < text.length && visible < width) {
+    const match = text.slice(i).match(/^\x1b\[[0-9;]*m/);
+    if (match) {
+      i += match[0].length;
+      continue;
+    }
+    visible++;
+    i++;
+  }
+  return text.slice(0, i);
+}
+
+export { Screen, stripAnsi, truncateEphemeral };
