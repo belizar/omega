@@ -2,6 +2,7 @@
 import { existsSync, readFileSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
+import { stdout } from "process";
 import dotenv from "dotenv";
 import { AgentConfig } from "./agent-config.js";
 import { Context } from "./app-context.js";
@@ -140,11 +141,13 @@ const main = async () => {
 
     const input = result.text;
 
-    // Eco del input arriba del editor (sin la caja, para que no parezca otro
-    // prompt), y limpiamos el buffer (siempre).
+    // Eco del input: lo escribimos directo a stdout (scrollback) sin pasar
+    // por printAbove/clearLive, que dependen de #prevCursorRow y pueden
+    // fallar si el spinner cambió el status entre iteraciones.
     const echo = lineEditor.renderEcho();
     lineEditor.reset();
-    screen.printAbove(`\n${echo}`);
+    stdout.write(`\n${echo}\n`);
+    screen.redrawLive();
 
     if (await dispatchCommand(input, ctx)) {
       continue;

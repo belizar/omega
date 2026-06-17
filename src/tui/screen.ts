@@ -119,6 +119,15 @@ class Screen {
     this.#streamingLines = 0;
   }
 
+  /** Redibuja la región viva en el lugar (útil tras escribir al scrollback).
+   * Toma el lock para que el timer del spinner no interfiera. */
+  redrawLive(): void {
+    this.#lock();
+    this.#clearLive();
+    this.#renderLive();
+    this.#unlock();
+  }
+
   /** Setea (o limpia con null) la línea de estado encima del editor. */
   setStatus(text: string | null): void {
     this.#status = text;
