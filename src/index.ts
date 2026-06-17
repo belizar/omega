@@ -212,11 +212,11 @@ const main = async () => {
 
         if (value.type === "tool_use") {
           spinner.stop();
-          toolCallText.display(value.name);
+          toolCallText.call(value.name, value.input, ctx.verbose);
         }
 
         if (value.type === "tool_result") {
-          toolResultText.display(value.output);
+          toolResultText.result(value.output, ctx.verbose);
           spinner.start();
         }
 

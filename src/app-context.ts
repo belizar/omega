@@ -15,12 +15,22 @@ class Context {
   #agentConfig: AgentConfig;
   #runner: Runner;
   #screen: Screen;
+  #verbose = false;
 
   constructor({ session, agentConfig, runner, screen }: ContextConstructorProps) {
     this.#session = session;
     this.#agentConfig = agentConfig;
     this.#runner = runner;
     this.#screen = screen;
+  }
+
+  get verbose() {
+    return this.#verbose;
+  }
+
+  toggleVerbose(): boolean {
+    this.#verbose = !this.#verbose;
+    return this.#verbose;
   }
 
   get session() {

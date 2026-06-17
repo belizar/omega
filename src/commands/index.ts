@@ -6,6 +6,7 @@ import { HelpCommand } from "./help.js";
 import { ModalCommand } from "./modal-command.js";
 import { RenameCommand } from "./rename.js";
 import { ResumeCommand } from "./resume.js";
+import { VerboseCommand } from "./verbose.js";
 import { resumeModalCommand } from "./session-resume.js";
 
 const commandsMap: Record<string, Command<unknown>> = {
@@ -13,6 +14,7 @@ const commandsMap: Record<string, Command<unknown>> = {
   "/exit": new ExitCommand(),
   "/rename": new RenameCommand(),
   "/resume": new ResumeCommand(),
+  "/verbose": new VerboseCommand(),
 };
 
 commandsMap["/help"] = new HelpCommand(commandsMap);

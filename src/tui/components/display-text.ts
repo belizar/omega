@@ -40,23 +40,98 @@ class DisplayAssistantText implements DisplayText {
   }
 }
 
-class DisplayToolCall implements DisplayText {
+/**
+ * Tool call compacto: "> read src/index.ts" o "> bash 'git status'".
+ * Verbose: igual que compacto (el input ya es visible).
+ */
+class DisplayToolCall {
   #screen: Screen;
   constructor(screen: Screen) {
     this.#screen = screen;
   }
-  display(text: string): void {
-    this.#screen.printAbove(cyan(text));
+
+  call(name: string, input: unknown, _verbose: boolean): void {
+    const desc = this.#describeInput(name, input);
+    this.#screen.printAbove(cyan(`> ${desc}`));
+  }
+
+  #describeInput(name: string, input: unknown): string {
+    if (!input || typeof input !== "object") return name;
+    const obj = input as Record<string, unknown>;
+
+    // Extraer el argumento más descriptivo según la tool
+    switch (name) {
+      case "read":
+        return `read ${this.#pathStr(obj)}`;
+      case "write":
+        return `write ${this.#pathStr(obj)}`;
+      case "edit":
+        return `edit ${this.#pathStr(obj)}`;
+      case "bash":
+        if (typeof obj.command === "string") {
+          return `bash ${this.#truncateCmd(obj.command)}`;
+        }
+        return "bash";
+      case "grep":
+        return `grep "${obj.pattern ?? "?"}" ${this.#pathStr(obj)}`;
+      default:
+        return name;
+    }
+  }
+
+  #pathStr(obj: Record<string, unknown>): string {
+    return typeof obj.path === "string" ? obj.path : "?";
+  }
+
+  #truncateCmd(cmd: string): string {
+    return cmd.length > 70 ? `'${cmd.slice(0, 67)}...'` : `'${cmd}'`;
   }
 }
 
-class DisplayToolResult implements DisplayText {
+/**
+ * Tool result: en modo compacto muestra un resumen de una línea.
+ * En modo verbose, vuelca el contenido completo.
+ */
+class DisplayToolResult {
   #screen: Screen;
   constructor(screen: Screen) {
     this.#screen = screen;
   }
-  display(text: string): void {
-    this.#screen.printAbove(gray(text));
+
+  result(output: string, verbose: boolean): void {
+    if (verbose) {
+      if (output.length > 0) {
+        this.#screen.printAbove(gray(output));
+      }
+      return;
+    }
+
+    const summary = this.#summarize(output);
+    this.#screen.printAbove(gray(`  = ${summary}`));
+  }
+
+  #summarize(output: string): string {
+    if (!output || output.trim() === "") return "vacío";
+
+    const lines = output.split("\n");
+    const chars = output.length;
+    const L = lines.length;
+
+    // Resúmenes por tipo de contenido
+    if (L === 1 && chars < 120) {
+      return output.trim();
+    }
+
+    if (output.startsWith("Error")) {
+      // Errores: mostrar la primera línea (el mensaje principal)
+      return output.split("\n")[0].trim();
+    }
+
+    const sizeStr = chars >= 1000
+      ? `${(chars / 1000).toFixed(1)}K`
+      : `${chars}`;
+
+    return `${L} líneas · ${sizeStr} chars`;
   }
 }
 
