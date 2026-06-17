@@ -2,15 +2,21 @@ import { Message } from "./message.js";
 
 // ── Truncado de outputs ──────────────────────────────────────────────────────
 
-function truncate(text: string, maxLines = 200, maxChars = 8000): string {
-  // Cap por cantidad de caracteres primero
+/** Trunca para mostrar al usuario: límite visual, no inunda la terminal. */
+function truncateForDisplay(
+  text: string,
+  maxLines = 50,
+  maxChars = 2000,
+): string {
   let t = text;
   if (t.length > maxChars) {
     const half = Math.floor(maxChars / 2);
-    t = t.slice(0, half) + `\n… [${t.length - maxChars} chars omitidos] …\n` + t.slice(-half);
+    t =
+      t.slice(0, half) +
+      `\n… [${t.length - maxChars} chars omitidos] …\n` +
+      t.slice(-half);
   }
   const lines = t.split("\n");
-
   if (lines.length <= maxLines) return t;
 
   const keep = Math.max(1, Math.floor(maxLines / 2));
@@ -18,9 +24,35 @@ function truncate(text: string, maxLines = 200, maxChars = 8000): string {
   const tail = lines.slice(-keep);
   const omitted = lines.length - keep * 2;
   const marker = `\n… [${omitted} líneas omitidas. Usá un comando más específico o read con offset/limit para ver más] …\n`;
-
   return [...head, marker, ...tail].join("\n");
 }
+
+/**
+ * Safety net: trunca output para el LLM si supera un porcentaje del
+ * presupuesto de contexto. Así un solo tool_result no satura la ventana.
+ * Si el texto está dentro del límite, lo devuelve intacto.
+ */
+function truncateForContext(
+  text: string,
+  maxContextTokens: number,
+  maxPercent = 0.25,
+): string {
+  const maxTokens = Math.floor(maxContextTokens * maxPercent);
+  const textTokens = estimateTokens(text);
+  if (textTokens <= maxTokens) return text;
+
+  // Cortamos a ~maxChars equivalente
+  const maxChars = maxTokens * CHARS_PER_TOKEN;
+  const half = Math.floor(maxChars / 2);
+  return (
+    text.slice(0, half) +
+    `\n… [${text.length - maxChars} chars omitidos por presupuesto] …\n` +
+    text.slice(-half)
+  );
+}
+
+// Mantenemos truncate como alias legacy (usan runner.ts y tests)
+const truncate = truncateForDisplay;
 
 // ── Estimación de tokens ─────────────────────────────────────────────────────
 
@@ -115,6 +147,8 @@ function pruneContext(
 
 export {
   truncate,
+  truncateForDisplay,
+  truncateForContext,
   estimateTokens,
   estimateMessagesTokens,
   pruneContext,

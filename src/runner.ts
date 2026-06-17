@@ -1,5 +1,5 @@
 import { AgentConfig } from "./agent-config.js";
-import { pruneContext, truncate } from "./context-management.js";
+import { pruneContext, truncateForContext, truncateForDisplay } from "./context-management.js";
 import { logger } from "./logger.js";
 import { Message, ToolMessage } from "./message.js";
 import { LLMProvider, LLMResponse } from "./providers/llm-provider.js";
@@ -169,13 +169,15 @@ class Runner {
           });
         }
 
-        const shown = truncate(output, 200);
+        // Display: límite visual. Modelo: safety net por tokens.
+        const shown = truncateForDisplay(output);
+        const forModel = truncateForContext(output, this.#maxContextTokens);
 
         yield { type: "tool_result", output: shown };
         toolResults.push({
           type: "tool_result",
           tool_use_id: block.id,
-          content: output,
+          content: forModel,
           is_error: isError,
         });
       }
