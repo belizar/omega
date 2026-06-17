@@ -216,7 +216,7 @@ const main = async () => {
         }
 
         if (value.type === "tool_result") {
-          toolResultText.result(value.output, ctx.verbose);
+          toolResultText.result(value.output, ctx.verbose, value.rawOutput);
           spinner.start();
         }
 

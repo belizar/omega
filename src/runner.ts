@@ -20,6 +20,8 @@ type RunnerEvent =
   | {
       type: "tool_result";
       output: string;
+      /** Output completo (sin truncar) para poder mostrar un resumen real. */
+      rawOutput?: string;
     };
 
 class Runner {
@@ -173,7 +175,7 @@ class Runner {
         const shown = truncateForDisplay(output);
         const forModel = truncateForContext(output, this.#maxContextTokens);
 
-        yield { type: "tool_result", output: shown };
+        yield { type: "tool_result", output: shown, rawOutput: output };
         toolResults.push({
           type: "tool_result",
           tool_use_id: block.id,

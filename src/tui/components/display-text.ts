@@ -98,7 +98,8 @@ class DisplayToolResult {
     this.#screen = screen;
   }
 
-  result(output: string, verbose: boolean): void {
+  result(output: string, verbose: boolean, rawOutput?: string): void {
+    const summarySource = rawOutput ?? output;
     if (verbose) {
       if (output.length > 0) {
         this.#screen.printAbove(gray(output));
@@ -106,7 +107,7 @@ class DisplayToolResult {
       return;
     }
 
-    const summary = this.#summarize(output);
+    const summary = this.#summarize(summarySource);
     this.#screen.printAbove(gray(`  = ${summary}`));
   }
 
