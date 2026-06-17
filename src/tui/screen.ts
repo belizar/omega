@@ -41,10 +41,25 @@ class Screen {
   #prevCursorRow = 0; // fila (0-based) donde quedó el cursor
   #streamingLines = 0; // líneas visuales que ocupó el último printAboveRaw
 
+  #busy = false; // lock para evitar que setStatus redibuje durante printAbove
   #pasteBuffer: string | null = null;
 
   constructor() {
     stdin.on("data", this.#onData);
+  }
+
+  /** Adquirir lock de escritura. Mientras está tomado, setStatus solo
+   * actualiza #status en memoria, no redibuja (evita race condition con
+   * el timer del spinner durante printAbove/printAboveRaw). */
+  #lock(): void {
+    this.#busy = true;
+  }
+
+  #unlock(): void {
+    this.#busy = false;
+    // Aplicar cualquier cambio de status pendiente (el timer pudo haber
+    // actualizado #status mientras estábamos imprimiendo).
+    this.#redraw();
   }
 
   /** Espera a que el componente termine (isDone). Lo deja vivo abajo. */
@@ -59,6 +74,7 @@ class Screen {
 
   /** Imprime text en el scrollback, por encima de la región viva. */
   printAbove(text: string): void {
+    this.#lock();
     this.#streamingLines = 0;
     this.#clearLive();
     if (text.length > 0) {
@@ -66,6 +82,7 @@ class Screen {
       if (!text.endsWith("\n")) stdout.write(LF);
     }
     this.#renderLive();
+    this.#unlock();
   }
 
   /**
@@ -74,6 +91,7 @@ class Screen {
    * El texto siempre queda en su propia línea, arriba del editor.
    */
   printAboveRaw(text: string): void {
+    this.#lock();
     // Borramos el editor viejo + las líneas del chunk anterior
     this.#clearLive(this.#streamingLines);
     if (text.length > 0) {
@@ -82,6 +100,7 @@ class Screen {
     // Cuántas líneas visuales ocupa este texto (para limpiar en el próximo chunk)
     this.#streamingLines = text.length > 0 ? this.#countVisualLines(text) : 0;
     this.#renderLive();
+    this.#unlock();
   }
 
   // Cuenta cuántas líneas ocupa un texto en la terminal, considerando wrapping
@@ -102,7 +121,7 @@ class Screen {
   /** Setea (o limpia con null) la línea de estado encima del editor. */
   setStatus(text: string | null): void {
     this.#status = text;
-    this.#redraw();
+    if (!this.#busy) this.#redraw();
   }
 
   // ── interno ───────────────────────────────────────────────────────────
