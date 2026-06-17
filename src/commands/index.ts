@@ -1,6 +1,7 @@
 import { Context } from "../app-context.js";
 import { ClearCommand } from "./clear.js";
 import { Command } from "./command.js";
+import { ExitCommand } from "./exit.js";
 import { HelpCommand } from "./help.js";
 import { ModalCommand } from "./modal-command.js";
 import { RenameCommand } from "./rename.js";
@@ -9,6 +10,7 @@ import { resumeModalCommand } from "./session-resume.js";
 
 const commandsMap: Record<string, Command<unknown>> = {
   "/clear": new ClearCommand(),
+  "/exit": new ExitCommand(),
   "/rename": new RenameCommand(),
   "/resume": new ResumeCommand(),
 };
