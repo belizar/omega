@@ -91,7 +91,7 @@ const main = async () => {
     .addTool(new EditTool())
     .addTool(new WriteTool());
 
-  const llmprovider = new OpenRouterProvider(config.openrouterApiKey!);
+  const llmprovider = new OpenRouterProvider(config.openrouterApiKey);
 
   const runner = new Runner({
     llmProvider: llmprovider,
