@@ -188,6 +188,7 @@ const main = async () => {
     try {
       iterator = runner.run(session.messages);
 
+      spinner.start();
       let item = await iterator.next();
 
       while (!item.done) {
