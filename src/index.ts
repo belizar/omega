@@ -195,9 +195,7 @@ const main = async () => {
         const { value } = item as { value: RunnerEvent };
 
         if (value.type === "text_stream") {
-          spinner.stop();
           assistantText.displayStream(value.text);
-          spinner.start();
         }
 
         if (value.type === "text_stream_end") {
@@ -205,9 +203,7 @@ const main = async () => {
         }
 
         if (value.type === "text") {
-          spinner.stop();
           assistantText.display(value.text);
-          spinner.start();
         }
 
         if (value.type === "tool_use") {
