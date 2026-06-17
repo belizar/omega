@@ -39,6 +39,7 @@ class Screen {
 
   #prevRows = 0; // filas que ocupó la región viva en el último render
   #prevCursorRow = 0; // fila (0-based) donde quedó el cursor
+  #streamingLines = 0; // líneas visuales que ocupó el último printAboveRaw
 
   #pasteBuffer: string | null = null;
 
@@ -58,6 +59,7 @@ class Screen {
 
   /** Imprime text en el scrollback, por encima de la región viva. */
   printAbove(text: string): void {
+    this.#streamingLines = 0;
     this.#clearLive();
     if (text.length > 0) {
       stdout.write(text);
@@ -72,12 +74,29 @@ class Screen {
    * El texto siempre queda en su propia línea, arriba del editor.
    */
   printAboveRaw(text: string): void {
-    // Borramos el editor viejo + la línea de texto del chunk anterior
-    this.#clearLive(1);
+    // Borramos el editor viejo + las líneas del chunk anterior
+    this.#clearLive(this.#streamingLines);
     if (text.length > 0) {
       stdout.write(text + LF);
     }
+    // Cuántas líneas visuales ocupa este texto (para limpiar en el próximo chunk)
+    this.#streamingLines = text.length > 0 ? this.#countVisualLines(text) : 0;
     this.#renderLive();
+  }
+
+  // Cuenta cuántas líneas ocupa un texto en la terminal, considerando wrapping
+  #countVisualLines(text: string): number {
+    const width = stdout.columns ?? 80;
+    let lines = 0;
+    for (const line of text.split("\n")) {
+      lines += Math.max(1, Math.ceil(line.length / width));
+    }
+    return lines;
+  }
+
+  /** Reinicia el tracking de líneas de streaming (llamado al hacer printAbove). */
+  resetStreamingLines(): void {
+    this.#streamingLines = 0;
   }
 
   /** Setea (o limpia con null) la línea de estado encima del editor. */

@@ -224,4 +224,4 @@ class Runner {
   }
 }
 
-export { Runner };
+export { Runner, RunnerEvent };

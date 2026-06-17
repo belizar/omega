@@ -9,7 +9,7 @@ import { dispatchCommand, modalCommandsMap } from "./commands/index.js";
 import { validateEnv } from "./config.js";
 import { logger } from "./logger.js";
 import { OpenRouterProvider } from "./providers/openrouter-llm-provider.js";
-import { Runner } from "./runner.js";
+import { Runner, RunnerEvent } from "./runner.js";
 import { Message } from "./message.js";
 import { Session } from "./session.js";
 import { BashTool } from "./tools/bash.js";
@@ -184,42 +184,54 @@ const main = async () => {
       session.addUserMessage(userContent);
     }
 
-    const iterator = runner.run(session.messages);
+    let iterator: AsyncGenerator<unknown>;
+    try {
+      iterator = runner.run(session.messages);
 
-    spinner.start();
-    let item = await iterator.next();
-    spinner.stop();
+      let item = await iterator.next();
 
-    while (!item.done) {
-      const { value } = item;
+      while (!item.done) {
+        const { value } = item as { value: RunnerEvent };
 
-      if (value.type === "text_stream") {
-        assistantText.displayStream(value.text);
+        if (value.type === "text_stream") {
+          spinner.stop();
+          assistantText.displayStream(value.text);
+          spinner.start();
+        }
+
+        if (value.type === "text_stream_end") {
+          assistantText.endStream();
+        }
+
+        if (value.type === "text") {
+          spinner.stop();
+          assistantText.display(value.text);
+          spinner.start();
+        }
+
+        if (value.type === "tool_use") {
+          spinner.stop();
+          toolCallText.display(value.name);
+        }
+
+        if (value.type === "tool_result") {
+          toolResultText.display(value.output);
+          spinner.start();
+        }
+
+        if (value.type === "state") {
+          session.addMessage(value.message);
+        }
+
+        item = await iterator.next();
       }
-
-      if (value.type === "text_stream_end") {
-        assistantText.endStream();
-      }
-
-      if (value.type === "text") {
-        assistantText.display(value.text);
-      }
-
-      if (value.type === "tool_use") {
-        toolCallText.display(value.name);
-      }
-
-      if (value.type === "tool_result") {
-        toolResultText.display(value.output);
-      }
-
-      if (value.type === "state") {
-        session.addMessage(value.message);
-      }
-
-      spinner.start();
-      item = await iterator.next();
       spinner.stop();
+    } catch (err: unknown) {
+      // Nos aseguramos de que el spinner se detenga ante cualquier error
+      spinner.stop();
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error("Runner error", msg);
+      screen.printAbove(dim(`Error: ${msg}`));
     }
 
     // Métricas de la iteración
@@ -235,7 +247,7 @@ const main = async () => {
     const runningStr =
       session.totalCost < 0.01 ? "<$0.01" : `${session.totalCost.toFixed(2)}`;
     const metricsLine = `~ ctx: ${session.contextTokens} tk · ${metrics.totalToolCalls} tools · in: ${metrics.totalInputTokens} · out: ${metrics.totalOutputTokens} tokens · ${durationSec}s · ${costStr} (total: ${runningStr})`;
-    screen.printAbove(dim(metricsLine));
+    screen.printAbove(dim(`\n${metricsLine}`));
     runner.resetMetrics();
   }
 };
