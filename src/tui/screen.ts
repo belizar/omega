@@ -39,7 +39,7 @@ class Screen {
 
   #prevRows = 0; // filas que ocupó la región viva en el último render
   #prevCursorRow = 0; // fila (0-based) donde quedó el cursor
-  #streamingLines = 0; // líneas visuales que ocupó el último printAboveRaw
+  #ephemeralLines = 0; // líneas visuales del texto efímero (writeEphemeral)
 
   #busy = false; // lock para evitar que setStatus redibuje durante printAbove
   #pasteBuffer: string | null = null;
@@ -50,7 +50,7 @@ class Screen {
 
   /** Adquirir lock de escritura. Mientras está tomado, setStatus solo
    * actualiza #status en memoria, no redibuja (evita race condition con
-   * el timer del spinner durante printAbove/printAboveRaw). */
+   * el timer del spinner durante printAbove/writeEphemeral). */
   #lock(): void {
     this.#busy = true;
   }
@@ -60,7 +60,7 @@ class Screen {
     // Si el spinner cambió status mientras estábamos ocupados, redibujamos.
     // Si no, no tocamos nada: el timer del spinner ya redibujará en su
     // próxima iteración (máx 100ms) y llamar a redraw acá compite con el
-    // siguiente printAboveRaw, pudiendo pisar salida.
+    // siguiente writeEphemeral, pudiendo pisar salida.
   }
 
   /** Espera a que el componente termine (isDone). Lo deja vivo abajo. */
@@ -76,8 +76,9 @@ class Screen {
   /** Imprime text en el scrollback, por encima de la región viva. */
   printAbove(text: string): void {
     this.#lock();
-    this.#streamingLines = 0;
-    this.#clearLive();
+    // Limpiar texto efímero pendiente antes de escribir al scrollback
+    this.#clearLive(this.#ephemeralLines);
+    this.#ephemeralLines = 0;
     if (text.length > 0) {
       stdout.write(text);
       if (!text.endsWith("\n")) stdout.write(LF);
@@ -87,36 +88,46 @@ class Screen {
   }
 
   /**
-   * Imprime texto sin forzar LF para streaming typewriter.
-   * Cada llamada borra la versión anterior del texto y la reemplaza.
-   * El texto siempre queda en su propia línea, arriba del editor.
+   * Texto efímero: se sobrescribe en cada llamada. Solo para 1-2 líneas
+   * visuales (la línea en progreso del streaming). No usar con texto que
+   * pueda crecer más que el viewport.
    */
-  printAboveRaw(text: string): void {
+  writeEphemeral(text: string): void {
     this.#lock();
-    // Borramos el editor viejo + las líneas del chunk anterior
-    this.#clearLive(this.#streamingLines);
+    this.#clearLive(this.#ephemeralLines);
     if (text.length > 0) {
+      // CON LF: el efímero ocupa su propia línea, consistente con
+      // #ephemeralLines. Sin el LF se fusiona con la 1ª línea del editor y el
+      // conteo queda 1 de más → cada clear se come la línea commiteada de arriba.
       stdout.write(text + LF);
     }
-    // Cuántas líneas visuales ocupa este texto (para limpiar en el próximo chunk)
-    this.#streamingLines = text.length > 0 ? this.#countVisualLines(text) : 0;
+    this.#ephemeralLines = text.length > 0 ? this.#countVisualLines(text) : 0;
     this.#renderLive();
     this.#unlock();
   }
 
-  // Cuenta cuántas líneas ocupa un texto en la terminal, considerando wrapping
+  /** Limpia el texto efímero sin dejar rastro. */
+  clearEphemeral(): void {
+    this.#lock();
+    this.#clearLive(this.#ephemeralLines);
+    this.#ephemeralLines = 0;
+    this.#renderLive();
+    this.#unlock();
+  }
+
+  // Cuenta cuántas líneas ocupa un texto en la terminal, considerando wrapping.
+  // Los códigos ANSI (color/dim) son zero-width: hay que sacarlos antes de
+  // medir, si no inflan el largo y el conteo da de más → clearLive sube una
+  // fila de más y se come la línea de arriba.
   #countVisualLines(text: string): number {
     const width = stdout.columns ?? 80;
+    // eslint-disable-next-line no-control-regex
+    const stripped = text.replace(/\x1b\[[0-9;]*m/g, "");
     let lines = 0;
-    for (const line of text.split("\n")) {
+    for (const line of stripped.split("\n")) {
       lines += Math.max(1, Math.ceil(line.length / width));
     }
     return lines;
-  }
-
-  /** Reinicia el tracking de líneas de streaming (llamado al hacer printAbove). */
-  resetStreamingLines(): void {
-    this.#streamingLines = 0;
   }
 
   /** Redibuja la región viva en el lugar (útil tras escribir al scrollback).

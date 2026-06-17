@@ -40,7 +40,7 @@ type OpenAITool = {
 
 // ── Helpers de traducción ─────────────────────────────────────────────────────
 
-function translateMessages(messages: Message[], systemPrompt: string): OpenAIMessage[] {
+export function translateMessages(messages: Message[], systemPrompt: string): OpenAIMessage[] {
   const result: OpenAIMessage[] = [{ role: "system", content: systemPrompt }];
 
   for (const msg of messages) {
@@ -143,7 +143,7 @@ function translateMessages(messages: Message[], systemPrompt: string): OpenAIMes
   return result;
 }
 
-function translateTools(agent: AgentConfig): OpenAITool[] {
+export function translateTools(agent: AgentConfig): OpenAITool[] {
   return Object.values(agent.tools()).map((t) => {
     const json = t.toJSON();
     return {
@@ -157,7 +157,7 @@ function translateTools(agent: AgentConfig): OpenAITool[] {
   });
 }
 
-function parseResponse(
+export function parseResponse(
   data: Record<string, unknown>,
   model: string,
   openrouterCostHeader: string | null,

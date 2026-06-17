@@ -12,27 +12,47 @@ interface DisplayText {
  */
 class DisplayAssistantText implements DisplayText {
   #screen: Screen;
-  #streamingBuffer = "";
+  #buffer = "";
   #streaming = false;
 
   constructor(screen: Screen) {
     this.#screen = screen;
   }
 
-  /** Muestra un chunk de texto (modo streaming). Acumula en buffer y
-   * va imprimiendo incrementalmente sin LF. */
+  /** Muestra un chunk de texto (modo streaming). Acumula en buffer,
+   * flushea líneas completas al scrollback (seguro sin importar el largo)
+   * y mantiene la línea en progreso como texto efímero (1-2 líneas,
+   * siempre cabe en viewport -> CUU seguro). */
   displayStream(chunk: string): void {
     this.#streaming = true;
-    this.#streamingBuffer += chunk;
-    this.#screen.printAboveRaw(dim(this.#streamingBuffer));
+    this.#buffer += chunk;
+
+    const lines = this.#buffer.split("\n");
+    const complete = lines.slice(0, -1);
+    const partial = lines[lines.length - 1];
+
+    // Flushear líneas completas al scrollback
+    if (complete.length > 0) {
+      this.#screen.clearEphemeral();
+      for (const line of complete) {
+        this.#screen.printAbove(dim(line));
+      }
+    }
+
+    // Mostrar la linea en progreso como texto efimero
+    this.#screen.writeEphemeral(dim(partial));
+    this.#buffer = partial;
   }
 
-  /** Cierra el bloque de streaming. El último displayStream ya fijó el
-   * texto en el scrollback; solo limpiamos el buffer interno. */
+  /** Cierra el streaming: limpia el texto efimero y flushea el resto. */
   endStream(): void {
     if (!this.#streaming) return;
     this.#streaming = false;
-    this.#streamingBuffer = "";
+    this.#screen.clearEphemeral();
+    if (this.#buffer.length > 0) {
+      this.#screen.printAbove(dim(this.#buffer));
+    }
+    this.#buffer = "";
   }
 
   display(text: string): void {
