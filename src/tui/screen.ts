@@ -57,9 +57,10 @@ class Screen {
 
   #unlock(): void {
     this.#busy = false;
-    // Aplicar cualquier cambio de status pendiente (el timer pudo haber
-    // actualizado #status mientras estábamos imprimiendo).
-    this.#redraw();
+    // Si el spinner cambió status mientras estábamos ocupados, redibujamos.
+    // Si no, no tocamos nada: el timer del spinner ya redibujará en su
+    // próxima iteración (máx 100ms) y llamar a redraw acá compite con el
+    // siguiente printAboveRaw, pudiendo pisar salida.
   }
 
   /** Espera a que el componente termine (isDone). Lo deja vivo abajo. */
