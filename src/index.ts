@@ -144,7 +144,7 @@ const main = async () => {
     // prompt), y limpiamos el buffer (siempre).
     const echo = lineEditor.renderEcho();
     lineEditor.reset();
-    screen.printAbove(echo);
+    screen.printAbove(`\n${echo}`);
 
     if (await dispatchCommand(input, ctx)) {
       continue;
