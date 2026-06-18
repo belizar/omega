@@ -14,14 +14,12 @@ export function enableRawMode() {
   // Restaurar al salir normalmente
   process.on("exit", disableRawMode);
 
-  // Restaurar ante señales catchables (SIGTERM, SIGINT)
-  // SIGKILL no es catchable — no hay nada que hacer.
-  const onSignal = () => {
+  // Restaurar ante SIGTERM. SIGINT se maneja en el Screen/runner para
+  // interrumpir al agente sin matar el proceso.
+  process.on("SIGTERM", () => {
     disableRawMode();
     process.exit(1);
-  };
-  process.on("SIGTERM", onSignal);
-  process.on("SIGINT", onSignal);
+  });
 }
 
 export function disableRawMode() {

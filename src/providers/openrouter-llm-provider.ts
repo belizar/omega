@@ -255,6 +255,7 @@ class OpenRouterProvider extends LLMProvider {
     messages: Message[],
     agent: AgentConfig,
     attempt: number = 1,
+    userSignal?: AbortSignal,
   ): Promise<LLMResponse> {
     const headers: Record<string, string> = {
       Authorization: `Bearer ${this.apiKey()}`,
@@ -272,14 +273,22 @@ class OpenRouterProvider extends LLMProvider {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
-      const response = await fetch(this.url(), {
-        method: "POST",
-        headers,
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      });
+      // Si el usuario interrumpe (SIGINT), abortar el fetch
+      const onAbort = () => controller.abort();
+      userSignal?.addEventListener("abort", onAbort, { once: true });
 
-      clearTimeout(timeoutId);
+      let response: Response;
+      try {
+        response = await fetch(this.url(), {
+          method: "POST",
+          headers,
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+        userSignal?.removeEventListener("abort", onAbort);
+      }
 
       if (response.ok) {
         const data = await response.json();
@@ -312,6 +321,12 @@ class OpenRouterProvider extends LLMProvider {
       );
     } catch (err: unknown) {
       if (err instanceof Error && err.name === "AbortError") {
+        // Si el userSignal está abortado, propagamos como AbortError
+        if (userSignal?.aborted) {
+          const e = new Error("Aborted by user");
+          e.name = "AbortError";
+          throw e;
+        }
         logger.error("OpenRouter request timeout");
         throw new Error(`Request timeout after ${TIMEOUT_MS}ms`);
       }
@@ -319,14 +334,15 @@ class OpenRouterProvider extends LLMProvider {
     }
   }
 
-  async call(messages: Message[], agent: AgentConfig): Promise<LLMResponse> {
+  async call(messages: Message[], agent: AgentConfig, signal?: AbortSignal): Promise<LLMResponse> {
     logger.info("Making API call to OpenRouter");
-    return this.callWithRetry(messages, agent);
+    return this.callWithRetry(messages, agent, 1, signal);
   }
 
   async *callStream(
     messages: Message[],
     agent: AgentConfig,
+    signal?: AbortSignal,
   ): AsyncGenerator<StreamEvent> {
     const headers: Record<string, string> = {
       Authorization: `Bearer ${this.apiKey()}`,
@@ -344,6 +360,25 @@ class OpenRouterProvider extends LLMProvider {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS * 2);
 
+    // El user signal puede abortar tanto el fetch como el stream.
+    // Si el signal ya está abortado al entrar, lanzamos de una.
+    if (signal?.aborted) {
+      clearTimeout(timeoutId);
+      const e = new Error("Aborted by user");
+      e.name = "AbortError";
+      throw e;
+    }
+
+    // Listener único para todo el ciclo de vida (fetch + stream)
+    let userAborted = false;
+    let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+    const onUserAbort = () => {
+      userAborted = true;
+      controller.abort();
+      reader?.cancel().catch(() => {}); // fuerza que reader.read() resuelva
+    };
+    signal?.addEventListener("abort", onUserAbort, { once: true });
+
     let response: Response;
     try {
       response = await fetch(this.url(), {
@@ -354,14 +389,18 @@ class OpenRouterProvider extends LLMProvider {
       });
     } catch (err: unknown) {
       clearTimeout(timeoutId);
+      signal?.removeEventListener("abort", onUserAbort);
       if (err instanceof Error && err.name === "AbortError") {
-        throw new Error(`Stream request timeout after ${TIMEOUT_MS * 2}ms`);
+        const e = new Error("Aborted by user");
+        e.name = "AbortError";
+        throw e;
       }
       throw err;
     }
     clearTimeout(timeoutId);
 
     if (!response.ok) {
+      signal?.removeEventListener("abort", onUserAbort);
       const errorData = await response.json();
       throw new Error(
         `OpenRouter stream error: ${response.status} - ${JSON.stringify(errorData)}`,
@@ -369,10 +408,11 @@ class OpenRouterProvider extends LLMProvider {
     }
 
     if (!response.body) {
+      signal?.removeEventListener("abort", onUserAbort);
       throw new Error("No response body for stream");
     }
 
-    const reader = response.body.getReader();
+    reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
     const toolCalls: Map<
@@ -385,7 +425,23 @@ class OpenRouterProvider extends LLMProvider {
 
     try {
       while (true) {
-        const { done, value } = await reader.read();
+        // Race entre reader.read() y el user signal abortado.
+        // Si el usuario interrumpe, lanzamos AbortError inmediatamente.
+        let readResult: ReadableStreamReadResult<Uint8Array>;
+        if (signal?.aborted || userAborted) {
+          reader.cancel();
+          const e = new Error("Aborted by user");
+          e.name = "AbortError";
+          throw e;
+        }
+        try {
+          readResult = await reader.read();
+        } catch {
+          const e = new Error("Aborted by user");
+          e.name = "AbortError";
+          throw e;
+        }
+        const { done, value } = readResult;
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
@@ -393,13 +449,16 @@ class OpenRouterProvider extends LLMProvider {
         // La última línea puede estar incompleta
         buffer = lines.pop() ?? "";
 
+        let streamDone = false;
         for (const line of lines) {
           const trimmed = line.trim();
           if (!trimmed || !trimmed.startsWith("data: ")) continue;
           const data = trimmed.slice(6);
           if (data === "[DONE]") {
             finishReason = finishReason ?? "stop";
-            continue;
+            streamDone = true;
+            break; // fin del stream: cortamos YA. Si seguimos, reader.read()
+            // queda bloqueado hasta que el server cierre el socket (~90s).
           }
 
           let parsed: Record<string, unknown>;
@@ -461,10 +520,15 @@ class OpenRouterProvider extends LLMProvider {
             }
           }
         }
+        if (streamDone) break; // cortar el while externo al ver [DONE]
       }
     } finally {
-      reader.releaseLock();
+      signal?.removeEventListener("abort", onUserAbort);
+      reader?.releaseLock();
     }
+
+    // Si fue abortado por el usuario, no emitimos tool_use ni done.
+    if (userAborted || signal?.aborted) return;
 
     // Después del stream, emitir tool_use completos
     for (const [, tc] of toolCalls) {

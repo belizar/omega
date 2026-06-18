@@ -12,6 +12,7 @@ export class ConfigFactory {
       maxContextMessages: overrides?.maxContextMessages ?? 50,
       maxContextTokens: overrides?.maxContextTokens ?? 100_000,
       nodeEnv: overrides?.nodeEnv || "test",
+      screenPadding: overrides?.screenPadding ?? 0,
     };
   }
 

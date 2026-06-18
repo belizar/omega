@@ -91,12 +91,13 @@ abstract class LLMProvider {
     return this.#url;
   }
 
-  abstract call(messages: Message[], agent: AgentConfig): Promise<LLMResponse>;
+  abstract call(messages: Message[], agent: AgentConfig, signal?: AbortSignal): Promise<LLMResponse>;
 
   /** Versión streaming: devuelve un async generator de eventos. */
   abstract callStream(
     messages: Message[],
     agent: AgentConfig,
+    signal?: AbortSignal,
   ): AsyncGenerator<StreamEvent>;
 }
 

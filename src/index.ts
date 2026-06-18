@@ -13,6 +13,7 @@ import { OpenRouterProvider } from "./providers/openrouter-llm-provider.js";
 import { Runner, RunnerEvent } from "./runner.js";
 import { Message } from "./message.js";
 import { Session } from "./session.js";
+import { AskUserTool } from "./tools/ask-user.js";
 import { BashTool } from "./tools/bash.js";
 import { EditTool } from "./tools/edit.js";
 import { GrepTool } from "./tools/grep.js";
@@ -45,14 +46,16 @@ Tools:
 - bash: explorá el proyecto (ls, grep, find) y ejecutá comandos.
 - edit: para cambios quirúrgicos; el texto a reemplazar debe matchear exacto.
 - write: solo para archivos nuevos o reescrituras completas.
+- ask_user: pedí confirmación al usuario antes de acciones destructivas o cuando
+  necesites que elija entre opciones.
 
 Cómo trabajás:
 - Explorá lo necesario antes de cambiar nada: leé los archivos relevantes
   para entender el contexto.
 - Después de editar código, verificá que no rompiste nada (typecheck, tests
   o lint según el proyecto) y corregí si hace falta.
-- Actuá solo en lo rutinario, pero pará y pedí confirmación antes de instalar
-  dependencias, borrar archivos, o cualquier comando destructivo o irreversible.
+- Antes de instalar dependencias, borrar archivos, ejecutar comandos destructivos
+  o hacer cambios irreversibles, usá ask_user para pedir confirmación.
 
 Estilo:
 - Respondé siempre en español.
@@ -86,6 +89,7 @@ const main = async () => {
   });
 
   haikuAgent
+    .addTool(new AskUserTool())
     .addTool(new BashTool())
     .addTool(new GrepTool())
     .addTool(new ReadTool())
@@ -101,7 +105,7 @@ const main = async () => {
     maxContextTokens: config.maxContextTokens,
   });
 
-  const screen = new Screen();
+  const screen = new Screen(config.screenPadding);
   const spinner = new Spinner(screen);
   const assistantText = new DisplayAssistantText(screen);
   const toolCallText = new DisplayToolCall(screen);
@@ -141,13 +145,11 @@ const main = async () => {
 
     const input = result.text;
 
-    // Eco del input: lo escribimos directo a stdout (scrollback) sin pasar
-    // por printAbove/clearLive, que dependen de #prevCursorRow y pueden
-    // fallar si el spinner cambió el status entre iteraciones.
+    // Eco del input: usamos printAbove para que se inserte en el scrollback
+    // sin pisar la región viva (el Screen limpia y redibuja automáticamente).
     const echo = lineEditor.renderEcho();
     lineEditor.reset();
-    stdout.write(`\n${echo}\n`);
-    screen.redrawLive();
+    screen.printAbove(`\n${echo}`);
 
     if (await dispatchCommand(input, ctx)) {
       continue;
@@ -188,8 +190,27 @@ const main = async () => {
     }
 
     let iterator: AsyncGenerator<unknown>;
+    const abortController = new AbortController();
+    screen.setAbortController(abortController);
+
+    // Crear un runner por iteración con el signal de abort
+    const run = new Runner({
+      llmProvider: llmprovider,
+      agentConfig: haikuAgent,
+      maxSteps: config.maxSteps,
+      maxContextTokens: config.maxContextTokens,
+      signal: abortController.signal,
+      onAskUser: async (question: string) => {
+        spinner.stop();
+        // Mostrar prompt inline y esperar respuesta del usuario
+        const answer = await screen.askUser(question);
+        spinner.start();
+        return answer;
+      },
+    });
+
     try {
-      iterator = runner.run(session.messages);
+      iterator = run.run(session.messages);
 
       spinner.start();
       let item = await iterator.next();
@@ -198,6 +219,10 @@ const main = async () => {
         const { value } = item as { value: RunnerEvent };
 
         if (value.type === "text_stream") {
+          // Apenas empieza a salir texto, frenamos el spinner: ya estás viendo
+          // la respuesta, "Pensando" sobra (y si no, queda colgado en la cola
+          // del stream esperando el chunk final de usage). stop() es idempotente.
+          spinner.stop();
           assistantText.displayStream(value.text);
         }
 
@@ -206,6 +231,7 @@ const main = async () => {
         }
 
         if (value.type === "text") {
+          spinner.stop();
           assistantText.display(value.text);
         }
 
@@ -226,16 +252,23 @@ const main = async () => {
         item = await iterator.next();
       }
       spinner.stop();
+      // Redundante: screen.redrawLive() garantiza que la línea de estado
+      // del spinner se limpie aunque algún timer encolado haya pintado
+      // justo antes del stop.
+      screen.redrawLive();
     } catch (err: unknown) {
       // Nos aseguramos de que el spinner se detenga ante cualquier error
       spinner.stop();
+      screen.redrawLive();
       const msg = err instanceof Error ? err.message : String(err);
       logger.error("Runner error", msg);
       screen.printAbove(dim(`Error: ${msg}`));
+    } finally {
+      screen.clearAbortController();
     }
 
     // Métricas de la iteración
-    const metrics = runner.getMetrics();
+    const metrics = run.getMetrics();
     session.addUsage(
       metrics.totalInputTokens,
       metrics.totalOutputTokens,
@@ -248,7 +281,7 @@ const main = async () => {
       session.totalCost < 0.01 ? "<$0.01" : `${session.totalCost.toFixed(2)}`;
     const metricsLine = `~ ctx: ${session.contextTokens} tk · ${metrics.totalToolCalls} tools · in: ${metrics.totalInputTokens} · out: ${metrics.totalOutputTokens} tokens · ${durationSec}s · ${costStr} (total: ${runningStr})`;
     screen.printAbove(dim(`\n${metricsLine}`));
-    runner.resetMetrics();
+    run.resetMetrics();
   }
 };
 

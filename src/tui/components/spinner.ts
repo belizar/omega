@@ -2,37 +2,50 @@ import { color } from "../theme.js";
 import { Screen } from "../screen.js";
 
 /**
- * Spinner como línea de estado: ya no escribe directo a stdout, sino que le
- * pide al Screen que muestre/limpie una línea de estado justo encima del
- * editor. Así no pelea con la región viva del prompt.
+ * Spinner: usa la línea de STATUS del Screen (setStatus), que es su slot
+ * propio — distinto del efímero, que usa el streaming del texto del agente.
+ * Si compartieran slot se pisarían (dos escritores, un solo lugar).
+ * El timer solo actualiza el valor; el Screen decide si redibuja según su lock.
  */
 class Spinner {
   #screen: Screen;
-  #timer: ReturnType<typeof setInterval> | null;
+  #timer: ReturnType<typeof setTimeout> | null = null;
+  #tickId = 0;
+  #active = false;
 
   constructor(screen: Screen) {
     this.#screen = screen;
-    this.#timer = null;
   }
 
   start(): void {
-    if (this.#timer) return; // ya andando
+    if (this.#active) return;
+    this.#active = true;
+    this.#tickId++;
 
     const colors = ["39", "38", "45", "51", "45", "38"];
     const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
     let i = 0;
+    const myTick = this.#tickId;
 
-    this.#timer = setInterval(() => {
+    const tick = () => {
+      if (this.#tickId !== myTick) return;
       const c = colors[i % colors.length];
       const f = frames[i % frames.length];
       this.#screen.setStatus(color(`${f} Pensando`, `38;5;${c}`));
       i++;
-    }, 100);
+      this.#timer = setTimeout(tick, 100);
+    };
+
+    // Primer frame inmediato
+    tick();
   }
 
   stop(): void {
-    if (this.#timer) {
-      clearInterval(this.#timer);
+    if (!this.#active) return; // ya parado: evita redibujos al llamarlo de más
+    this.#active = false;
+    this.#tickId++; // invalida cualquier timer pendiente
+    if (this.#timer !== null) {
+      clearTimeout(this.#timer);
       this.#timer = null;
     }
     this.#screen.setStatus(null);

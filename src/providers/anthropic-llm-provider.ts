@@ -60,6 +60,7 @@ class AnthropicProvider extends LLMProvider {
     messages: Message[],
     agent: AgentConfig,
     attempt: number = 1,
+    userSignal?: AbortSignal,
   ): Promise<LLMResponse> {
     const headers: Record<string, string> = {
       "x-api-key": this.apiKey(),
@@ -79,14 +80,21 @@ class AnthropicProvider extends LLMProvider {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
-      const response = await fetch(this.url(), {
-        method: "POST",
-        headers,
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      });
+      const onAbort = () => controller.abort();
+      userSignal?.addEventListener("abort", onAbort, { once: true });
 
-      clearTimeout(timeoutId);
+      let response: Response;
+      try {
+        response = await fetch(this.url(), {
+          method: "POST",
+          headers,
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+        userSignal?.removeEventListener("abort", onAbort);
+      }
 
       if (response.ok) {
         const data = (await response.json()) as AnthropicResponse;
@@ -118,6 +126,11 @@ class AnthropicProvider extends LLMProvider {
       );
     } catch (err: unknown) {
       if (err instanceof Error && err.name === "AbortError") {
+        if (userSignal?.aborted) {
+          const e = new Error("Aborted by user");
+          e.name = "AbortError";
+          throw e;
+        }
         logger.error("API request timeout");
         throw new Error(`Request timeout after ${TIMEOUT_MS}ms`);
       }
@@ -125,14 +138,15 @@ class AnthropicProvider extends LLMProvider {
     }
   }
 
-  async call(messages: Message[], agent: AgentConfig): Promise<LLMResponse> {
+  async call(messages: Message[], agent: AgentConfig, signal?: AbortSignal): Promise<LLMResponse> {
     logger.info("Making API call to Anthropic");
-    return this.callWithRetry(messages, agent);
+    return this.callWithRetry(messages, agent, 1, signal);
   }
 
   async *callStream(
     _messages: Message[],
     _agent: AgentConfig,
+    _signal?: AbortSignal,
   ): AsyncGenerator<StreamEvent> {
     throw new Error("AnthropicProvider does not support streaming yet");
   }

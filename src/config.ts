@@ -9,6 +9,7 @@ interface Config {
   maxContextMessages: number;
   maxContextTokens: number;
   nodeEnv: string;
+  screenPadding: number;
 }
 
 function validateEnv(): Config {
@@ -29,6 +30,7 @@ function validateEnv(): Config {
   const maxContextMessages = parseInt(process.env.MAX_CONTEXT_MESSAGES || "50", 10);
   const maxContextTokens = parseInt(process.env.MAX_CONTEXT_TOKENS || "100000", 10);
   const nodeEnv = process.env.NODE_ENV || "development";
+  const screenPadding = parseInt(process.env.SCREEN_PADDING || "0", 10);
 
   const config: Config = {
     anthropicApiKey: apiKey,
@@ -39,6 +41,7 @@ function validateEnv(): Config {
     maxContextMessages,
     maxContextTokens,
     nodeEnv,
+    screenPadding,
   };
 
   logger.info("Config loaded successfully", {

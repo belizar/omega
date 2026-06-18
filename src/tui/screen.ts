@@ -1,7 +1,9 @@
 import { stdin, stdout } from "process";
-import { InputComponent } from "./component.js";
+import { AskUserInput } from "./components/ask-user-input.js";
+import { CursorPosition, InputComponent } from "./component.js";
 import { decodeKey } from "./decodeKey.js";
 import { disableRawMode } from "./terminal.js";
+import { dim } from "./theme.js";
 
 // ── Secuencias de escape ANSI ─────────────────────────────────────────
 
@@ -42,10 +44,28 @@ class Screen {
   #prevCursorRow = 0; // fila (0-based) donde quedó el cursor
 
   #busy = false; // lock para evitar que setStatus redibuje durante printAbove
+  #statusDirty = false; // setStatus cambió estando busy → redibujar al unlock
   #pasteBuffer: string | null = null;
+  #paddingRight: number;
 
-  constructor() {
+  /** Si está seteado, Ctrl+C durante la ejecución del agente aborta esta
+   * señal en lugar de matar el proceso. */
+  #abortSignal: AbortController | null = null;
+
+  constructor(paddingRight: number = 0) {
+    this.#paddingRight = paddingRight;
     stdin.on("data", this.#onData);
+  }
+
+  /** Registra un AbortController para que Ctrl+C lo aborte durante la
+   * ejecución del agente, en lugar de matar el proceso. */
+  setAbortController(ctrl: AbortController): void {
+    this.#abortSignal = ctrl;
+  }
+
+  /** Limpia el AbortController asociado. */
+  clearAbortController(): void {
+    this.#abortSignal = null;
   }
 
   /** Adquirir lock de escritura. Mientras está tomado, setStatus solo
@@ -57,10 +77,10 @@ class Screen {
 
   #unlock(): void {
     this.#busy = false;
-    // Si el spinner cambió status mientras estábamos ocupados, redibujamos.
-    // Si no, no tocamos nada: el timer del spinner ya redibujará en su
-    // próxima iteración (máx 100ms) y llamar a redraw acá compite con el
-    // siguiente writeEphemeral, pudiendo pisar salida.
+    if (this.#statusDirty) {
+      this.#statusDirty = false;
+      this.#redraw();
+    }
   }
 
   /** Espera a que el componente termine (isDone). Lo deja vivo abajo. */
@@ -81,11 +101,19 @@ class Screen {
     this.#clearLive();
     // Considerar "vacío" después de strippear ANSI, no por text.length
     if (stripAnsi(text).trim().length > 0) {
-      stdout.write(text);
-      if (!text.endsWith("\n")) stdout.write(LF);
+      const out = this.#wrapIfNeeded(text);
+      stdout.write(out);
+      if (!out.endsWith("\n")) stdout.write(LF);
     }
     this.#renderLive();
     this.#unlock();
+  }
+
+  #wrapIfNeeded(text: string): string {
+    if (this.#paddingRight <= 0) return text;
+    const maxWidth = (stdout.columns ?? 80) - this.#paddingRight;
+    if (maxWidth < 20) return text; // no vale la pena wrappear columnas muy angostas
+    return wrapText(text, maxWidth);
   }
 
   /**
@@ -121,7 +149,25 @@ class Screen {
   /** Setea (o limpia con null) la línea de estado encima del editor. */
   setStatus(text: string | null): void {
     this.#status = text;
-    if (!this.#busy) this.#redraw();
+    if (!this.#busy) {
+      this.#redraw();
+    } else {
+      this.#statusDirty = true;
+    }
+  }
+
+  /** Pausa la UI y muestra un prompt inline para que el usuario responda
+   * una pregunta del agente. Devuelve la respuesta. */
+  async askUser(question: string): Promise<string> {
+    this.#lock();
+    this.#clearLive();
+    // Mostrar la pregunta como texto commited
+    stdout.write(dim(`\n${question}\n`));
+    this.#unlock();
+
+    const component = new AskUserInput();
+    component.setPrompt("> Responder (Enter para enviar, vacío para cancelar):");
+    return this.readLine(component);
   }
 
   // ── interno ───────────────────────────────────────────────────────────
@@ -174,7 +220,16 @@ class Screen {
   }
 
   #onData = (raw: string): void => {
-    if (!this.#reading) return; // ignoramos input mientras el agente trabaja
+    // Durante la ejecución del agente, solo dejamos pasar Ctrl+C y Esc
+    // para interrupción; el resto del input se ignora.
+    if (!this.#reading) {
+      // Ctrl+C: \x03. Esc: \x1b. Escape sequences (flechas, etc): \x1b[...]
+      // Solo pasamos \x03 y \x1b solo (sin argumentos extra).
+      if (raw === "\x03" || raw === "\x1b") {
+        this.#processKey(raw);
+      }
+      return;
+    }
 
     if (this.#pasteBuffer !== null) {
       this.#pasteBuffer += raw;
@@ -208,11 +263,29 @@ class Screen {
   #processKey(keyStr: string): void {
     const key = decodeKey(keyStr);
 
-    if (key.type === "ctrl" && key.key === "c") {
-      stdout.write(CURSOR_SHOW);
-      stdin.removeListener("data", this.#onData);
-      disableRawMode();
-      process.exit(0);
+    if (key.type === "ctrl" && key.key === "c" || key.type === "escape") {
+      // Si el agente está corriendo y hay un AbortController registrado,
+      // interrumpimos la llamada al LLM en lugar de matar el proceso.
+      if (this.#abortSignal) {
+        this.#abortSignal.abort();
+        // Si estamos en ask_user (reading=true), forzamos que el componente
+        // termine con resultado vacío para cancelar la confirmación.
+        if (this.#reading && this.#resolve) {
+          this.#reading = false;
+          const resolve = this.#resolve;
+          this.#resolve = null;
+          resolve?.("");
+        }
+        return;
+      }
+      // Solo Ctrl+C (no Esc) mata el proceso en el prompt normal
+      if (key.type === "ctrl" && key.key === "c") {
+        stdout.write(CURSOR_SHOW);
+        stdin.removeListener("data", this.#onData);
+        disableRawMode();
+        process.exit(0);
+      }
+      return;
     }
 
     if (!this.#live) return;
@@ -261,4 +334,96 @@ function truncateEphemeral(text: string): string {
   return text.slice(0, i);
 }
 
-export { Screen, stripAnsi, truncateEphemeral };
+/**
+ * Word-wrap consciente de ANSI. Respeta saltos de línea existentes y
+ * re-aplica códigos de estilo en cada línea resultante para que no se
+ * pierdan al cortar.
+ */
+function wrapText(text: string, maxWidth: number): string {
+  const lines = text.split("\n");
+  const result: string[] = [];
+  for (const line of lines) {
+    const wrapped = wrapLine(line, maxWidth);
+    result.push(...wrapped);
+  }
+  return result.join("\n");
+}
+
+/** Secuencia ANSI de apertura al inicio de un string, ej: "\x1b[2m". */
+const ANSI_LEADING_RE = /^\x1b\[[0-9;]*m/;
+
+function extractLeadingAnsi(s: string): string {
+  const m = s.match(ANSI_LEADING_RE);
+  return m ? m[0] : "";
+}
+
+function extractTrailingAnsi(s: string): string {
+  // El cierre de estilo que usamos siempre es \x1b[0m
+  if (s.endsWith("\x1b[0m")) return "\x1b[0m";
+  return "";
+}
+
+function wrapLine(line: string, maxWidth: number): string[] {
+  const visibleLen = stripAnsi(line).length;
+  if (visibleLen <= maxWidth) return [line];
+
+  const leading = extractLeadingAnsi(line);
+  const trailing = extractTrailingAnsi(line);
+
+  // Quitar apertura y cierre para trabajar con el texto limpio
+  let inner = line;
+  if (leading) inner = inner.slice(leading.length);
+  if (trailing) inner = inner.slice(0, inner.length - trailing.length);
+
+  const result: string[] = [];
+
+  while (inner.length > 0) {
+    if (stripAnsi(inner).length <= maxWidth) {
+      result.push(leading + inner + trailing);
+      break;
+    }
+
+    // Buscar el último espacio dentro del límite visible
+    let spaceIdx = -1;
+    let visibleCount = 0;
+    for (let i = 0; i < inner.length && visibleCount < maxWidth; i++) {
+      const ansiMatch = inner.slice(i).match(ANSI_LEADING_RE);
+      if (ansiMatch) {
+        i += ansiMatch[0].length - 1;
+        continue;
+      }
+      if (inner[i] === " ") spaceIdx = i;
+      visibleCount++;
+    }
+
+    let cutIdx: number;
+    let skip: number; // cuántos chars saltar al pasar a la siguiente línea
+
+    if (spaceIdx > 0) {
+      // Cortar en el espacio: no lo incluimos en la línea, y lo saltamos
+      cutIdx = spaceIdx;
+      skip = 1; // saltar el espacio mismo
+    } else {
+      // No hay espacio: cortar justo en maxWidth caracteres visibles
+      visibleCount = 0;
+      cutIdx = 0;
+      for (let i = 0; i < inner.length && visibleCount < maxWidth; i++) {
+        const ansiMatch = inner.slice(i).match(ANSI_LEADING_RE);
+        if (ansiMatch) {
+          i += ansiMatch[0].length - 1;
+          continue;
+        }
+        visibleCount++;
+        cutIdx = i + 1;
+      }
+      skip = 0; // no saltar nada, continuación pegada
+    }
+
+    result.push(leading + inner.slice(0, cutIdx) + trailing);
+    inner = inner.slice(cutIdx + skip);
+  }
+
+  return result.length > 0 ? result : [line];
+}
+
+export { Screen, stripAnsi, truncateEphemeral, wrapText };
