@@ -24,6 +24,7 @@ import {
   DisplayToolCall,
   DisplayToolResult,
 } from "./tui/components/display-text.js";
+import { AnsiRenderer } from "./tui/markdown/ansi-renderer.js";
 import { LineEditor } from "./tui/components/line-editor.js";
 import { Prompt } from "./tui/components/prompt.js";
 import { Spinner } from "./tui/components/spinner.js";
@@ -107,7 +108,7 @@ const main = async () => {
 
   const screen = new Screen(config.screenPadding);
   const spinner = new Spinner(screen);
-  const assistantText = new DisplayAssistantText(screen);
+  const assistantText = new DisplayAssistantText(screen, new AnsiRenderer());
   const toolCallText = new DisplayToolCall(screen);
   const toolResultText = new DisplayToolResult(screen);
 
@@ -210,7 +211,7 @@ const main = async () => {
     });
 
     try {
-      iterator = run.run(session.messages);
+      iterator = run.run(session.getContext());
 
       spinner.start();
       let item = await iterator.next();
@@ -256,6 +257,9 @@ const main = async () => {
       // del spinner se limpie aunque algún timer encolado haya pintado
       // justo antes del stop.
       screen.redrawLive();
+
+      // Compactar reads viejos en el workingContext para mantenerlo filoso
+      session.compactWorkingContext();
     } catch (err: unknown) {
       // Nos aseguramos de que el spinner se detenga ante cualquier error
       spinner.stop();

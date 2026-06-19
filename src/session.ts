@@ -3,7 +3,11 @@ import { writeFileSync, readFileSync, existsSync, mkdirSync, readdirSync, statSy
 import { dirname, join, basename } from "path";
 import { randomUUID } from "crypto";
 import { logger } from "./logger.js";
-import { estimateMessagesTokens, pruneContext } from "./context-management.js";
+import {
+  compactStaleReads,
+  estimateMessagesTokens,
+  pruneContext,
+} from "./context-management.js";
 
 type SessionOptions = {
   id?: string;
@@ -16,6 +20,10 @@ type SessionOptions = {
 
 class Session {
   #messages: Message[];
+  /** Contexto de trabajo con compactaciones aplicadas (se mantiene sincronizado
+   * con #messages, pero con reads viejos compactados). Se persiste en disco
+   * para que al reanudar no haya que reprocesar. */
+  #workingContext: Message[];
   #id: string;
   #name: string;
   #sessionPath?: string;
@@ -27,6 +35,7 @@ class Session {
     this.#id = options.id ?? randomUUID();
     this.#name = "";
     this.#messages = [];
+    this.#workingContext = [];
     this.#maxContextTokens = options.maxContextTokens ?? 100_000;
     this.#totalCost = 0;
     this.#totalTokens = { input: 0, output: 0 };
@@ -43,10 +52,19 @@ class Session {
         this.#totalCost = parsed.totalCost ?? 0;
         this.#totalTokens = parsed.totalTokens ?? { input: 0, output: 0 };
         this.#name = parsed.name ?? "";
+
+        // workingContext: si existe en disco, se carga; si no (formato viejo), se regenera
+        if (parsed.workingContext && Array.isArray(parsed.workingContext)) {
+          this.#workingContext = parsed.workingContext;
+        } else {
+          this.#workingContext = compactStaleReads(this.#messages);
+        }
+
         logger.info("Session loaded from file", {
           id: this.#id,
           name: this.#name || "(sin nombre)",
           messageCount: this.#messages.length,
+          workingContextSize: this.#workingContext.length,
           totalCost: this.#totalCost,
           totalTokens: this.#totalTokens,
         });
@@ -73,32 +91,51 @@ class Session {
   }
 
   addUserMessage(msg: string | Message["content"]) {
-    this.#messages.push({
+    const message = {
       role: "user",
       content: msg,
-    } as Message);
+    } as Message;
+    this.#messages.push(message);
+    this.#workingContext.push(message);
     this.#save();
   }
 
   addMessage(msg: Message) {
     this.#messages.push(msg);
+    this.#workingContext.push(msg);
     this.#save();
   }
 
-  /** Devuelve los mensajes podados por presupuesto de tokens.
-   * El historial completo se guarda en disco igual. */
+  /** Devuelve el historial completo de mensajes (sin compactar, sin podar).
+   * Para auditoría y debugging. */
   get messages(): readonly Message[] {
-    return pruneContext(this.#messages, this.#maxContextTokens);
+    return this.#messages;
   }
 
-  /** Devuelve el historial completo sin truncar */
-  get allMessages(): readonly Message[] {
-    return this.#messages;
+  /** Devuelve el contexto de trabajo con compactaciones aplicadas.
+   * Para debugging y tests. */
+  get workingContext(): readonly Message[] {
+    return this.#workingContext;
+  }
+
+  /** Contexto listo para enviar al modelo: workingContext podado por tokens. */
+  getContext(): readonly Message[] {
+    return pruneContext(this.#workingContext, this.#maxContextTokens);
+  }
+
+  /** Aplica compactación de reads viejos al workingContext.
+   * Se llama al final de cada turno del runner. */
+  compactWorkingContext(options?: {
+    staleTurns?: number;
+    minLines?: number;
+  }): void {
+    this.#workingContext = compactStaleReads(this.#workingContext, options);
+    this.#save();
   }
 
   /** Tokens estimados que ocuparía el contexto actual enviado al modelo */
   get contextTokens(): number {
-    return estimateMessagesTokens(this.messages);
+    return estimateMessagesTokens(this.getContext());
   }
 
   /** Presupuesto máximo de tokens de contexto configurado */
@@ -131,6 +168,7 @@ class Session {
    */
   clear(): void {
     this.#messages = [];
+    this.#workingContext = [];
     this.#save();
   }
 
@@ -171,6 +209,7 @@ class Session {
             name: this.#name || undefined,
             savedAt: new Date().toISOString(),
             messages: this.#messages,
+            workingContext: this.#workingContext,
             totalCost: this.#totalCost,
             totalTokens: this.#totalTokens,
           },

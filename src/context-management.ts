@@ -1,5 +1,194 @@
 import { Message } from "./message.js";
 
+// ── Compactación de reads viejos ─────────────────────────────────────────────
+
+interface ReadRegistryEntry {
+  toolUseId: string;
+  path: string;
+  turnNumber: number;
+  lineCount: number;
+}
+
+interface CompactOptions {
+  /** Reads con más de N turnos de antigüedad se compactan. Default: 3. */
+  staleTurns?: number;
+  /** Solo se compactan reads con más de N líneas. Default: 20. */
+  minLines?: number;
+}
+
+/**
+ * Compacta tool_results de reads viejos dentro del contexto de trabajo.
+ * Dos mecanismos:
+ *  A. Por antigüedad: si un read tiene >staleTurns turnos, se reemplaza
+ *     por un marcador.
+ *  B. Por edición: si un archivo fue editado después de ser leído, el read
+ *     se invalida.
+ *
+ * No muta los mensajes de entrada; devuelve un nuevo array con shallow
+ * clones de los mensajes modificados.
+ */
+/** Si el content de un tool_result ya es un marcador de compactación,
+ * extrae el lineCount original. Devuelve 0 si no es un marcador reconocido. */
+function parseCompactedLineCount(content: string): number {
+  const m = content.match(/^\[leído .+ hace \d+ turnos — (\d+) líneas omitidas\]$/);
+  return m ? parseInt(m[1], 10) : 0;
+}
+
+function compactStaleReads(
+  messages: readonly Message[],
+  options: CompactOptions = {},
+): Message[] {
+  const { staleTurns = 3, minLines = 20 } = options;
+
+  // ── Fase 1: scan ──────────────────────────────────────────────────────────
+  let turnNumber = 0;
+  const readRegistry = new Map<string, ReadRegistryEntry>();
+  const lastEditTurn = new Map<string, number>();
+
+  for (const msg of messages) {
+    // Incrementar turno en cada user de texto (no tool_result)
+    if (msg.role === "user") {
+      if (Array.isArray(msg.content)) {
+        const isToolResult = msg.content.some(
+          (b) =>
+            b && typeof b === "object" && "type" in b && b.type === "tool_result",
+        );
+        if (!isToolResult) turnNumber++;
+      } else {
+        turnNumber++;
+      }
+    }
+
+    // Registrar reads
+    if (msg.role === "assistant" && Array.isArray(msg.content)) {
+      for (const block of msg.content) {
+        if (
+          block &&
+          typeof block === "object" &&
+          "type" in block &&
+          block.type === "tool_use" &&
+          "name" in block &&
+          block.name === "read" &&
+          "id" in block &&
+          "input" in block
+        ) {
+          const input = block.input as { path?: string };
+          readRegistry.set(block.id as string, {
+            toolUseId: block.id as string,
+            path: input.path ?? "desconocido",
+            turnNumber,
+            lineCount: 0,
+          });
+        }
+        // Registrar edits/writes
+        if (
+          block &&
+          typeof block === "object" &&
+          "type" in block &&
+          block.type === "tool_use" &&
+          "name" in block &&
+          (block.name === "edit" || block.name === "write") &&
+          "input" in block
+        ) {
+          const input = block.input as { path?: string };
+          if (input.path) {
+            lastEditTurn.set(input.path, turnNumber);
+          }
+        }
+      }
+    }
+
+    // Actualizar lineCount de reads cuando vemos el tool_result.
+    // Si el contenido ya es un marcador de compactación, parseamos el lineCount
+    // original para que la edad se recalcule en cada pasada en vez de congelarse.
+    if (msg.role === "user" && Array.isArray(msg.content)) {
+      for (const block of msg.content) {
+        if (
+          block &&
+          typeof block === "object" &&
+          "type" in block &&
+          block.type === "tool_result" &&
+          "tool_use_id" in block &&
+          "content" in block
+        ) {
+          const entry = readRegistry.get(block.tool_use_id as string);
+          if (entry && typeof block.content === "string") {
+            const compacted = parseCompactedLineCount(block.content);
+            entry.lineCount = compacted > 0 ? compacted : block.content.split("\n").length;
+          }
+        }
+      }
+    }
+  }
+
+  // ── Fase 2: compact ─────────────────────────────────────────────────────────
+  const currentTurn = turnNumber;
+  const result: Message[] = [];
+
+  for (const msg of messages) {
+    if (msg.role !== "user" || !Array.isArray(msg.content)) {
+      result.push(msg);
+      continue;
+    }
+
+    // Verificar si este mensaje contiene tool_results de reads a compactar
+    let hasCompacted = false;
+    const newContent = msg.content.map((block) => {
+      if (
+        !block ||
+        typeof block !== "object" ||
+        !("type" in block) ||
+        block.type !== "tool_result" ||
+        !("tool_use_id" in block)
+      ) {
+        return block;
+      }
+
+      const entry = readRegistry.get(block.tool_use_id as string);
+      if (!entry) return block;
+
+      const origIsError = "is_error" in block ? (block as { is_error: boolean }).is_error : false;
+
+      // B: invalidación por edición posterior (sin gate de minLines — si se
+      //    editó, el contenido viejo es inválido sin importar el tamaño).
+      const editTurn = lastEditTurn.get(entry.path);
+      if (editTurn !== undefined && editTurn > entry.turnNumber) {
+        hasCompacted = true;
+        return {
+          type: "tool_result" as const,
+          tool_use_id: block.tool_use_id as string,
+          content: `[${entry.path} fue editado después — el contenido anterior ya no es válido]`,
+          is_error: origIsError,
+        };
+      }
+
+      // A: compactación por antigüedad (solo si supera minLines)
+      if (entry.lineCount >= minLines) {
+        const age = currentTurn - entry.turnNumber;
+        if (age > staleTurns) {
+          hasCompacted = true;
+          return {
+            type: "tool_result" as const,
+            tool_use_id: block.tool_use_id as string,
+            content: `[leído ${entry.path} hace ${age} turnos — ${entry.lineCount} líneas omitidas]`,
+            is_error: origIsError,
+          };
+        }
+      }
+
+      return block;
+    });
+
+    if (hasCompacted) {
+      result.push({ ...msg, content: newContent });
+    } else {
+      result.push(msg);
+    }
+  }
+
+  return result;
+}
+
 // ── Truncado de outputs ──────────────────────────────────────────────────────
 
 /** Trunca para mostrar al usuario: límite visual, no inunda la terminal. */
@@ -146,6 +335,7 @@ function pruneContext(
 }
 
 export {
+  compactStaleReads,
   truncate,
   truncateForDisplay,
   truncateForContext,
