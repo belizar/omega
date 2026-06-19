@@ -34,6 +34,14 @@ type RunnerEvent =
     }
   | { type: "ask_user"; question: string; toolId: string };
 
+/** Estado mutable que comparten los métodos de un turno del loop. */
+interface TurnState {
+  textParts: string[];
+  toolBlocks: Array<{ id: string; name: string; input: unknown }>;
+  toolResults: ToolMessage[];
+  stopReason: "end_turn" | "tool_use" | "max_tokens";
+}
+
 class Runner {
   // Métricas de una sola corrida (se resetean con resetMetrics()).
   // El acumulado histórico lo mantiene Session (addUsage), que es el
@@ -83,6 +91,206 @@ class Runner {
     return this.#interrupted;
   }
 
+  // ── helpers ────────────────────────────────────────────────────────
+
+  /**
+   * Arma el contenido del mensaje assistant a partir de lo producido
+   * en el turno. Si no hay nada visible, pone un fallback.
+   */
+  #buildAssistantContent(state: TurnState): Message["content"] {
+    const content: Message["content"] = [];
+    if (state.textParts.length > 0) {
+      content.push({ type: "text", text: state.textParts.join("") });
+    }
+    for (const tb of state.toolBlocks) {
+      content.push({
+        type: "tool_use",
+        id: tb.id,
+        name: tb.name,
+        input: tb.input,
+      });
+    }
+    if (content.length === 0) {
+      content.push({
+        type: "text",
+        text: "(El modelo no produjo contenido visible en este turno)",
+      });
+    }
+    return content;
+  }
+
+  /** Construye el snapshot del estado vacío para un turno nuevo. */
+  #newTurnState(): TurnState {
+    return {
+      textParts: [],
+      toolBlocks: [],
+      toolResults: [],
+      stopReason: "end_turn",
+    };
+  }
+
+  // ── fases del turno ────────────────────────────────────────────────
+
+  /** Llama al LLM (stream o no-stream), emite eventos y llena `state`. */
+  async *#callLLM(
+    prunedContext: Message[],
+    state: TurnState,
+  ): AsyncGenerator<RunnerEvent> {
+    const hasStream = typeof this.#llmProvider.callStream === "function";
+
+    if (hasStream) {
+      const stream = this.#llmProvider.callStream(
+        prunedContext,
+        this.#agentConfig,
+        this.#signal,
+      );
+
+      for await (const event of stream) {
+        if (event.type === "text") {
+          state.textParts.push(event.text);
+          yield { type: "text_stream", text: event.text };
+        } else if (event.type === "tool_use") {
+          state.toolBlocks.push({
+            id: event.id,
+            name: event.name,
+            input: event.input,
+          });
+        } else if (event.type === "done") {
+          state.stopReason = event.stop_reason;
+          this.#metrics.totalInputTokens += event.usage.input_tokens;
+          this.#metrics.totalOutputTokens += event.usage.output_tokens;
+          this.#metrics.totalCost += event.cost;
+        }
+      }
+
+      if (state.textParts.length > 0) {
+        yield { type: "text_stream_end" };
+      }
+    } else {
+      const data: LLMResponse = await this.#llmProvider.call(
+        prunedContext,
+        this.#agentConfig,
+        this.#signal,
+      );
+
+      this.#metrics.totalInputTokens += data.usage.input_tokens;
+      this.#metrics.totalOutputTokens += data.usage.output_tokens;
+      this.#metrics.totalCost += data.cost;
+
+      for (const block of data.content) {
+        if (block.type === "text") {
+          state.textParts.push(block.text);
+          yield { type: "text", text: block.text };
+        }
+        if (block.type === "tool_use") {
+          state.toolBlocks.push({
+            id: block.id,
+            name: block.name,
+            input: block.input,
+          });
+        }
+      }
+
+      state.stopReason = data.stop_reason;
+    }
+  }
+
+  /** Ejecuta las tool calls pendientes, emite eventos y llena `state.toolResults`. */
+  async *#executeTools(state: TurnState): AsyncGenerator<RunnerEvent> {
+    for (const block of state.toolBlocks) {
+      if (block.name === "ask_user") {
+        yield* this.#handleAskUser(block, state);
+        continue;
+      }
+
+      this.#metrics.totalToolCalls++;
+
+      const tool = this.#agentConfig.getTool(block.name);
+      if (!tool) {
+        yield* this.#handleUnknownTool(block.name, block.id, state);
+        continue;
+      }
+
+      yield { type: "tool_use", name: tool.name, input: block.input };
+
+      yield* this.#handleToolExecution(tool.name, block.id, block.input, state);
+    }
+  }
+
+  // ── sub-fases de executeTools ──────────────────────────────────────
+
+  async *#handleAskUser(
+    block: { id: string; name: string; input: unknown },
+    state: TurnState,
+  ): AsyncGenerator<RunnerEvent> {
+    if (!this.#onAskUser) return;
+
+    const question =
+      (block.input as { question?: string }).question ?? "¿Continuar?";
+    yield { type: "ask_user", question, toolId: block.id };
+
+    const answer = await this.#onAskUser(question);
+    const output = answer || "(sin respuesta)";
+    yield {
+      type: "tool_result",
+      output: "(confirmación recibida)",
+      rawOutput: output,
+    };
+    state.toolResults.push({
+      type: "tool_result",
+      tool_use_id: block.id,
+      content: output,
+      is_error: false,
+    });
+  }
+
+  async *#handleUnknownTool(
+    name: string,
+    toolId: string,
+    state: TurnState,
+  ): AsyncGenerator<RunnerEvent> {
+    const output = `Error: unknown tool "${name}"`;
+    logger.error(output);
+    yield { type: "tool_result", output };
+    state.toolResults.push({
+      type: "tool_result",
+      tool_use_id: toolId,
+      content: output,
+      is_error: true,
+    });
+  }
+
+  async *#handleToolExecution(
+    toolName: string,
+    toolId: string,
+    input: unknown,
+    state: TurnState,
+  ): AsyncGenerator<RunnerEvent> {
+    const tool = this.#agentConfig.getTool(toolName)!;
+    let output: string;
+    let isError = false;
+    try {
+      output = tool.execute(input) as string;
+    } catch (err: unknown) {
+      isError = true;
+      output = `Error executing tool "${toolName}": ${err instanceof Error ? err.message : String(err)}`;
+      logger.error("Tool execution threw", { tool: toolName, error: output });
+    }
+
+    const shown = truncateForDisplay(output);
+    const forModel = truncateForContext(output, this.#maxContextTokens);
+
+    yield { type: "tool_result", output: shown, rawOutput: output };
+    state.toolResults.push({
+      type: "tool_result",
+      tool_use_id: toolId,
+      content: forModel,
+      is_error: isError,
+    });
+  }
+
+  // ── loop principal ─────────────────────────────────────────────────
+
   async *run(incomingContext: readonly Message[]): AsyncGenerator<RunnerEvent> {
     const workingContext = [...incomingContext];
     logger.info(`Starting runner with max steps: ${this.#maxSteps}`);
@@ -92,10 +300,7 @@ class Runner {
       if (this.#signal?.aborted) {
         this.#interrupted = true;
         logger.info("Runner interrupted by abort signal");
-        yield {
-          type: "text",
-          text: "⏹ Interrumpido por el usuario.",
-        };
+        yield { type: "text", text: "⏹ Interrumpido por el usuario." };
         break;
       }
 
@@ -104,90 +309,18 @@ class Runner {
         this.#maxContextTokens,
       );
 
-      // Usamos streaming si el provider lo soporta
-      const hasStream = typeof this.#llmProvider.callStream === "function";
-      const toolBlocks: Array<{ id: string; name: string; input: unknown }> =
-        [];
-      const textParts: string[] = [];
-      let stopReason: "end_turn" | "tool_use" | "max_tokens" = "end_turn";
+      const state = this.#newTurnState();
 
       try {
-        if (hasStream) {
-          const stream = this.#llmProvider.callStream(
-            prunedContext,
-            this.#agentConfig,
-            this.#signal,
-          );
-
-          for await (const event of stream) {
-            if (event.type === "text") {
-              textParts.push(event.text);
-              yield { type: "text_stream", text: event.text };
-            } else if (event.type === "tool_use") {
-              toolBlocks.push({
-                id: event.id,
-                name: event.name,
-                input: event.input,
-              });
-            } else if (event.type === "done") {
-              stopReason = event.stop_reason;
-              this.#metrics.totalInputTokens += event.usage.input_tokens;
-              this.#metrics.totalOutputTokens += event.usage.output_tokens;
-              this.#metrics.totalCost += event.cost;
-            }
-          }
-
-          if (textParts.length > 0) {
-            yield { type: "text_stream_end" };
-          }
-        } else {
-          const data: LLMResponse = await this.#llmProvider.call(
-            prunedContext,
-            this.#agentConfig,
-            this.#signal,
-          );
-
-          this.#metrics.totalInputTokens += data.usage.input_tokens;
-          this.#metrics.totalOutputTokens += data.usage.output_tokens;
-          this.#metrics.totalCost += data.cost;
-
-          for (const block of data.content) {
-            if (block.type === "text") {
-              textParts.push(block.text);
-              yield { type: "text", text: block.text };
-            }
-            if (block.type === "tool_use") {
-              toolBlocks.push({
-                id: block.id,
-                name: block.name,
-                input: block.input,
-              });
-            }
-          }
-
-          stopReason = data.stop_reason;
-        }
+        yield* this.#callLLM(prunedContext, state);
       } catch (err: unknown) {
         if (err instanceof Error && err.name === "AbortError") {
           this.#interrupted = true;
           logger.info("LLM call aborted by signal");
-          yield {
-            type: "text",
-            text: "⏹ Interrumpido por el usuario.",
-          };
-          // Guardar lo que alcanzó a salir como mensaje assistant
-          const partialContent: Message["content"] =
-            textParts.length > 0
-              ? [{ type: "text" as const, text: textParts.join("") }]
-              : [
-                  {
-                    type: "text" as const,
-                    text: "(Interrumpido antes de recibir respuesta)",
-                  },
-                ];
+          yield { type: "text", text: "⏹ Interrumpido por el usuario." };
           const partialMessage: Message = {
             role: "assistant",
-            content: partialContent,
+            content: this.#buildAssistantContent(state),
           };
           workingContext.push(partialMessage);
           yield { type: "state", message: partialMessage };
@@ -196,123 +329,27 @@ class Runner {
         throw err;
       }
 
-      // Construir el mensaje assistant completo
-      const assistantContent: Message["content"] = [];
-      if (textParts.length > 0) {
-        assistantContent.push({ type: "text", text: textParts.join("") });
-      }
-      for (const tb of toolBlocks) {
-        assistantContent.push({
-          type: "tool_use",
-          id: tb.id,
-          name: tb.name,
-          input: tb.input,
-        });
-      }
-
-      // Si el LLM no produjo ni texto ni tool calls (ej: solo bloques
-      // thinking filtrados), ponemos un fallback para que la sesión no
-      // guarde un mensaje vacío.
+      // Agregar mensaje assistant al contexto
       const assistantMessage: Message = {
         role: "assistant",
-        content:
-          assistantContent.length > 0
-            ? assistantContent
-            : [
-                {
-                  type: "text",
-                  text: "(El modelo no produjo contenido visible en este turno)",
-                },
-              ],
+        content: this.#buildAssistantContent(state),
       };
       workingContext.push(assistantMessage);
       yield { type: "state", message: assistantMessage };
 
       // Ejecutar tools
-      const toolResults: ToolMessage[] = [];
-      for (const block of toolBlocks) {
-        this.#metrics.totalToolCalls++;
+      yield* this.#executeTools(state);
 
-        const tool = this.#agentConfig.getTool(block.name);
-        if (!tool) {
-          // Caso especial: ask_user — pausar y pedir input al usuario
-          if (block.name === "ask_user" && this.#onAskUser) {
-            yield {
-              type: "ask_user",
-              question: (block.input as { question?: string }).question ?? "¿Continuar?",
-              toolId: block.id,
-            };
-            const answer = await this.#onAskUser(
-              (block.input as { question?: string }).question ?? "¿Continuar?",
-            );
-            const output = answer || "(sin respuesta)";
-            yield {
-              type: "tool_result",
-              output: "(confirmación recibida)",
-              rawOutput: output,
-            };
-            toolResults.push({
-              type: "tool_result",
-              tool_use_id: block.id,
-              content: output,
-              is_error: false,
-            });
-            continue;
-          }
-
-          const output = `Error: unknown tool "${block.name}"`;
-          logger.error(output);
-          yield { type: "tool_result", output };
-          toolResults.push({
-            type: "tool_result",
-            tool_use_id: block.id,
-            content: output,
-            is_error: true,
-          });
-          continue;
-        }
-
-        // ask_user fue manejado arriba, no debería llegar acá
-        if (block.name === "ask_user") continue;
-
-        yield { type: "tool_use", name: tool.name, input: block.input };
-
-        // ask_user no llega acá, lo manejamos arriba
-        if (tool.name === "ask_user") continue;
-
-        let output: string;
-        let isError = false;
-        try {
-          output = tool.execute(block.input) as string;
-        } catch (err: unknown) {
-          isError = true;
-          output = `Error executing tool "${tool.name}": ${err instanceof Error ? err.message : String(err)}`;
-          logger.error("Tool execution threw", {
-            tool: tool.name,
-            error: output,
-          });
-        }
-
-        // Display: límite visual. Modelo: safety net por tokens.
-        const shown = truncateForDisplay(output);
-        const forModel = truncateForContext(output, this.#maxContextTokens);
-
-        yield { type: "tool_result", output: shown, rawOutput: output };
-        toolResults.push({
-          type: "tool_result",
-          tool_use_id: block.id,
-          content: forModel,
-          is_error: isError,
-        });
-      }
-
-      if (toolResults.length > 0) {
-        const toolMessage: Message = { role: "user", content: toolResults };
+      if (state.toolResults.length > 0) {
+        const toolMessage: Message = {
+          role: "user",
+          content: state.toolResults,
+        };
         workingContext.push(toolMessage);
         yield { type: "state", message: toolMessage };
       }
 
-      if (stopReason === "max_tokens") {
+      if (state.stopReason === "max_tokens") {
         logger.warn("Respuesta cortada por max_tokens");
         yield {
           type: "text",
@@ -321,10 +358,11 @@ class Runner {
         break;
       }
 
-      if (stopReason === "end_turn") {
+      if (state.stopReason === "end_turn") {
         logger.info("Agent finished (end_turn)");
         break;
       }
+
       steps--;
       if (steps === 0) {
         logger.warn(`Max steps reached (${this.#maxSteps})`);
