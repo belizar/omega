@@ -126,7 +126,7 @@ class Session {
   /** Aplica compactación de reads viejos al workingContext.
    * Se llama al final de cada turno del runner. */
   compactWorkingContext(options?: {
-    staleTurns?: number;
+    staleSteps?: number;
     minLines?: number;
   }): void {
     this.#workingContext = compactStaleReads(this.#workingContext, options);

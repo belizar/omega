@@ -2,7 +2,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ClearCommand } from "../../commands/clear.js";
 import { RenameCommand } from "../../commands/rename.js";
 import { ResumeCommand } from "../../commands/resume.js";
+import { HelpCommand } from "../../commands/help.js";
 import { dispatchCommand } from "../../commands/index.js";
+import { Command } from "../../commands/command.js";
 import { Context } from "../../app-context.js";
 import { Session } from "../../session.js";
 import { AgentConfig } from "../../agent-config.js";
@@ -148,6 +150,40 @@ describe("ResumeCommand", () => {
   });
 });
 
+// ── HelpCommand ──────────────────────────────────────────────────────────────
+
+describe("HelpCommand", () => {
+  it("should list all registered commands", () => {
+    const ctx = createMockContext();
+    const screen = ctx.screen as unknown as MockScreen;
+
+    const commandsMap: Record<string, Command<unknown>> = {
+      "/clear": new ClearCommand(),
+      "/rename": new RenameCommand(),
+    };
+    commandsMap["/help"] = new HelpCommand(commandsMap);
+
+    const cmd = new HelpCommand(commandsMap);
+    cmd.handler(ctx, []);
+
+    const output = screen.getAllLines().join("\n");
+    expect(output).toContain("Comandos disponibles");
+    expect(output).toContain("/clear");
+    expect(output).toContain("/rename");
+    expect(output).toContain("/help");
+  });
+
+  it("should show message when no commands registered", () => {
+    const ctx = createMockContext();
+    const screen = ctx.screen as unknown as MockScreen;
+
+    const cmd = new HelpCommand({});
+    cmd.handler(ctx, []);
+
+    expect(screen.getLastLine()).toContain("No hay comandos disponibles");
+  });
+});
+
 // ── dispatchCommand ──────────────────────────────────────────────────────────
 
 describe("dispatchCommand", () => {
@@ -182,5 +218,15 @@ describe("dispatchCommand", () => {
     const result = await dispatchCommand("/rename test-session", ctx);
     expect(result).toBe(true);
     expect(ctx.session.name).toBe("test-session");
+  });
+
+  it("should dispatch /help and show available commands", async () => {
+    const ctx = createMockContext();
+    const screen = ctx.screen as unknown as MockScreen;
+
+    const result = await dispatchCommand("/help", ctx);
+    expect(result).toBe(true);
+    const output = screen.getAllLines().join("\n");
+    expect(output).toContain("Comandos disponibles");
   });
 });

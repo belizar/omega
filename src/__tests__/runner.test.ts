@@ -196,6 +196,36 @@ describe("Runner", () => {
     });
   });
 
+  describe("stop_reason tool_use without tools", () => {
+    it("should break the loop when stop_reason is tool_use but no tool blocks exist", async () => {
+      // Caso borde: el provider devuelve stop_reason="tool_use" pero sin
+      // tool_use blocks en el contenido (respuesta de texto puro). El runner
+      // debe frenar, no loopear hasta maxSteps.
+      const provider = new MockLLMProvider([{
+        content: [{ type: "text", text: "Acá va la respuesta final." }],
+        stop_reason: "tool_use",
+        usage: { input_tokens: 10, output_tokens: 5 },
+        cost: 0.0001,
+      }]);
+      const runner = new Runner({
+        llmProvider: provider,
+        agentConfig: mockAgent(),
+        maxSteps: 10,
+      });
+      const context: Message[] = [{ role: "user", content: "algo" }];
+
+      let textEventCount = 0;
+      for await (const event of runner.run(context)) {
+        if (event.type === "text_stream" || event.type === "text") {
+          textEventCount++;
+        }
+      }
+
+      // Una sola respuesta, el loop debería frenar.
+      expect(textEventCount).toBeLessThanOrEqual(2); // text_stream + text_stream_end
+    });
+  });
+
   describe("metrics", () => {
     it("should accumulate token usage and cost", async () => {
       const provider = new MockLLMProvider([

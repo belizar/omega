@@ -165,9 +165,14 @@ class Screen {
     stdout.write(dim(`\n${question}\n`));
     this.#unlock();
 
+    const prevLive = this.#live;
     const component = new AskUserInput();
     component.setPrompt("> Responder (Enter para enviar, vacío para cancelar):");
-    return this.readLine(component);
+    const answer = await this.readLine(component);
+
+    this.#live = prevLive;
+    this.#redraw();
+    return answer;
   }
 
   // ── interno ───────────────────────────────────────────────────────────

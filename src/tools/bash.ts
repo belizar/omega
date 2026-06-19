@@ -1,8 +1,17 @@
-import { execSync } from "child_process";
+import { exec } from "child_process";
 import { Tool } from "./tool.js";
 import { logger } from "../logger.js";
+import { CommandClassifier, type ClassifierResult } from "../classifier/classifier.js";
 
 type BashInput = { command: string };
+
+/** Si está presente, BashTool clasifica el comando y pide confirmación antes de ejecutar. */
+export type BashConfirmCallback = (command: string, classification: ClassifierResult) => Promise<boolean>;
+
+export type BashToolOptions = {
+  classifier?: CommandClassifier;
+  onConfirm?: BashConfirmCallback;
+};
 
 const TIMEOUT_MS = 30_000; // matar comandos colgados a los 30s
 const MAX_BUFFER = 10 * 1024 * 1024; // 10MB de stdout/stderr
@@ -32,7 +41,10 @@ const ENV_ACCESS_PATTERNS = [
 ];
 
 export class BashTool extends Tool<BashInput, string> {
-  constructor() {
+  #classifier?: CommandClassifier;
+  #onConfirm?: BashConfirmCallback;
+
+  constructor(options?: BashToolOptions) {
     super({
       name: "bash",
       description: "Ejecuta un comando bash y devuelve stdout y stderr",
@@ -47,6 +59,8 @@ export class BashTool extends Tool<BashInput, string> {
         required: ["command"],
       },
     });
+    this.#classifier = options?.classifier;
+    this.#onConfirm = options?.onConfirm;
   }
 
   private isCommandBlocked(command: string): boolean {
@@ -54,7 +68,7 @@ export class BashTool extends Tool<BashInput, string> {
       || ENV_ACCESS_PATTERNS.some((pattern) => pattern.test(command));
   }
 
-  execute({ command }: BashInput): string {
+  async execute({ command }: BashInput): Promise<string> {
     try {
       if (!command || typeof command !== "string") {
         logger.error("Invalid bash command input", { command });
@@ -66,11 +80,40 @@ export class BashTool extends Tool<BashInput, string> {
         return "Error: This command is blocked for security reasons";
       }
 
+      // ── Clasificación ──────────────────────────────────────────
+      if (this.#classifier && this.#onConfirm) {
+        const classification = await this.#classifier.classify(command);
+
+        if (classification.verdict === "dangerous") {
+          const confirmed = await this.#onConfirm(command, classification);
+
+          // Aprender del feedback del usuario
+          if (confirmed) {
+            await this.#classifier.learnOverride(command, "safe");
+          } else {
+            await this.#classifier.learnOverride(command, "dangerous");
+            return `Error: El usuario rechazó la ejecución del comando: "${command}". Razón del clasificador: ${classification.reason}`;
+          }
+        }
+      }
+
       logger.info("Executing bash command", { command });
-      const result = execSync(command, {
-        encoding: "utf-8",
-        timeout: TIMEOUT_MS,
-        maxBuffer: MAX_BUFFER,
+      const result = await new Promise<string>((resolve, reject) => {
+        exec(command, {
+          encoding: "buffer" as BufferEncoding,
+          timeout: TIMEOUT_MS,
+          maxBuffer: MAX_BUFFER,
+        }, (error, stdout, stderr) => {
+          // juntar stdout y stderr
+          const out = Buffer.isBuffer(stdout) ? stdout.toString("utf-8") : String(stdout);
+          const err = Buffer.isBuffer(stderr) ? stderr.toString("utf-8") : String(stderr);
+          const combined = (out + (err ? err : "")).trim();
+          if (error && !combined) {
+            reject(error);
+          } else {
+            resolve(combined || (error?.message ?? ""));
+          }
+        });
       });
       logger.info("Command executed successfully");
       return result;

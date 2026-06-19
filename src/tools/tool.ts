@@ -15,7 +15,7 @@ export abstract class Tool<Tin, Tout> {
     this.#schema = schema;
   }
 
-  abstract execute(input: Tin): Tout;
+  abstract execute(input: Tin): Promise<Tout>;
 
   get name() {
     return this.#name;

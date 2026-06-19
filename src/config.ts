@@ -1,7 +1,6 @@
 import { logger } from "./logger.js";
 
 interface Config {
-  anthropicApiKey: string;
   openrouterApiKey: string;
   model: string;
   maxTokens: number;
@@ -15,14 +14,11 @@ interface Config {
 function validateEnv(): Config {
   logger.info("Validating environment variables...");
 
-  // OpenRouter es el provider por defecto (ver #18 para selección dinámica).
   const openrouterApiKey = process.env.OPENROUTER_API_KEY;
   if (!openrouterApiKey) {
     logger.error("Missing required env var: OPENROUTER_API_KEY");
     throw new Error("OPENROUTER_API_KEY environment variable is required. Create a .env file or set it in ~/.omega/.env");
   }
-
-  const apiKey = process.env.ANTHROPIC_API_KEY || "";
 
   const model = process.env.MODEL || "claude-haiku-4-5-20251001";
   const maxTokens = parseInt(process.env.MAX_TOKENS || "1024", 10);
@@ -33,7 +29,6 @@ function validateEnv(): Config {
   const screenPadding = parseInt(process.env.SCREEN_PADDING || "0", 10);
 
   const config: Config = {
-    anthropicApiKey: apiKey,
     openrouterApiKey,
     model,
     maxTokens,

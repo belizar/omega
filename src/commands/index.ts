@@ -4,6 +4,7 @@ import { Command } from "./command.js";
 import { ExitCommand } from "./exit.js";
 import { HelpCommand } from "./help.js";
 import { ModalCommand } from "./modal-command.js";
+import { OverridesCommand } from "./overrides.js";
 import { RenameCommand } from "./rename.js";
 import { ResumeCommand } from "./resume.js";
 import { VerboseCommand } from "./verbose.js";
@@ -12,6 +13,7 @@ import { resumeModalCommand } from "./session-resume.js";
 const commandsMap: Record<string, Command<unknown>> = {
   "/clear": new ClearCommand(),
   "/exit": new ExitCommand(),
+  "/overrides": new OverridesCommand(),
   "/rename": new RenameCommand(),
   "/resume": new ResumeCommand(),
   "/verbose": new VerboseCommand(),

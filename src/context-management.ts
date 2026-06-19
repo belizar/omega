@@ -5,13 +5,13 @@ import { Message } from "./message.js";
 interface ReadRegistryEntry {
   toolUseId: string;
   path: string;
-  turnNumber: number;
+  step: number;
   lineCount: number;
 }
 
 interface CompactOptions {
-  /** Reads con más de N turnos de antigüedad se compactan. Default: 3. */
-  staleTurns?: number;
+  /** Reads con más de N pasos del agente de antigüedad se compactan. Default: 5. */
+  staleSteps?: number;
   /** Solo se compactan reads con más de N líneas. Default: 20. */
   minLines?: number;
 }
@@ -19,8 +19,8 @@ interface CompactOptions {
 /**
  * Compacta tool_results de reads viejos dentro del contexto de trabajo.
  * Dos mecanismos:
- *  A. Por antigüedad: si un read tiene >staleTurns turnos, se reemplaza
- *     por un marcador.
+ *  A. Por antigüedad: si un read tiene >staleSteps pasos del agente, se
+ *     reemplaza por un marcador.
  *  B. Por edición: si un archivo fue editado después de ser leído, el read
  *     se invalida.
  *
@@ -28,35 +28,36 @@ interface CompactOptions {
  * clones de los mensajes modificados.
  */
 /** Si el content de un tool_result ya es un marcador de compactación,
- * extrae el lineCount original. Devuelve 0 si no es un marcador reconocido. */
+ * extrae el lineCount original. Para el nuevo formato sin lineCount explícito,
+ * devuelve 0 (el fallback usa split("\n").length = 1, que es < minLines,
+ * logrando idempotencia). */
 function parseCompactedLineCount(content: string): number {
-  const m = content.match(/^\[leído .+ hace \d+ turnos — (\d+) líneas omitidas\]$/);
-  return m ? parseInt(m[1], 10) : 0;
+  // Formato nuevo: "[leído ... hace N pasos — usá read ...]"
+  const m1 = content.match(/^\[leído .+ hace \d+ pasos — usá read/);
+  if (m1) return 0;
+  // Formato viejo (compatibilidad con sesiones preexistentes):
+  // "[leído ... hace N turnos — X líneas omitidas]"
+  const m2 = content.match(/^\[leído .+ hace \d+ turnos — (\d+) líneas omitidas\]$/);
+  return m2 ? parseInt(m2[1], 10) : 0;
 }
 
 function compactStaleReads(
   messages: readonly Message[],
   options: CompactOptions = {},
 ): Message[] {
-  const { staleTurns = 3, minLines = 20 } = options;
+  const { staleSteps = 5, minLines = 20 } = options;
 
   // ── Fase 1: scan ──────────────────────────────────────────────────────────
-  let turnNumber = 0;
+  let step = 0;
   const readRegistry = new Map<string, ReadRegistryEntry>();
-  const lastEditTurn = new Map<string, number>();
+  const lastEditStep = new Map<string, number>();
 
   for (const msg of messages) {
-    // Incrementar turno en cada user de texto (no tool_result)
-    if (msg.role === "user") {
-      if (Array.isArray(msg.content)) {
-        const isToolResult = msg.content.some(
-          (b) =>
-            b && typeof b === "object" && "type" in b && b.type === "tool_result",
-        );
-        if (!isToolResult) turnNumber++;
-      } else {
-        turnNumber++;
-      }
+    // Contar pasos del agente: cada mensaje assistant es un paso.
+    // Esto captura el costo real en tareas agénticas (1 turno de usuario
+    // puede generar decenas de pasos internos).
+    if (msg.role === "assistant") {
+      step++;
     }
 
     // Registrar reads
@@ -76,7 +77,7 @@ function compactStaleReads(
           readRegistry.set(block.id as string, {
             toolUseId: block.id as string,
             path: input.path ?? "desconocido",
-            turnNumber,
+            step,
             lineCount: 0,
           });
         }
@@ -92,7 +93,7 @@ function compactStaleReads(
         ) {
           const input = block.input as { path?: string };
           if (input.path) {
-            lastEditTurn.set(input.path, turnNumber);
+            lastEditStep.set(input.path, step);
           }
         }
       }
@@ -100,7 +101,7 @@ function compactStaleReads(
 
     // Actualizar lineCount de reads cuando vemos el tool_result.
     // Si el contenido ya es un marcador de compactación, parseamos el lineCount
-    // original para que la edad se recalcule en cada pasada en vez de congelarse.
+    // original para que el marcador (1 línea) no se re-compacte (idempotencia).
     if (msg.role === "user" && Array.isArray(msg.content)) {
       for (const block of msg.content) {
         if (
@@ -122,7 +123,7 @@ function compactStaleReads(
   }
 
   // ── Fase 2: compact ─────────────────────────────────────────────────────────
-  const currentTurn = turnNumber;
+  const currentStep = step;
   const result: Message[] = [];
 
   for (const msg of messages) {
@@ -151,8 +152,8 @@ function compactStaleReads(
 
       // B: invalidación por edición posterior (sin gate de minLines — si se
       //    editó, el contenido viejo es inválido sin importar el tamaño).
-      const editTurn = lastEditTurn.get(entry.path);
-      if (editTurn !== undefined && editTurn > entry.turnNumber) {
+      const editStep = lastEditStep.get(entry.path);
+      if (editStep !== undefined && editStep > entry.step) {
         hasCompacted = true;
         return {
           type: "tool_result" as const,
@@ -164,13 +165,13 @@ function compactStaleReads(
 
       // A: compactación por antigüedad (solo si supera minLines)
       if (entry.lineCount >= minLines) {
-        const age = currentTurn - entry.turnNumber;
-        if (age > staleTurns) {
+        const age = currentStep - entry.step;
+        if (age > staleSteps) {
           hasCompacted = true;
           return {
             type: "tool_result" as const,
             tool_use_id: block.tool_use_id as string,
-            content: `[leído ${entry.path} hace ${age} turnos — ${entry.lineCount} líneas omitidas]`,
+            content: `[leído ${entry.path} hace ${age} pasos — usá read para verlo de nuevo si lo necesitás]`,
             is_error: origIsError,
           };
         }

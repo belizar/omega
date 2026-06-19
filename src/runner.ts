@@ -252,7 +252,7 @@ class Runner {
       return { output: msg, isError: true };
     }
     try {
-      return { output: tool.execute(input) as string, isError: false };
+      return { output: (await tool.execute(input)) as string, isError: false };
     } catch (err: unknown) {
       const msg = `Error executing tool "${name}": ${err instanceof Error ? err.message : String(err)}`;
       logger.error("Tool execution threw", { tool: name, error: msg });
@@ -358,6 +358,13 @@ class Runner {
 
       if (state.stopReason === "end_turn") {
         logger.info("Agent finished (end_turn)");
+        break;
+      }
+
+      // Si el provider devolvió "tool_use" pero no había tools que ejecutar
+      // (respuesta de texto puro con stop_reason incorrecto), cortamos.
+      if (state.stopReason === "tool_use" && state.toolResults.length === 0) {
+        logger.info("Agent finished (tool_use without tools)");
         break;
       }
 

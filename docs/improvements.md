@@ -43,9 +43,11 @@ El provider real tampoco tiene tests:
 
 ## 🟡 Media prioridad
 
-### 4. Selección de provider por config
+### 4. Selección de provider por config ✅
 
-`AnthropicProvider` existe pero no se usa. Debería seleccionarse vía variable de entorno `PROVIDER=anthropic|openrouter`.
+~~`AnthropicProvider` existe pero no se usa. Debería seleccionarse vía variable de entorno `PROVIDER=anthropic|openrouter`.~~
+
+**Resuelto**: AnthropicProvider borrado. OpenRouter es el único camino.
 
 ---
 
@@ -115,9 +117,11 @@ Si `input` no es válido, muestra `[object Object]`. Debería mostrar un mensaje
 
 ---
 
-### 12. Streaming
+### 12. Streaming ✅
 
-La llamada al LLM es request/response completa. Con modelos grandes el usuario espera sin feedback. Streaming (SSE) mejoraría la experiencia. Requiere refactor del provider y del runner.
+~~La llamada al LLM es request/response completa. Con modelos grandes el usuario espera sin feedback. Streaming (SSE) mejoraría la experiencia. Requiere refactor del provider y del runner.~~
+
+**Resuelto**: Streaming implementado.
 
 ---
 
@@ -216,12 +220,16 @@ El diagrama de arquitectura muestra `AnthropicProvider`, pero el default real es
 
 ---
 
-### 26. No hay tests de `edit` tool
+### 26. No hay tests de `edit` tool ✅
 
-Solo bash, read y write tienen tests. `EditTool` no tiene cobertura, siendo la herramienta más delicada (matcheo exacto, detección de múltiples ocurrencias, archivos inexistentes).
+~~Solo bash, read y write tienen tests. EditTool no tiene cobertura.~~
+
+**Resuelto**: `edit.test.ts` con 22 tests.
 
 ---
 
 ### 27. Logs sin rotación
+
+Los logs en `.omega/logs/` se acumulan indefinidamente. No hay mecanismo de rotación ni cleanup automático. Con uso intensivo, el directorio crece sin control.ación
 
 Los logs en `.omega/logs/` se acumulan indefinidamente. No hay mecanismo de rotación ni cleanup automático. Con uso intensivo, el directorio crece sin control.

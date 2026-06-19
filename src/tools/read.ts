@@ -1,4 +1,4 @@
-import { readFileSync } from "fs";
+import { readFile } from "fs/promises";
 import { Tool } from "./tool.js";
 import { logger } from "../logger.js";
 import { isEnvFile, ENV_BLOCK_MESSAGE } from "./env-guard.js";
@@ -28,7 +28,7 @@ export class ReadTool extends Tool<ReadInput, string> {
     });
   }
 
-  execute(input: unknown): string {
+  async execute(input: unknown): Promise<string> {
     try {
       if (typeof input !== "object" || input === null) {
         throw new Error("Input must be an object with path");
@@ -46,7 +46,7 @@ export class ReadTool extends Tool<ReadInput, string> {
       }
 
       logger.info("Reading file", { path, offset, limit });
-      const content = readFileSync(path, "utf-8");
+      const content = await readFile(path, "utf-8");
 
       // sin offset/limit: devolvemos el archivo entero
       if (offset === undefined && limit === undefined) {

@@ -1,4 +1,5 @@
 import { AgentConfig } from "./agent-config.js";
+import { CommandClassifier } from "./classifier/classifier.js";
 import { Runner } from "./runner.js";
 import { Session } from "./session.js";
 import { Screen } from "./tui/screen.js";
@@ -8,6 +9,7 @@ type ContextConstructorProps = {
   agentConfig: AgentConfig;
   runner: Runner;
   screen: Screen;
+  classifier?: CommandClassifier;
 };
 
 class Context {
@@ -15,13 +17,15 @@ class Context {
   #agentConfig: AgentConfig;
   #runner: Runner;
   #screen: Screen;
+  #classifier?: CommandClassifier;
   #verbose = false;
 
-  constructor({ session, agentConfig, runner, screen }: ContextConstructorProps) {
+  constructor({ session, agentConfig, runner, screen, classifier }: ContextConstructorProps) {
     this.#session = session;
     this.#agentConfig = agentConfig;
     this.#runner = runner;
     this.#screen = screen;
+    this.#classifier = classifier;
   }
 
   get verbose() {
@@ -41,6 +45,11 @@ class Context {
    * ctx.screen.printAbove para no pisar el editor fijo de abajo. */
   get screen() {
     return this.#screen;
+  }
+
+  /** Manager de overrides del clasificador de comandos */
+  get classifier() {
+    return this.#classifier;
   }
 
   /** Reemplaza la sesión activa (ej: al resumir otra sesión) */

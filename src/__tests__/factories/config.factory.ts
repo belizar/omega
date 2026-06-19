@@ -4,7 +4,6 @@ import { Config } from "../../config.js";
 export class ConfigFactory {
   static createConfig(overrides?: Partial<Config>): Config {
     return {
-      anthropicApiKey: overrides?.anthropicApiKey || faker.string.alphanumeric(32),
       openrouterApiKey: overrides?.openrouterApiKey || faker.string.alphanumeric(32),
       model: overrides?.model || "claude-haiku-4-5-20251001",
       maxTokens: overrides?.maxTokens || faker.number.int({ min: 512, max: 4096 }),

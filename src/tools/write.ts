@@ -1,4 +1,4 @@
-import { writeFileSync, mkdirSync } from "fs";
+import { writeFile, mkdir } from "fs/promises";
 import { dirname } from "path";
 import { Tool } from "./tool.js";
 import { logger } from "../logger.js";
@@ -26,7 +26,7 @@ export class WriteTool extends Tool<WriteInput, string> {
     });
   }
 
-  execute(input: unknown): string {
+  async execute(input: unknown): Promise<string> {
     try {
       // Validar que input es un objeto
       if (typeof input !== "object" || input === null) {
@@ -50,8 +50,8 @@ export class WriteTool extends Tool<WriteInput, string> {
       }
 
       logger.info("Writing file", { path, size: content.length });
-      mkdirSync(dirname(path), { recursive: true });
-      writeFileSync(path, content, "utf-8");
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, content, "utf-8");
       logger.info("File written successfully", { path });
       return `Escrito ${path} correctamente.`;
     } catch (err: unknown) {

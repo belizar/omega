@@ -35,7 +35,7 @@ export class AskUserTool extends Tool<AskUserInput, string> {
     });
   }
 
-  execute(_input: AskUserInput): string {
+  async execute(_input: AskUserInput): Promise<string> {
     return "Error: ask_user debe ser interceptado por el runner. Esto es un bug interno.";
   }
 }

@@ -1,5 +1,5 @@
-import { execSync } from "child_process";
-import { existsSync, statSync } from "fs";
+import { exec } from "child_process";
+import { stat } from "fs/promises";
 import { resolve, relative } from "path";
 import { Tool } from "./tool.js";
 import { logger } from "../logger.js";
@@ -11,14 +11,6 @@ type GrepInput = {
   include?: string;
   contextLines?: number;
   maxResults?: number;
-};
-
-type GrepMatch = {
-  file: string;
-  line: number;
-  column: number;
-  match: string;
-  context: string;
 };
 
 const TIMEOUT_MS = 10_000;
@@ -64,7 +56,7 @@ export class GrepTool extends Tool<GrepInput, string> {
     });
   }
 
-  execute(input: GrepInput): string {
+  async execute(input: GrepInput): Promise<string> {
     const {
       pattern,
       path: searchPath = ".",
@@ -82,7 +74,13 @@ export class GrepTool extends Tool<GrepInput, string> {
       return "Error: no se puede buscar en archivos .env por seguridad";
     }
 
-    const isFile = existsSync(absPath) && statSync(absPath).isFile();
+    let isFile = false;
+    try {
+      const s = await stat(absPath);
+      isFile = s.isFile();
+    } catch {
+      // path doesn't exist, grep will fail gracefully
+    }
 
     try {
       const args: string[] = [
@@ -97,18 +95,24 @@ export class GrepTool extends Tool<GrepInput, string> {
 
       // Escapar el patrón para shell
       args.push("-e", pattern);
+      args.push(absPath);
 
-      if (isFile) {
-        args.push(absPath);
-      } else {
-        args.push(absPath);
-      }
-
-      const result = execSync(`grep ${args.map(a => `'${a.replace(/'/g, "'\\''")}'`).join(" ")}`, {
-        encoding: "utf-8",
-        timeout: TIMEOUT_MS,
-        maxBuffer: MAX_BUFFER,
-        cwd: process.cwd(),
+      const result = await new Promise<string>((resolve, reject) => {
+        exec(`grep ${args.map(a => `'${a.replace(/'/g, "'\\''")}'`).join(" ")}`, {
+          encoding: "buffer" as BufferEncoding,
+          timeout: TIMEOUT_MS,
+          maxBuffer: MAX_BUFFER,
+          cwd: process.cwd(),
+        }, (error, stdout, stderr) => {
+          const out = Buffer.isBuffer(stdout) ? stdout.toString("utf-8") : String(stdout);
+          const err = Buffer.isBuffer(stderr) ? stderr.toString("utf-8") : String(stderr);
+          // grep devuelve exit code 1 cuando no hay matches (no es error)
+          if (error && error.code !== 1 && !out) {
+            reject(err || error);
+          } else {
+            resolve(out);
+          }
+        });
       });
 
       if (!result.trim()) {

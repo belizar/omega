@@ -1,9 +1,9 @@
-import { readFileSync, writeFileSync } from "fs";
+import { readFile, writeFile } from "fs/promises";
 import { Tool } from "./tool.js";
 import { logger } from "../logger.js";
 import { isEnvFile, ENV_BLOCK_MESSAGE } from "./env-guard.js";
 
-type EditInput = { path: string; oldText: string; newText: string };
+export type EditInput = { path: string; oldText: string; newText: string };
 
 export class EditTool extends Tool<EditInput, string> {
   constructor() {
@@ -29,7 +29,7 @@ export class EditTool extends Tool<EditInput, string> {
     });
   }
 
-  execute(input: unknown): string {
+  async execute(input: unknown): Promise<string> {
     try {
       if (typeof input !== "object" || input === null) {
         throw new Error("Input must be an object with path, oldText, and newText");
@@ -50,7 +50,7 @@ export class EditTool extends Tool<EditInput, string> {
 
       let content: string;
       try {
-        content = readFileSync(path, "utf-8");
+        content = await readFile(path, "utf-8");
       } catch (err: unknown) {
         throw new Error(`Could not read ${path}: ${err instanceof Error ? err.message : String(err)}`);
       }
@@ -69,7 +69,7 @@ export class EditTool extends Tool<EditInput, string> {
 
       const updated = content.replace(oldText, newText);
       try {
-        writeFileSync(path, updated, "utf-8");
+        await writeFile(path, updated, "utf-8");
       } catch (err: unknown) {
         throw new Error(`Could not write ${path}: ${err instanceof Error ? err.message : String(err)}`);
       }

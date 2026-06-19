@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 import { existsSync, readFileSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
@@ -6,6 +5,8 @@ import { stdout } from "process";
 import dotenv from "dotenv";
 import { AgentConfig } from "./agent-config.js";
 import { Context } from "./app-context.js";
+import { CommandClassifier } from "./classifier/classifier.js";
+import { OverrideManager } from "./classifier/overrides.js";
 import { dispatchCommand, modalCommandsMap } from "./commands/index.js";
 import { validateEnv } from "./config.js";
 import { logger } from "./logger.js";
@@ -14,7 +15,7 @@ import { Runner, RunnerEvent } from "./runner.js";
 import { Message } from "./message.js";
 import { Session } from "./session.js";
 import { AskUserTool } from "./tools/ask-user.js";
-import { BashTool } from "./tools/bash.js";
+import { BashTool, type BashConfirmCallback } from "./tools/bash.js";
 import { EditTool } from "./tools/edit.js";
 import { GrepTool } from "./tools/grep.js";
 import { ReadTool } from "./tools/read.js";
@@ -30,7 +31,7 @@ import { Prompt } from "./tui/components/prompt.js";
 import { Spinner } from "./tui/components/spinner.js";
 import { Screen } from "./tui/screen.js";
 import { disableRawMode, enableRawMode } from "./tui/terminal.js";
-import { dim } from "./tui/theme.js";
+import { dim, bold, yellow } from "./tui/theme.js";
 import { expandFileMentions } from "./file-mentions.js";
 
 // Carga la .env del cwd (overrides por proyecto) y, como fallback, la global
@@ -83,6 +84,40 @@ const main = async () => {
 
   const fullSystemPrompt = SYSTEM_PROMPT + loadProjectContext();
 
+  // ── Clasificador de comandos ──────────────────────────────────────
+  const overrides = await OverrideManager.load(".omega");
+  const classifier = new CommandClassifier(
+    overrides,
+    config.openrouterApiKey,
+  );
+
+  // Callback que se invoca cuando el clasificador marca un comando como DANGEROUS.
+  // Pausa el runner, muestra la pregunta al usuario, y espera su respuesta.
+  const onBashConfirm: BashConfirmCallback = async (command, classification) => {
+    spinner.stop();
+    const sourceLabel = classification.source === "override"
+      ? `[override: ${classification.override?.pattern}]`
+      : "[clasificador]";
+    const question = [
+      `${yellow(bold("⚠ Comando potencialmente peligroso"))} ${dim(sourceLabel)}`,
+      ``,
+      `  ${yellow(command)}`,
+      ``,
+      `${classification.reason}`,
+      ``,
+      `¿Ejecutar? (sí/no)`,
+    ].join("\n");
+    const answer = await screen.askUser(question);
+    spinner.start();
+    const trimmed = answer.trim().toLowerCase();
+    return trimmed === "sí" || trimmed === "si" || trimmed === "yes" || trimmed === "y";
+  };
+
+  const bashTool = new BashTool({
+    classifier,
+    onConfirm: onBashConfirm,
+  });
+
   const haikuAgent = new AgentConfig({
     systemPrompt: fullSystemPrompt,
     model: config.model,
@@ -91,7 +126,7 @@ const main = async () => {
 
   haikuAgent
     .addTool(new AskUserTool())
-    .addTool(new BashTool())
+    .addTool(bashTool)
     .addTool(new GrepTool())
     .addTool(new ReadTool())
     .addTool(new EditTool())
@@ -117,6 +152,7 @@ const main = async () => {
     agentConfig: haikuAgent,
     runner,
     screen,
+    classifier,
   });
 
   const lineEditor = new LineEditor();
