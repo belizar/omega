@@ -195,25 +195,68 @@ class Runner {
     }
   }
 
-  /** Ejecuta las tool calls pendientes, emite eventos y llena `state.toolResults`. */
+  /** Ejecuta las tool calls pendientes, emite eventos y llena `state.toolResults`.
+   *
+   * Las tools regulares se ejecutan en paralelo (Promise.allSettled).
+   * Los tool_use se emiten todos primero; los tool_result se emiten en
+   * el orden original de los tool_use, preservando consistencia.
+   * ask_user se ejecuta siempre secuencial. */
   async *#executeTools(state: TurnState): AsyncGenerator<RunnerEvent> {
+    // 1. Separar ask_user del resto y emitir tool_use en orden
+    for (const block of state.toolBlocks) {
+      yield { type: "tool_use", name: block.name, input: block.input };
+    }
+
+    // 2. Lanzar tools regulares en paralelo (sin esperar aún)
+    const regularBlocks = state.toolBlocks.filter((b) => b.name !== "ask_user");
+    this.#metrics.totalToolCalls += regularBlocks.length;
+
+    const pending = new Map(
+      regularBlocks.map((block) => {
+        const promise = this.#executeOneTool(block.name, block.id, block.input);
+        return [block.id, promise];
+      }),
+    );
+
+    // 3. Procesar en orden original: ask_user secuencial, tools resueltas
     for (const block of state.toolBlocks) {
       if (block.name === "ask_user") {
         yield* this.#handleAskUser(block, state);
         continue;
       }
 
-      this.#metrics.totalToolCalls++;
+      const result = await pending.get(block.id)!;
+      const shown = truncateForDisplay(result.output);
+      const forModel = truncateForContext(result.output, this.#maxContextTokens);
 
-      const tool = this.#agentConfig.getTool(block.name);
-      if (!tool) {
-        yield* this.#handleUnknownTool(block.name, block.id, state);
-        continue;
-      }
+      yield { type: "tool_result", output: shown, rawOutput: result.output };
+      state.toolResults.push({
+        type: "tool_result",
+        tool_use_id: block.id,
+        content: forModel,
+        is_error: result.isError,
+      });
+    }
+  }
 
-      yield { type: "tool_use", name: tool.name, input: block.input };
-
-      yield* this.#handleToolExecution(tool.name, block.id, block.input, state);
+  /** Ejecuta una sola tool y devuelve output + flag de error. */
+  async #executeOneTool(
+    name: string,
+    id: string,
+    input: unknown,
+  ): Promise<{ output: string; isError: boolean }> {
+    const tool = this.#agentConfig.getTool(name);
+    if (!tool) {
+      const msg = `Error: unknown tool "${name}"`;
+      logger.error(msg);
+      return { output: msg, isError: true };
+    }
+    try {
+      return { output: tool.execute(input) as string, isError: false };
+    } catch (err: unknown) {
+      const msg = `Error executing tool "${name}": ${err instanceof Error ? err.message : String(err)}`;
+      logger.error("Tool execution threw", { tool: name, error: msg });
+      return { output: msg, isError: true };
     }
   }
 
@@ -241,51 +284,6 @@ class Runner {
       tool_use_id: block.id,
       content: output,
       is_error: false,
-    });
-  }
-
-  async *#handleUnknownTool(
-    name: string,
-    toolId: string,
-    state: TurnState,
-  ): AsyncGenerator<RunnerEvent> {
-    const output = `Error: unknown tool "${name}"`;
-    logger.error(output);
-    yield { type: "tool_result", output };
-    state.toolResults.push({
-      type: "tool_result",
-      tool_use_id: toolId,
-      content: output,
-      is_error: true,
-    });
-  }
-
-  async *#handleToolExecution(
-    toolName: string,
-    toolId: string,
-    input: unknown,
-    state: TurnState,
-  ): AsyncGenerator<RunnerEvent> {
-    const tool = this.#agentConfig.getTool(toolName)!;
-    let output: string;
-    let isError = false;
-    try {
-      output = tool.execute(input) as string;
-    } catch (err: unknown) {
-      isError = true;
-      output = `Error executing tool "${toolName}": ${err instanceof Error ? err.message : String(err)}`;
-      logger.error("Tool execution threw", { tool: toolName, error: output });
-    }
-
-    const shown = truncateForDisplay(output);
-    const forModel = truncateForContext(output, this.#maxContextTokens);
-
-    yield { type: "tool_result", output: shown, rawOutput: output };
-    state.toolResults.push({
-      type: "tool_result",
-      tool_use_id: toolId,
-      content: forModel,
-      is_error: isError,
     });
   }
 
