@@ -85,11 +85,15 @@ const main = async () => {
   const fullSystemPrompt = SYSTEM_PROMPT + loadProjectContext();
 
   // ── Clasificador de comandos ──────────────────────────────────────
-  const overrides = await OverrideManager.load(".omega");
-  const classifier = new CommandClassifier(
-    overrides,
-    config.openrouterApiKey,
-  );
+  let classifier: CommandClassifier | undefined;
+  if (config.classifierMode === "on") {
+    const overrides = await OverrideManager.load(".omega");
+    classifier = new CommandClassifier(
+      overrides,
+      config.openrouterApiKey,
+      config.classifierModel,
+    );
+  }
 
   // Callback que se invoca cuando el clasificador marca un comando como DANGEROUS.
   // Pausa el runner, muestra la pregunta al usuario, y espera su respuesta.

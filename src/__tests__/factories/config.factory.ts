@@ -12,6 +12,8 @@ export class ConfigFactory {
       maxContextTokens: overrides?.maxContextTokens ?? 100_000,
       nodeEnv: overrides?.nodeEnv || "test",
       screenPadding: overrides?.screenPadding ?? 0,
+      classifierMode: overrides?.classifierMode || "off",
+      classifierModel: overrides?.classifierModel || "anthropic/claude-haiku-4-5",
     };
   }
 

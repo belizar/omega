@@ -47,7 +47,7 @@ export class CommandClassifier {
     // 1. Chequear overrides
     const override = this.#overrides.lookup(command);
     if (override) {
-      logger.debug("Classifier: override match", {
+      logger.info("Classifier: override match (no LLM call)", {
         command,
         verdict: override.verdict,
         source: override.source,
@@ -114,7 +114,7 @@ Responde solo con el formato indicado. Nada más.`;
     });
 
     try {
-      logger.debug("Classifier: calling LLM", { command, model: this.#model });
+      logger.info("Classifier: calling LLM", { command, model: this.#model });
 
       const resp = await fetch(`${this.#baseUrl}/chat/completions`, {
         method: "POST",
@@ -138,7 +138,7 @@ Responde solo con el formato indicado. Nada más.`;
 
       const content = json.choices?.[0]?.message?.content?.trim() || "";
 
-      logger.debug("Classifier: LLM response", {
+      logger.info("Classifier: LLM response", {
         command,
         content,
         tokens: json.usage?.prompt_tokens,

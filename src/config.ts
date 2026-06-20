@@ -9,6 +9,10 @@ interface Config {
   maxContextTokens: number;
   nodeEnv: string;
   screenPadding: number;
+  /** Modo del clasificador de comandos: "on" (default) o "off" */
+  classifierMode: "on" | "off";
+  /** Modelo usado para clasificar comandos (debe ser rápido y barato) */
+  classifierModel: string;
 }
 
 function validateEnv(): Config {
@@ -27,6 +31,8 @@ function validateEnv(): Config {
   const maxContextTokens = parseInt(process.env.MAX_CONTEXT_TOKENS || "100000", 10);
   const nodeEnv = process.env.NODE_ENV || "development";
   const screenPadding = parseInt(process.env.SCREEN_PADDING || "0", 10);
+  const classifierMode = (process.env.CLASSIFIER_MODE || "on") as "on" | "off";
+  const classifierModel = process.env.CLASSIFIER_MODEL || "anthropic/claude-haiku-4-5";
 
   const config: Config = {
     openrouterApiKey,
@@ -37,6 +43,8 @@ function validateEnv(): Config {
     maxContextTokens,
     nodeEnv,
     screenPadding,
+    classifierMode,
+    classifierModel,
   };
 
   logger.info("Config loaded successfully", {
