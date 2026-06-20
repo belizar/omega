@@ -25,12 +25,12 @@ describe("BashTool", () => {
 
   it("should block dangerous commands", async () => {
     const result = await bashTool.execute({ command: "rm -rf /" });
-    expect(result).toContain("blocked");
+    expect(result).toContain("BLOQUEADO");
   });
 
   it("should block fork bomb pattern", async () => {
     const result = await bashTool.execute({ command: ":() { :|:& };" });
-    expect(result).toContain("blocked");
+    expect(result).toContain("BLOQUEADO");
   });
 
   it("should validate command input", async () => {
@@ -46,6 +46,6 @@ describe("BashTool", () => {
   it("should allow safe commands", async () => {
     const result = await bashTool.execute({ command: "pwd" });
     expect(result).toBeTruthy();
-    expect(result).not.toContain("blocked");
+    expect(result).not.toContain("BLOQUEADO");
   });
 });

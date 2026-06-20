@@ -82,9 +82,23 @@ export class BashTool extends Tool<BashInput, string> {
         return "Error: command must be a non-empty string";
       }
 
-      if (this.isCommandBlocked(command)) {
-        logger.warn("Blocked dangerous command", { command });
-        return "Error: This command is blocked for security reasons";
+      // ── Blacklist: solo si no viene con force: true ──────────
+      if (!force && this.isCommandBlocked(command)) {
+        logger.warn("Blacklisted command blocked", { command });
+        return [
+          "BLOQUEADO POR BLACKLIST (patrones de seguridad fijos)",
+          "",
+          `Comando: ${command}`,
+          "",
+          "Razón: El comando matchea patrones de bloqueo estrictos",
+          "(rm -rf, fork bombs, escritura a discos, etc).",
+          "",
+          "INSTRUCCIONES PARA EL AGENTE:",
+          "- No intentes este comando con otra sintaxis o herramienta.",
+          "- Informale al usuario que la blacklist lo bloqueó.",
+          "- Si el usuario insiste, puede ejecutarlo manualmente.",
+          "- El parámetro force: true NO saltea la blacklist por seguridad.",
+        ].join("\n");
       }
 
       // ── Clasificación ──────────────────────────────────────────
