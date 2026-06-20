@@ -1,5 +1,0 @@
-[2026-06-20T20:54:26.856Z] INFO: Omega agent starting {"session":"350e63f2-3167-410e-9ac8-4b7892a52925"}
-[2026-06-20T20:54:26.858Z] INFO: No classifier overrides file found, starting fresh {"path":".omega/classifier-overrides.json"}
-[2026-06-20T20:54:46.443Z] INFO: Starting runner with max steps: 90
-[2026-06-20T20:55:12.794Z] WARN: Blocked dangerous command {"command":"rm -rf .omega"}
-[2026-06-20T20:55:23.284Z] INFO: Agent finished (end_turn)

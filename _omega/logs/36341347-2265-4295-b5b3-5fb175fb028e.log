@@ -1,2 +1,0 @@
-[2026-06-20T21:01:46.021Z] INFO: Omega agent starting {"session":"36341347-2265-4295-b5b3-5fb175fb028e"}
-[2026-06-20T21:01:46.023Z] INFO: No classifier overrides file found, starting fresh {"path":".omega/classifier-overrides.json"}
