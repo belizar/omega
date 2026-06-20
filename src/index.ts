@@ -100,8 +100,11 @@ const main = async () => {
     const overrides = await OverrideManager.load(".omega");
     classifier = new CommandClassifier(
       overrides,
-      config.openrouterApiKey,
-      config.classifierModel,
+      {
+        apiKey: config.openrouterApiKey,
+        model: config.classifierModel,
+        learnEnabled: config.classifierLearn,
+      },
     );
   }
 

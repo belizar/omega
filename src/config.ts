@@ -13,6 +13,8 @@ interface Config {
   classifierMode: "on" | "off";
   /** Modelo usado para clasificar comandos (debe ser rápido y barato) */
   classifierModel: string;
+  /** Habilita el aprendizaje automático de overrides (default: false) */
+  classifierLearn: boolean;
 }
 
 function validateEnv(): Config {
@@ -33,6 +35,7 @@ function validateEnv(): Config {
   const screenPadding = parseInt(process.env.SCREEN_PADDING || "0", 10);
   const classifierMode = (process.env.CLASSIFIER_MODE || "on") as "on" | "off";
   const classifierModel = process.env.CLASSIFIER_MODEL || "anthropic/claude-haiku-4-5";
+  const classifierLearn = process.env.CLASSIFIER_LEARN === "true";
 
   const config: Config = {
     openrouterApiKey,
@@ -45,6 +48,7 @@ function validateEnv(): Config {
     screenPadding,
     classifierMode,
     classifierModel,
+    classifierLearn,
   };
 
   logger.info("Config loaded successfully", {

@@ -14,6 +14,7 @@ export class ConfigFactory {
       screenPadding: overrides?.screenPadding ?? 0,
       classifierMode: overrides?.classifierMode || "off",
       classifierModel: overrides?.classifierModel || "anthropic/claude-haiku-4-5",
+      classifierLearn: overrides?.classifierLearn ?? false,
     };
   }
 

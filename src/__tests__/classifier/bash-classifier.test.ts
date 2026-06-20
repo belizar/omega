@@ -19,7 +19,7 @@ describe("BashTool with classifier", () => {
       source: "classifier" as const,
     });
 
-    const classifier = new CommandClassifier(overrides, "test-key");
+    const classifier = new CommandClassifier(overrides, { apiKey: "test-key" });
     vi.spyOn(classifier, "classify").mockImplementation(mockClassify);
 
     const tool = new BashTool({ classifier });
@@ -37,7 +37,7 @@ describe("BashTool with classifier", () => {
       source: "classifier" as const,
     });
 
-    const classifier = new CommandClassifier(overrides, "test-key");
+    const classifier = new CommandClassifier(overrides, { apiKey: "test-key" });
     vi.spyOn(classifier, "classify").mockImplementation(mockClassify);
 
     const tool = new BashTool({ classifier });
@@ -53,11 +53,9 @@ describe("BashTool with classifier", () => {
 
   it("should execute when force: true, skipping classifier", async () => {
     const mockClassify = vi.fn();
-    const mockLearn = vi.fn().mockResolvedValue(undefined);
 
-    const classifier = new CommandClassifier(overrides, "test-key");
+    const classifier = new CommandClassifier(overrides, { apiKey: "test-key" });
     vi.spyOn(classifier, "classify").mockImplementation(mockClassify);
-    vi.spyOn(classifier, "learnOverride").mockImplementation(mockLearn);
 
     const tool = new BashTool({ classifier });
 
@@ -65,16 +63,32 @@ describe("BashTool with classifier", () => {
 
     // Should not call classify at all
     expect(mockClassify).not.toHaveBeenCalled();
-    // Should learn the override
-    expect(mockLearn).toHaveBeenCalledWith("rm file.txt", "safe");
-    // Should have executed (or at least tried — rm without file is fine)
+    // Should have executed (or at least tried)
     expect(result).not.toContain("BLOQUEADO");
   });
 
-  it("should use override instead of classifying when pattern matches", async () => {
-    await overrides.add({ pattern: "echo safe", verdict: "safe", reason: "Confío", source: "manual" });
+  it("should learn override on force when learnEnabled", async () => {
+    const classWithLearn = new CommandClassifier(overrides, {
+      apiKey: "test-key",
+      learnEnabled: true,
+    });
+    const mockLearn = vi.fn().mockResolvedValue(undefined);
+    vi.spyOn(classWithLearn, "learnOverride").mockImplementation(mockLearn);
 
-    const classifier = new CommandClassifier(overrides, "test-key");
+    const tool = new BashTool({ classifier: classWithLearn });
+    await tool.execute({ command: "rm file.txt", force: true });
+    expect(mockLearn).toHaveBeenCalledWith("rm file.txt", "safe");
+  });
+
+  it("should use override instead of classifying when pattern matches", async () => {
+    await overrides.add({
+      pattern: "echo safe",
+      verdict: "safe",
+      reason: "Confío",
+      source: "manual",
+    });
+
+    const classifier = new CommandClassifier(overrides, { apiKey: "test-key" });
     const result_classify = await classifier.classify("echo safe");
     expect(result_classify.verdict).toBe("safe");
     expect(result_classify.source).toBe("override");

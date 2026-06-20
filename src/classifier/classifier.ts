@@ -12,6 +12,14 @@ export interface ClassifierResult {
   override?: Override;
 }
 
+export type ClassifierOptions = {
+  apiKey: string;
+  model?: string;
+  baseUrl?: string;
+  /** Habilita el aprendizaje automático de overrides (default: false) */
+  learnEnabled?: boolean;
+};
+
 /**
  * Clasifica comandos bash como SAFE o DANGEROUS.
  *
@@ -25,22 +33,27 @@ export class CommandClassifier {
   #apiKey: string;
   #model: string;
   #baseUrl: string;
+  #learnEnabled: boolean;
 
   constructor(
     overrides: OverrideManager,
-    apiKey: string,
-    model = "anthropic/claude-haiku-4-5",
-    baseUrl = "https://openrouter.ai/api/v1",
+    options: ClassifierOptions,
   ) {
     this.#overrides = overrides;
-    this.#apiKey = apiKey;
-    this.#model = model;
-    this.#baseUrl = baseUrl;
+    this.#apiKey = options.apiKey;
+    this.#model = options.model || "anthropic/claude-haiku-4-5";
+    this.#baseUrl = options.baseUrl || "https://openrouter.ai/api/v1";
+    this.#learnEnabled = options.learnEnabled ?? false;
   }
 
   /** Acceso al manager para operaciones externas (ej: comandos slash). */
   get overrides(): OverrideManager {
     return this.#overrides;
+  }
+
+  /** Si el aprendizaje automático está habilitado. */
+  get learnEnabled(): boolean {
+    return this.#learnEnabled;
   }
 
   async classify(command: string): Promise<ClassifierResult> {

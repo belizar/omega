@@ -113,8 +113,8 @@ export class BashTool extends Tool<BashInput, string> {
         }
       }
 
-      // Si force: true, aprendemos que el usuario considera este comando seguro
-      if (this.#classifier && force) {
+      // Si force: true y el aprendizaje está habilitado, registramos el override
+      if (this.#classifier && force && this.#classifier.learnEnabled) {
         this.#classifier.learnOverride(command, "safe");
       }
 
