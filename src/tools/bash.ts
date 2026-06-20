@@ -17,6 +17,18 @@ export type BashToolOptions = {
 const TIMEOUT_MS = 30_000; // matar comandos colgados a los 30s
 const MAX_BUFFER = 10 * 1024 * 1024; // 10MB de stdout/stderr
 
+// Guardarraíl determinista: patrones que nunca se ejecutan sin importar
+// lo que diga el clasificador. Son el safety net para casos donde el LLM
+// falle (ej: no detecte un fork bomb o un dd a un disco).
+const HARDBLOCK_PATTERNS = [
+  /\brm\s+-[a-z]*[rf]/i,              // rm con -r o -f
+  /:\s*\(\s*\)\s*\{.*:.*\|.*:.*\}/,    // fork bomb
+  />\s*\/dev\/(sd|nvme|disk|hd)/i,     // escritura directa a un disco
+  /\bmkfs\b/i,                         // formatear filesystem
+  /\bdd\b.*\bof=\/dev\//i,             // dd hacia un device
+  /\b(shutdown|reboot|halt|poweroff)\b/i, // apagar/reiniciar la máquina
+];
+
 export class BashTool extends Tool<BashInput, string> {
   #classifier?: CommandClassifier;
 
@@ -51,6 +63,28 @@ export class BashTool extends Tool<BashInput, string> {
       if (!command || typeof command !== "string") {
         logger.error("Invalid bash command input", { command });
         return "Error: command must be a non-empty string";
+      }
+
+      // ── Guardarraíl determinista ──────────────────────────
+      // Bloquea comandos catastróficos incluso si el clasificador
+      // los marca como SAFE por error. force: true lo saltea
+      // (el usuario ya confirmó explícitamente vía ask_user).
+      if (!force && this.isHardblocked(command)) {
+        logger.warn("Hardblocked command", { command });
+        return [
+          "BLOQUEADO POR GUARDARRAÍL DETERMINISTA",
+          "",
+          `Comando: ${command}`,
+          "",
+          "Razón: El comando matchea patrones de bloqueo duro",
+          "(rm -rf, fork bomb, escritura a discos, etc).",
+          "Estos patrones son un safety net adicional al clasificador.",
+          "",
+          "INSTRUCCIONES PARA EL AGENTE:",
+          "- No intentes este comando con otra sintaxis o herramienta.",
+          "- Informale al usuario que el guardarraíl lo bloqueó.",
+          "- Si el usuario insiste, que lo ejecute manualmente.",
+        ].join("\n");
       }
 
       // ── Clasificación ──────────────────────────────────────────
@@ -115,5 +149,9 @@ export class BashTool extends Tool<BashInput, string> {
       logger.error("Bash command failed", { command, error: errorMsg });
       return errorMsg;
     }
+  }
+
+  private isHardblocked(command: string): boolean {
+    return HARDBLOCK_PATTERNS.some((p) => p.test(command));
   }
 }

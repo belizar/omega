@@ -37,4 +37,35 @@ describe("BashTool", () => {
     expect(result).toBeTruthy();
     expect(result).not.toContain("BLOQUEADO");
   });
+
+  it("should hardblock rm -rf even without classifier", async () => {
+    const result = await bashTool.execute({ command: "rm -rf /" });
+    expect(result).toContain("BLOQUEADO POR GUARDARRAÍL DETERMINISTA");
+    expect(result).toContain("rm -rf");
+  });
+
+  it("should hardblock fork bomb pattern", async () => {
+    const result = await bashTool.execute({ command: ":() { :|:& };" });
+    expect(result).toContain("BLOQUEADO POR GUARDARRAÍL DETERMINISTA");
+  });
+
+  it("should allow hardblocked command with force: true", async () => {
+    const result = await bashTool.execute({ command: "rm -rf /tmp/nonexistent", force: true });
+    expect(result).not.toContain("BLOQUEADO");
+  });
+
+  it("should hardblock dd to device", async () => {
+    const result = await bashTool.execute({ command: "dd if=/dev/zero of=/dev/sda" });
+    expect(result).toContain("BLOQUEADO POR GUARDARRAÍL DETERMINISTA");
+  });
+
+  it("should hardblock mkfs", async () => {
+    const result = await bashTool.execute({ command: "mkfs.ext4 /dev/sda1" });
+    expect(result).toContain("BLOQUEADO POR GUARDARRAÍL DETERMINISTA");
+  });
+
+  it("should hardblock shutdown", async () => {
+    const result = await bashTool.execute({ command: "shutdown -h now" });
+    expect(result).toContain("BLOQUEADO POR GUARDARRAÍL DETERMINISTA");
+  });
 });
