@@ -22,17 +22,6 @@ describe("BashTool", () => {
     const result = await bashTool.execute({ command: "false" });
     expect(result).toBeTruthy(); // Returns error output
   });
-
-  it("should block dangerous commands", async () => {
-    const result = await bashTool.execute({ command: "rm -rf /" });
-    expect(result).toContain("BLOQUEADO");
-  });
-
-  it("should block fork bomb pattern", async () => {
-    const result = await bashTool.execute({ command: ":() { :|:& };" });
-    expect(result).toContain("BLOQUEADO");
-  });
-
   it("should validate command input", async () => {
     const result = await bashTool.execute({ command: "" });
     expect(result).toContain("Error");

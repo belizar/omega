@@ -17,30 +17,6 @@ export type BashToolOptions = {
 const TIMEOUT_MS = 30_000; // matar comandos colgados a los 30s
 const MAX_BUFFER = 10 * 1024 * 1024; // 10MB de stdout/stderr
 
-// Esto NO es un sandbox: es un guardarraíl best-effort contra los
-// errores más groseros. Un comando malicioso decidido lo puede saltar.
-// Para aislamiento real haría falta correr en un contenedor/VM.
-const BLOCKED_PATTERNS = [
-  /\brm\s+-[a-z]*[rf]/i, // rm con -r o -f en cualquier orden/combinación
-  /:\s*\(\s*\)\s*\{.*:.*\|.*:.*\}/, // fork bomb
-  />\s*\/dev\/(sd|nvme|disk|hd)/i, // escritura directa a un disco
-  /\bmkfs\b/i, // formatear un filesystem
-  /\bdd\b.*\bof=\/dev\//i, // dd hacia un device
-  /\b(shutdown|reboot|halt|poweroff)\b/i, // apagar/reiniciar la máquina
-];
-
-// Patrones que involucran archivos .env (lectura o escritura)
-const ENV_ACCESS_PATTERNS = [
-  /(^|[|&;`\s])(cat|head|tail|less|more|bat|nl|od|strings)\s+.*\.env\b/i,
-  /(^|[|&;`\s])(cp|mv)\s+.*\.env\b/i,
-  /(^|[|&;`\s])(cp|mv)\s+\S+\s+.*\.env\b/i,
-  />>>?\s*.*\.env\b/i,        // > .env, >> .env
-  /(^|[|&;`\s])echo\s+.*>>>?\s*.*\.env\b/i,
-  /(^|[|&;`\s])tee\s+.*\.env\b/i,
-  /(^|[|&;`\s])(grep|rg|awk|sed|cut|sort|uniq|diff|comm|join|paste)\s+.*\.env\b/i,
-  /\.env[\s'"]*$/i,            // cualquier comando cuyo último arg sea .env
-];
-
 export class BashTool extends Tool<BashInput, string> {
   #classifier?: CommandClassifier;
 
@@ -70,35 +46,11 @@ export class BashTool extends Tool<BashInput, string> {
     this.#classifier = options?.classifier;
   }
 
-  private isCommandBlocked(command: string): boolean {
-    return BLOCKED_PATTERNS.some((pattern) => pattern.test(command))
-      || ENV_ACCESS_PATTERNS.some((pattern) => pattern.test(command));
-  }
-
   async execute({ command, force }: BashInput): Promise<string> {
     try {
       if (!command || typeof command !== "string") {
         logger.error("Invalid bash command input", { command });
         return "Error: command must be a non-empty string";
-      }
-
-      // ── Blacklist: solo si no viene con force: true ──────────
-      if (!force && this.isCommandBlocked(command)) {
-        logger.warn("Blacklisted command blocked", { command });
-        return [
-          "BLOQUEADO POR BLACKLIST (patrones de seguridad fijos)",
-          "",
-          `Comando: ${command}`,
-          "",
-          "Razón: El comando matchea patrones de bloqueo estrictos",
-          "(rm -rf, fork bombs, escritura a discos, etc).",
-          "",
-          "INSTRUCCIONES PARA EL AGENTE:",
-          "- No intentes este comando con otra sintaxis o herramienta.",
-          "- Informale al usuario que la blacklist lo bloqueó.",
-          "- Si el usuario insiste, puede ejecutarlo manualmente.",
-          "- El parámetro force: true NO saltea la blacklist por seguridad.",
-        ].join("\n");
       }
 
       // ── Clasificación ──────────────────────────────────────────
