@@ -1,0 +1,11 @@
+{
+  "overrides": [
+    {
+      "pattern": "/^npm (test|build)$/",
+      "verdict": "safe",
+      "reason": "",
+      "added": "2026-06-20T13:55:08.958Z",
+      "source": "manual"
+    }
+  ]
+}

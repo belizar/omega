@@ -1,16 +1,17 @@
 import { exec } from "child_process";
 import { Tool } from "./tool.js";
 import { logger } from "../logger.js";
-import { CommandClassifier, type ClassifierResult } from "../classifier/classifier.js";
+import { CommandClassifier } from "../classifier/classifier.js";
 
-type BashInput = { command: string };
-
-/** Si está presente, BashTool clasifica el comando y pide confirmación antes de ejecutar. */
-export type BashConfirmCallback = (command: string, classification: ClassifierResult) => Promise<boolean>;
+type BashInput = {
+  command: string;
+  /** Si es true, saltea el clasificador y ejecuta el comando directamente.
+   * Usar solo después de que el usuario confirmó vía ask_user. */
+  force?: boolean;
+};
 
 export type BashToolOptions = {
   classifier?: CommandClassifier;
-  onConfirm?: BashConfirmCallback;
 };
 
 const TIMEOUT_MS = 30_000; // matar comandos colgados a los 30s
@@ -42,7 +43,6 @@ const ENV_ACCESS_PATTERNS = [
 
 export class BashTool extends Tool<BashInput, string> {
   #classifier?: CommandClassifier;
-  #onConfirm?: BashConfirmCallback;
 
   constructor(options?: BashToolOptions) {
     super({
@@ -55,12 +55,19 @@ export class BashTool extends Tool<BashInput, string> {
             type: "string",
             description: "El comando bash a ejecutar",
           },
+          force: {
+            type: "boolean",
+            description:
+              "Opcional. Si es true, saltea el clasificador de seguridad y ejecuta " +
+              "el comando directamente. Solo debe usarse después de que el usuario " +
+              "haya confirmado explícitamente vía ask_user que quiere ejecutar un " +
+              "comando que fue clasificado como peligroso.",
+          },
         },
         required: ["command"],
       },
     });
     this.#classifier = options?.classifier;
-    this.#onConfirm = options?.onConfirm;
   }
 
   private isCommandBlocked(command: string): boolean {
@@ -68,7 +75,7 @@ export class BashTool extends Tool<BashInput, string> {
       || ENV_ACCESS_PATTERNS.some((pattern) => pattern.test(command));
   }
 
-  async execute({ command }: BashInput): Promise<string> {
+  async execute({ command, force }: BashInput): Promise<string> {
     try {
       if (!command || typeof command !== "string") {
         logger.error("Invalid bash command input", { command });
@@ -81,23 +88,37 @@ export class BashTool extends Tool<BashInput, string> {
       }
 
       // ── Clasificación ──────────────────────────────────────────
-      if (this.#classifier && this.#onConfirm) {
+      if (this.#classifier && !force) {
         const classification = await this.#classifier.classify(command);
 
         if (classification.verdict === "dangerous") {
-          const confirmed = await this.#onConfirm(command, classification);
+          const sourceTag = classification.source === "override"
+            ? `override: "${classification.override?.pattern}"`
+            : "clasificador Haiku";
 
-          // Aprender del feedback del usuario
-          if (confirmed) {
-            await this.#classifier.learnOverride(command, "safe");
-          } else {
-            await this.#classifier.learnOverride(command, "dangerous");
-            return `Error: El usuario rechazó la ejecución del comando: "${command}". Razón del clasificador: ${classification.reason}`;
-          }
+          return [
+            `BLOQUEADO POR CLASIFICADOR DE SEGURIDAD (${sourceTag})`,
+            ``,
+            `Comando: ${command}`,
+            ``,
+            `Razón: ${classification.reason}`,
+            ``,
+            `INSTRUCCIONES PARA EL AGENTE:`,
+            `- No intentes este comando con otra sintaxis o herramienta.`,
+            `- Informale al usuario qué comando fue bloqueado y por qué.`,
+            `- Si el usuario quiere ejecutarlo igual, usá ask_user para`,
+            `  preguntarle explícitamente, y si confirma, volvé a llamar`,
+            `  a bash con el mismo comando y el parámetro force: true.`,
+          ].join("\n");
         }
       }
 
-      logger.info("Executing bash command", { command });
+      // Si force: true, aprendemos que el usuario considera este comando seguro
+      if (this.#classifier && force) {
+        this.#classifier.learnOverride(command, "safe");
+      }
+
+      logger.info("Executing bash command", { command, force });
       const result = await new Promise<string>((resolve, reject) => {
         exec(command, {
           encoding: "buffer" as BufferEncoding,

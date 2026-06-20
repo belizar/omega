@@ -1,0 +1,18 @@
+{
+  "overrides": [
+    {
+      "pattern": "ls -la",
+      "verdict": "safe",
+      "reason": "",
+      "added": "2026-06-20T13:55:08.954Z",
+      "source": "manual"
+    },
+    {
+      "pattern": "ls *",
+      "verdict": "dangerous",
+      "reason": "",
+      "added": "2026-06-20T13:55:08.955Z",
+      "source": "learned"
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "id": "513ced46-4762-4242-8558-34db5f96edd6",
+  "savedAt": "2026-06-19T14:05:27.460Z",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Escribi un texto en markdown estoy probando un renderer"
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Claro, te genero un archivo con ejemplos de distintos elementos Markdown para probar el renderer:"
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": "No me refiero a un archivo"
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Ah, entendido. Acá va:\n\n---\n\n# Encabezado nivel 1\n## Encabezado nivel 2\n### Encabezado nivel 3\n#### Encabezado nivel 4\n\nPárrafo con **negrita**, *cursiva*, ***negrita-cursiva***, `código inline`, ~~tachado~~ y un [link](https://ejemplo.com).\n\n> Esto es una cita en bloque.\n> Puede tener varios párrafos.\n>\n> > Y citas anidadas.\n\n- Lista desordenada\n- Otro ítem\n  - Sub-ítem con sangría\n  - Otro sub-ítem\n- Tercer ítem\n\n1. Lista ordenada\n2. Segundo elemento\n   1. Sub-ítem numerado\n   2. Otro sub-ítem\n3. Tercer elemento\n\n- [x] Tarea completada\n- [ ] Tarea pendiente\n- [ ] Otra pendiente\n\n---\n\n## Código\n\n```python\ndef hola(nombre: str) -> str:\n    \"\"\"Devuelve un saludo.\"\"\"\n    return f\"Hola, {nombre}!\"\n\nprint(hola(\"Mundo\"))\n```\n\nCódigo inline: `const x = 42;`\n\n---\n\n## Tabla\n\n| Izquierda | Centro | Derecha |\n|:----------|:------:|--------:|\n| A         | B      | C       |\n| Rojo      | Verde  | Azul    |\n| 123       | 456    | 789     |\n\n---\n\n## Extras\n\nSeparador horizontal:\n\n---\n\n![Imagen de ejemplo](https://placehold.co/600x200/333/white?text=Imagen+de+prueba)\n\nPie de página[^1] y otra nota[^nota].\n\n[^1]: Esta es la primera nota al pie.\n[^nota]: Nota con identificador personalizado.\n\nTérmino\n: Definición del término en una lista de definiciones.\n\n~~Texto tachado~~ y ==texto resaltado== (depende del renderer).\n\nMención @usuario y emoji :smile: (extensiones comunes)."
+        }
+      ]
+    }
+  ],
+  "totalCost": 0,
+  "totalTokens": {
+    "input": 3193,
+    "output": 569
+  }
+}

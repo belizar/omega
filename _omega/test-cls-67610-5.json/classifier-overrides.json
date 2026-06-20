@@ -1,0 +1,12 @@
+{
+  "overrides": [
+    {
+      "pattern": "some command",
+      "verdict": "safe",
+      "reason": "",
+      "added": "2026-06-20T13:55:08.961Z",
+      "source": "learned",
+      "count": 1
+    }
+  ]
+}

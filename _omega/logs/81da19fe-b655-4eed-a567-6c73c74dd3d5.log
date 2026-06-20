@@ -1,0 +1,3 @@
+[2026-06-18T20:52:17.942Z] INFO: Omega agent starting {"session":"81da19fe-b655-4eed-a567-6c73c74dd3d5"}
+[2026-06-18T20:52:47.287Z] INFO: Starting runner with max steps: 90
+[2026-06-18T20:54:21.558Z] INFO: Agent finished (end_turn)

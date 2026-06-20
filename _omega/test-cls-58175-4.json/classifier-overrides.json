@@ -1,0 +1,19 @@
+{
+  "overrides": [
+    {
+      "pattern": "npm test",
+      "verdict": "dangerous",
+      "reason": "",
+      "added": "2026-06-19T22:42:36.548Z",
+      "source": "learned",
+      "count": 1
+    },
+    {
+      "pattern": "npm test",
+      "verdict": "safe",
+      "reason": "",
+      "added": "2026-06-19T22:42:36.551Z",
+      "source": "manual"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "overrides": [
+    {
+      "pattern": "git push*",
+      "verdict": "dangerous",
+      "reason": "",
+      "added": "2026-06-19T22:42:36.545Z",
+      "source": "manual"
+    }
+  ]
+}

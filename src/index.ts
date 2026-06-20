@@ -15,7 +15,7 @@ import { Runner, RunnerEvent } from "./runner.js";
 import { Message } from "./message.js";
 import { Session } from "./session.js";
 import { AskUserTool } from "./tools/ask-user.js";
-import { BashTool, type BashConfirmCallback } from "./tools/bash.js";
+import { BashTool } from "./tools/bash.js";
 import { EditTool } from "./tools/edit.js";
 import { GrepTool } from "./tools/grep.js";
 import { ReadTool } from "./tools/read.js";
@@ -59,6 +59,16 @@ Cómo trabajás:
 - Antes de instalar dependencias, borrar archivos, ejecutar comandos destructivos
   o hacer cambios irreversibles, usá ask_user para pedir confirmación.
 
+IMPORTANTE — Clasificador de seguridad en bash:
+Omega tiene un clasificador que evalúa cada comando bash antes de ejecutarlo.
+Si el clasificador bloquea un comando, la tool bash te devolverá un mensaje
+"BLOQUEADO POR CLASIFICADOR DE SEGURIDAD" con la razón. En ese caso:
+- NO intentes el mismo comando con otra sintaxis, herramienta o enfoque.
+- Informale al usuario qué pasó y por qué el comando fue bloqueado.
+- Si el usuario quiere ejecutarlo igual, usá ask_user para preguntarle
+  explícitamente. Si confirma, llamá a bash con el mismo comando exacto
+  y el parámetro adicional force: true.
+
 Estilo:
 - Respondé siempre en español.
 - Sé conciso: explicá brevemente qué hiciste y por qué, sin resúmenes largos.
@@ -95,31 +105,8 @@ const main = async () => {
     );
   }
 
-  // Callback que se invoca cuando el clasificador marca un comando como DANGEROUS.
-  // Pausa el runner, muestra la pregunta al usuario, y espera su respuesta.
-  const onBashConfirm: BashConfirmCallback = async (command, classification) => {
-    spinner.stop();
-    const sourceLabel = classification.source === "override"
-      ? `[override: ${classification.override?.pattern}]`
-      : "[clasificador]";
-    const question = [
-      `${yellow(bold("⚠ Comando potencialmente peligroso"))} ${dim(sourceLabel)}`,
-      ``,
-      `  ${yellow(command)}`,
-      ``,
-      `${classification.reason}`,
-      ``,
-      `¿Ejecutar? (sí/no)`,
-    ].join("\n");
-    const answer = await screen.askUser(question);
-    spinner.start();
-    const trimmed = answer.trim().toLowerCase();
-    return trimmed === "sí" || trimmed === "si" || trimmed === "yes" || trimmed === "y";
-  };
-
   const bashTool = new BashTool({
     classifier,
-    onConfirm: onBashConfirm,
   });
 
   const haikuAgent = new AgentConfig({

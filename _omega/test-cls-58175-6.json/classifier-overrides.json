@@ -1,0 +1,12 @@
+{
+  "overrides": [
+    {
+      "pattern": "test-cmd-1781908956554",
+      "verdict": "dangerous",
+      "reason": "",
+      "added": "2026-06-19T22:42:36.555Z",
+      "source": "learned",
+      "count": 3
+    }
+  ]
+}

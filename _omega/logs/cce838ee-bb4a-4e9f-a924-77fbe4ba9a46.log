@@ -1,0 +1,5 @@
+[2026-06-19T14:03:33.630Z] INFO: Omega agent starting {"session":"cce838ee-bb4a-4e9f-a924-77fbe4ba9a46"}
+[2026-06-19T14:04:06.461Z] INFO: Starting runner with max steps: 90
+[2026-06-19T14:04:17.927Z] INFO: LLM call aborted by signal
+[2026-06-19T14:04:30.113Z] INFO: Starting runner with max steps: 90
+[2026-06-19T14:04:39.041Z] INFO: Agent finished (end_turn)
