@@ -16,8 +16,10 @@ import { Message } from "./message.js";
 import { Session } from "./session.js";
 import { AskUserTool } from "./tools/ask-user.js";
 import { BashTool } from "./tools/bash.js";
+import { DecideTool } from "./tools/decide.js";
 import { EditTool } from "./tools/edit.js";
 import { GrepTool } from "./tools/grep.js";
+import { NoteTool } from "./tools/note.js";
 import { ReadTool } from "./tools/read.js";
 import { WriteTool } from "./tools/write.js";
 import {
@@ -46,10 +48,12 @@ Tenés tools para leer, escribir, editar y ejecutar comandos.
 Tools:
 - read: leé un archivo antes de editarlo.
 - bash: explorá el proyecto (ls, grep, find) y ejecutá comandos.
-- edit: para cambios quirúrgicos; el texto a reemplazar debe matchear exacto.
-- write: solo para archivos nuevos o reescrituras completas.
+- edit: para cambios quirúrgicos; el texto a reemplazar debe matchear exacto. Requiere rationale.
+- write: solo para archivos nuevos o reescrituras completas. Requiere rationale.
 - ask_user: pedí confirmación al usuario antes de acciones destructivas o cuando
   necesites que elija entre opciones.
+- note: agregá entries al dossier (decisiones, gotchas, tasks, observaciones).
+- decide: registrá decisiones que pueden reemplazar decisiones anteriores.
 
 Cómo trabajás:
 - Explorá lo necesario antes de cambiar nada: leé los archivos relevantes
@@ -58,6 +62,16 @@ Cómo trabajás:
   o lint según el proyecto) y corregí si hace falta.
 - Antes de instalar dependencias, borrar archivos, ejecutar comandos destructivos
   o hacer cambios irreversibles, usá ask_user para pedir confirmación.
+- Usá note y decide para mantener tu working memory. Cuando tomás una decisión
+  de diseño, registrala con decide. Cuando encontrás un gotcha o necesitás
+  trackear una tarea, usá note.
+
+Dossier:
+En cada turno ves al principio un "Dossier" con tus decisiones activas,
+tareas pendientes y gotchas. Es tu working memory acotada. Se actualiza
+solo con lo que vos registres vía note, decide, y los rationales de edit/write.
+Las entradas que ya no son relevantes se eviccionan automáticamente.
+Cuando veas "(sin entries)" significa que empezás fresco.
 
 IMPORTANTE — Clasificador de seguridad en bash:
 Omega tiene un clasificador que evalúa cada comando bash antes de ejecutarlo.
@@ -92,8 +106,6 @@ const main = async () => {
   logger.setLogFile(`.omega/logs/${session.id}.log`);
   logger.info("Omega agent starting", { session: session.id });
 
-  const fullSystemPrompt = SYSTEM_PROMPT + loadProjectContext();
-
   // ── Clasificador de comandos ──────────────────────────────────────
   let classifier: CommandClassifier | undefined;
   if (config.classifierMode === "on") {
@@ -113,10 +125,13 @@ const main = async () => {
   });
 
   const haikuAgent = new AgentConfig({
-    systemPrompt: fullSystemPrompt,
+    systemPrompt: SYSTEM_PROMPT,
     model: config.model,
     maxTokens: config.maxTokens,
   });
+
+  // Set project context on the agent config (AGENT.md goes here, dossier goes in the runner)
+  haikuAgent.projectContext = loadProjectContext();
 
   haikuAgent
     .addTool(new AskUserTool())
@@ -124,13 +139,17 @@ const main = async () => {
     .addTool(new GrepTool())
     .addTool(new ReadTool())
     .addTool(new EditTool())
-    .addTool(new WriteTool());
+    .addTool(new WriteTool())
+    .addTool(new NoteTool())
+    .addTool(new DecideTool());
 
   const llmprovider = new OpenRouterProvider(config.openrouterApiKey);
 
   const runner = new Runner({
     llmProvider: llmprovider,
     agentConfig: haikuAgent,
+    dossier: session.dossier,
+    lastKTurns: config.lastKTurns,
     maxSteps: config.maxSteps,
     maxContextTokens: config.maxContextTokens,
   });
@@ -228,6 +247,8 @@ const main = async () => {
     const run = new Runner({
       llmProvider: llmprovider,
       agentConfig: haikuAgent,
+      dossier: session.dossier,
+      lastKTurns: config.lastKTurns,
       maxSteps: config.maxSteps,
       maxContextTokens: config.maxContextTokens,
       signal: abortController.signal,

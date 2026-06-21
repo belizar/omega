@@ -1,3 +1,11 @@
+import type { DossierEvent } from "../dossier/types.js";
+
+/** Lo que devuelve execute(): texto visible + eventos de dossier. */
+export type ToolResult = {
+  output: string;
+  events?: DossierEvent[];
+};
+
 type ToolConstructorProps = {
   name: string;
   description: string;

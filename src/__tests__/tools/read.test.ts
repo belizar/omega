@@ -13,42 +13,36 @@ describe("ReadTool", () => {
   });
 
   afterEach(async () => {
-    try {
-      await unlink(testFile);
-    } catch {
-      // File doesn't exist
-    }
+    try { await unlink(testFile); } catch { /* */ }
   });
 
   it("should read entire file content", async () => {
-    const result = await readTool.execute({ path: testFile });
-    expect(result).toContain("Line 1");
-    expect(result).toContain("Line 5");
+    const { output } = await readTool.execute({ path: testFile });
+    expect(output).toContain("Line 1");
+    expect(output).toContain("Line 5");
   });
 
   it("should read with offset and limit", async () => {
-    const result = await readTool.execute({ path: testFile, offset: 2, limit: 2 });
-    const lines = result.split("\n");
+    const { output } = await readTool.execute({ path: testFile, offset: 2, limit: 2 });
+    const lines = output.split("\n");
     expect(lines[0]).toBe("Line 2");
     expect(lines[1]).toBe("Line 3");
   });
 
   it("should handle offset only", async () => {
-    const result = await readTool.execute({ path: testFile, offset: 3 });
-    expect(result).toContain("Line 3");
-    expect(result).toContain("Line 4");
-    expect(result).toContain("Line 5");
+    const { output } = await readTool.execute({ path: testFile, offset: 3 });
+    expect(output).toContain("Line 3");
+    expect(output).toContain("Line 4");
+    expect(output).toContain("Line 5");
   });
 
   it("should handle invalid path", async () => {
-    const result = await readTool.execute({ path: "./non-existent-file.txt" });
-    expect(result).toContain("Error");
+    const { output } = await readTool.execute({ path: "./non-existent-file.txt" });
+    expect(output).toContain("Error");
   });
 
   it("should validate input type", async () => {
-    const result = await readTool.execute({
-      path: "",
-    } as any);
-    expect(result).toContain("Error");
+    const { output } = await readTool.execute({ path: "" } as any);
+    expect(output).toContain("Error");
   });
 });

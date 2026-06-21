@@ -7,13 +7,17 @@ type AgentConfigConstructorProps = {
 };
 
 class AgentConfig {
-  #systemPrompt: string;
+  #baseSystemPrompt: string;
+  #dossierFold: string;
+  #projectContext: string;
   #model: string;
   #max_tokens: number;
   #tools: Record<string, Tool<unknown, unknown>>;
 
   constructor({ model, maxTokens, systemPrompt }: AgentConfigConstructorProps) {
-    this.#systemPrompt = systemPrompt;
+    this.#baseSystemPrompt = systemPrompt;
+    this.#dossierFold = "";
+    this.#projectContext = "";
     this.#model = model;
     this.#max_tokens = maxTokens;
     this.#tools = {};
@@ -28,8 +32,26 @@ class AgentConfig {
     return this.#tools[name];
   }
 
+  /** El system prompt completo: base + project context + dossier fold. */
   get systemPrompt() {
-    return this.#systemPrompt;
+    const parts: string[] = [this.#baseSystemPrompt];
+    if (this.#projectContext) {
+      parts.push(this.#projectContext);
+    }
+    if (this.#dossierFold) {
+      parts.push(this.#dossierFold);
+    }
+    return parts.join("\n");
+  }
+
+  /** Reemplaza el fold del dossier (llamado por el runner antes de cada turno). */
+  set dossierFold(text: string) {
+    this.#dossierFold = text;
+  }
+
+  /** Setea el contexto de proyecto (AGENT.md). */
+  set projectContext(text: string) {
+    this.#projectContext = text;
   }
 
   get model() {

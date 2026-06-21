@@ -335,6 +335,54 @@ function pruneContext(
   return messages.slice(startIdx);
 }
 
+// ── Windowing por últimas K turnos ───────────────────────────────────────────
+
+/**
+ * Devuelve las últimas K turnos del historial.
+ *
+ * Una "turno" es un mensaje user de texto real (no tool_result) + todo lo que
+ * sigue hasta justo antes del próximo user de texto real. Esto agrupa todos
+ * los pares tool_use/tool_result internos del agente bajo el turno que los
+ * disparó.
+ *
+ * Turn-aware: el resultado NUNCA empieza en un tool_result huérfano ni en un
+ * mensaje assistant (reusa `isValidWindowStart`). Si k es mayor que el total
+ * de turnos, devuelve el historial completo sin romper.
+ */
+function lastTurns(messages: readonly Message[], k: number): Message[] {
+  if (messages.length === 0 || k <= 0) return [];
+
+  // Contar turnos reales desde el final hacia atrás
+  let turnCount = 0;
+  let startIdx = 0;
+
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (isValidWindowStart(messages[i])) {
+      turnCount++;
+      if (turnCount >= k) {
+        startIdx = i;
+        break;
+      }
+    }
+  }
+
+  // Si hay menos de k turnos, startIdx queda en 0 (todo el historial)
+  // Pero igual avanzamos hasta un inicio válido por si el historial empieza
+  // con un assistant o tool_result (no debería, pero defensivo).
+  while (startIdx < messages.length && !isValidWindowStart(messages[startIdx])) {
+    startIdx++;
+  }
+
+  if (startIdx >= messages.length) {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (isValidWindowStart(messages[i])) return messages.slice(i);
+    }
+    return [...messages];
+  }
+
+  return messages.slice(startIdx);
+}
+
 export {
   compactStaleReads,
   truncate,
@@ -343,4 +391,5 @@ export {
   estimateTokens,
   estimateMessagesTokens,
   pruneContext,
+  lastTurns,
 };

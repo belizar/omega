@@ -4,14 +4,20 @@ import {
   pruneContext,
   truncateForContext,
   truncateForDisplay,
+  lastTurns,
 } from "./context-management.js";
+import { Dossier } from "./dossier/dossier.js";
+import type { DossierEvent } from "./dossier/types.js";
 import { logger } from "./logger.js";
 import { Message, ToolMessage } from "./message.js";
 import { LLMProvider, LLMResponse } from "./providers/llm-provider.js";
+import type { ToolResult } from "./tools/tool.js";
 
 type RunnerConstructorProps = {
   llmProvider: LLMProvider;
   agentConfig: AgentConfig;
+  dossier?: Dossier;
+  lastKTurns?: number;
   maxSteps?: number;
   maxContextTokens?: number;
   signal?: AbortSignal;
@@ -53,6 +59,8 @@ class Runner {
   #signal: AbortSignal | undefined;
   #interrupted: boolean;
   #onAskUser: ((question: string) => Promise<string>) | undefined;
+  #dossier: Dossier | undefined;
+  #lastKTurns: number;
   #metrics: {
     totalInputTokens: number;
     totalOutputTokens: number;
@@ -64,6 +72,8 @@ class Runner {
   constructor({
     llmProvider,
     agentConfig,
+    dossier,
+    lastKTurns = 4,
     maxSteps = 15,
     maxContextTokens = 100_000,
     signal,
@@ -71,6 +81,8 @@ class Runner {
   }: RunnerConstructorProps) {
     this.#llmProvider = llmProvider;
     this.#agentConfig = agentConfig;
+    this.#dossier = dossier;
+    this.#lastKTurns = lastKTurns;
     this.#maxSteps = maxSteps;
     this.#maxContextTokens = maxContextTokens;
     this.#signal = signal;
@@ -252,7 +264,19 @@ class Runner {
       return { output: msg, isError: true };
     }
     try {
-      return { output: (await tool.execute(input)) as string, isError: false };
+      const raw = await tool.execute(input);
+      // ToolResult (nuevo protocolo): extraer output y eventos
+      if (raw && typeof raw === "object" && "output" in raw) {
+        const tr = raw as ToolResult;
+        if (tr.events && this.#dossier) {
+          for (const event of tr.events) {
+            this.#dossier.ingestEvent(event);
+          }
+        }
+        return { output: tr.output, isError: false };
+      }
+      // Compatibilidad hacia atrás: string
+      return { output: raw as string, isError: false };
     } catch (err: unknown) {
       const msg = `Error executing tool "${name}": ${err instanceof Error ? err.message : String(err)}`;
       logger.error("Tool execution threw", { tool: name, error: msg });
@@ -302,10 +326,17 @@ class Runner {
         break;
       }
 
-      const prunedContext = pruneContext(
-        workingContext,
-        this.#maxContextTokens,
-      );
+      // Fold the dossier before each LLM call so the system prompt is fresh
+      if (this.#dossier) {
+        const { text } = this.#dossier.fold();
+        this.#agentConfig.dossierFold = text;
+      }
+
+      // Windowing: con dossier activo, solo últimas K turnos (el fold cubre lo viejo).
+      // Sin dossier, poda por tokens como siempre.
+      const prunedContext = this.#dossier
+        ? lastTurns(workingContext, this.#lastKTurns)
+        : pruneContext(workingContext, this.#maxContextTokens);
 
       const state = this.#newTurnState();
 

@@ -8,6 +8,7 @@ import {
   estimateMessagesTokens,
   pruneContext,
 } from "./context-management.js";
+import { Dossier, DossierOptions } from "./dossier/dossier.js";
 
 type SessionOptions = {
   id?: string;
@@ -16,6 +17,8 @@ type SessionOptions = {
   dir?: string;
   /** Máximo de tokens de contexto a exponer al modelo (default 100000). */
   maxContextTokens?: number;
+  /** Opciones para el Dossier (working memory acotada). */
+  dossierOptions?: DossierOptions;
 };
 
 class Session {
@@ -30,6 +33,8 @@ class Session {
   #maxContextTokens: number;
   #totalCost: number;
   #totalTokens: { input: number; output: number };
+  #dossier: Dossier | null;
+  #dossierOptions: DossierOptions;
 
   constructor(options: SessionOptions = {}) {
     this.#id = options.id ?? randomUUID();
@@ -42,6 +47,11 @@ class Session {
     this.#sessionPath = options.dir
       ? join(options.dir, `${this.#id}.json`)
       : undefined;
+    this.#dossier = null;
+    this.#dossierOptions = {
+      dir: options.dir ? join(dirname(options.dir), "dossiers") : ".omega/dossiers",
+      foldMaxTokens: 3000,
+    };
 
     // Cargar sesión anterior si existe (al reanudar por id)
     if (this.#sessionPath && existsSync(this.#sessionPath)) {
@@ -118,6 +128,14 @@ class Session {
     return this.#workingContext;
   }
 
+  /** Dossier (working memory acotada). Lazy init. */
+  get dossier(): Dossier {
+    if (!this.#dossier) {
+      this.#dossier = new Dossier(this.#id, this.#dossierOptions);
+    }
+    return this.#dossier;
+  }
+
   /** Contexto listo para enviar al modelo: workingContext podado por tokens. */
   getContext(): readonly Message[] {
     return pruneContext(this.#workingContext, this.#maxContextTokens);
@@ -169,6 +187,7 @@ class Session {
   clear(): void {
     this.#messages = [];
     this.#workingContext = [];
+    this.#dossier = null;
     this.#save();
   }
 

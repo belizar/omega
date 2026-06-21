@@ -24,9 +24,9 @@ describe("BashTool with classifier", () => {
 
     const tool = new BashTool({ classifier });
 
-    const result = await tool.execute({ command: "echo hello" });
+    const { output } = await tool.execute({ command: "echo hello" });
 
-    expect(result).toContain("hello");
+    expect(output).toContain("hello");
     expect(mockClassify).toHaveBeenCalledWith("echo hello");
   });
 
@@ -42,12 +42,12 @@ describe("BashTool with classifier", () => {
 
     const tool = new BashTool({ classifier });
 
-    const result = await tool.execute({ command: "rm file.txt" });
+    const { output } = await tool.execute({ command: "rm file.txt" });
 
-    expect(result).toContain("BLOQUEADO POR CLASIFICADOR DE SEGURIDAD");
-    expect(result).toContain("rm file.txt");
-    expect(result).toContain("Modifica el filesystem");
-    expect(result).toContain("INSTRUCCIONES PARA EL AGENTE");
+    expect(output).toContain("BLOQUEADO POR CLASIFICADOR DE SEGURIDAD");
+    expect(output).toContain("rm file.txt");
+    expect(output).toContain("Modifica el filesystem");
+    expect(output).toContain("INSTRUCCIONES PARA EL AGENTE");
     expect(mockClassify).toHaveBeenCalledWith("rm file.txt");
   });
 
@@ -59,12 +59,10 @@ describe("BashTool with classifier", () => {
 
     const tool = new BashTool({ classifier });
 
-    const result = await tool.execute({ command: "rm file.txt", force: true });
+    const { output } = await tool.execute({ command: "rm file.txt", force: true });
 
-    // Should not call classify at all
     expect(mockClassify).not.toHaveBeenCalled();
-    // Should have executed (or at least tried)
-    expect(result).not.toContain("BLOQUEADO");
+    expect(output).not.toContain("BLOQUEADO");
   });
 
   it("should learn override on force when learnEnabled", async () => {
@@ -95,19 +93,19 @@ describe("BashTool with classifier", () => {
 
     const tool = new BashTool({ classifier });
 
-    const result = await tool.execute({ command: "echo safe" });
-    expect(result).toContain("safe");
+    const { output } = await tool.execute({ command: "echo safe" });
+    expect(output).toContain("safe");
   });
 
   it("should work without classifier (backward compatible)", async () => {
     const tool = new BashTool();
-    const result = await tool.execute({ command: "echo hello" });
-    expect(result).toContain("hello");
+    const { output } = await tool.execute({ command: "echo hello" });
+    expect(output).toContain("hello");
   });
 
   it("should accept force: true even without classifier", async () => {
     const tool = new BashTool();
-    const result = await tool.execute({ command: "echo forced", force: true });
-    expect(result).toContain("forced");
+    const { output } = await tool.execute({ command: "echo forced", force: true });
+    expect(output).toContain("forced");
   });
 });

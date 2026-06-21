@@ -15,6 +15,8 @@ interface Config {
   classifierModel: string;
   /** Habilita el aprendizaje automático de overrides (default: false) */
   classifierLearn: boolean;
+  /** Cantidad de turnos a mantener en el contexto activo cuando hay dossier (default: 4) */
+  lastKTurns: number;
 }
 
 function validateEnv(): Config {
@@ -36,6 +38,7 @@ function validateEnv(): Config {
   const classifierMode = (process.env.CLASSIFIER_MODE || "on") as "on" | "off";
   const classifierModel = process.env.CLASSIFIER_MODEL || "anthropic/claude-haiku-4-5";
   const classifierLearn = process.env.CLASSIFIER_LEARN === "true";
+  const lastKTurns = parseInt(process.env.LAST_K_TURNS || "4", 10);
 
   const config: Config = {
     openrouterApiKey,
@@ -49,6 +52,7 @@ function validateEnv(): Config {
     classifierMode,
     classifierModel,
     classifierLearn,
+    lastKTurns,
   };
 
   logger.info("Config loaded successfully", {

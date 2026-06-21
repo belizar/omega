@@ -1,7 +1,7 @@
 import { exec } from "child_process";
 import { stat } from "fs/promises";
 import { resolve, relative } from "path";
-import { Tool } from "./tool.js";
+import { Tool, ToolResult } from "./tool.js";
 import { logger } from "../logger.js";
 import { isEnvFile } from "./env-guard.js";
 
@@ -17,7 +17,7 @@ const TIMEOUT_MS = 10_000;
 const MAX_BUFFER = 5 * 1024 * 1024;
 const DEFAULT_MAX_RESULTS = 50;
 
-export class GrepTool extends Tool<GrepInput, string> {
+export class GrepTool extends Tool<GrepInput, ToolResult> {
   constructor() {
     super({
       name: "grep",
@@ -56,7 +56,7 @@ export class GrepTool extends Tool<GrepInput, string> {
     });
   }
 
-  async execute(input: GrepInput): Promise<string> {
+  async execute(input: GrepInput): Promise<ToolResult> {
     const {
       pattern,
       path: searchPath = ".",
@@ -66,12 +66,12 @@ export class GrepTool extends Tool<GrepInput, string> {
     } = input;
 
     if (!pattern || typeof pattern !== "string") {
-      return "Error: pattern es requerido y debe ser un string";
+      return { output: "Error: pattern es requerido y debe ser un string" };
     }
 
     const absPath = resolve(searchPath);
     if (isEnvFile(absPath)) {
-      return "Error: no se puede buscar en archivos .env por seguridad";
+      return { output: "Error: no se puede buscar en archivos .env por seguridad" };
     }
 
     let isFile = false;
@@ -116,7 +116,7 @@ export class GrepTool extends Tool<GrepInput, string> {
       });
 
       if (!result.trim()) {
-        return "Sin resultados.";
+        return { output: "Sin resultados." };
       }
 
       const lines = result.trim().split("\n");
@@ -129,18 +129,18 @@ export class GrepTool extends Tool<GrepInput, string> {
       const header = `${limited.length} líneas de resultados`;
       const summary = `\n-- grep "${pattern}" en ${relative(process.cwd(), absPath) || "."} --`;
 
-      return `${summary}\n${truncated}`;
+      return { output: `${summary}\n${truncated}` };
     } catch (err: unknown) {
       const error = err as { code?: string; signal?: string; stderr?: string; stdout?: string; message?: string };
       // grep devuelve exit code 1 cuando no hay matches (no es error)
       if (error.code === "ETIMEDOUT" || error.signal === "SIGTERM") {
-        return `Error: búsqueda cancelada por timeout (${TIMEOUT_MS}ms)`;
+        return { output: `Error: búsqueda cancelada por timeout (${TIMEOUT_MS}ms)` };
       }
       if (error.stderr && !error.stderr.includes("No such file")) {
         logger.error("Grep command failed", { pattern, error: error.stderr || error.message });
-        return `Error: ${error.stderr || error.message}`;
+        return { output: `Error: ${error.stderr || error.message}` };
       }
-      return "Sin resultados.";
+      return { output: "Sin resultados." };
     }
   }
 }

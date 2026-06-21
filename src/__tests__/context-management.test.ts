@@ -5,6 +5,7 @@ import {
   estimateTokens,
   estimateMessagesTokens,
   pruneContext,
+  lastTurns,
 } from "../context-management.js";
 import { Message } from "../message.js";
 
@@ -633,5 +634,167 @@ describe("compactStaleReads", () => {
     // r6 (índice 17): step=11, age=12-11=1, no > 5 → intacto
     const r6Block = (result[17].content as Array<{ content: string }>)[0];
     expect(r6Block.content).toBe(content);
+  });
+});
+
+// ── lastTurns (windowing por K turnos) ───────────────────────────────────────
+
+describe("lastTurns", () => {
+  it("devuelve array vacío si no hay mensajes", () => {
+    expect(lastTurns([], 4)).toEqual([]);
+  });
+
+  it("devuelve array vacío si k <= 0", () => {
+    const msgs: Message[] = [userText("hola"), assistantText("qué tal")];
+    expect(lastTurns(msgs, 0)).toEqual([]);
+    expect(lastTurns(msgs, -1)).toEqual([]);
+  });
+
+  it("devuelve exactamente las últimas K turnos", () => {
+    const msgs: Message[] = [
+      userText("turno 1"),
+      assistantText("respuesta 1"),
+      userText("turno 2"),
+      assistantText("respuesta 2"),
+      userText("turno 3"),
+      assistantText("respuesta 3"),
+      userText("turno 4"),
+      assistantText("respuesta 4"),
+      userText("turno 5"),
+      assistantText("respuesta 5"),
+    ];
+
+    const result = lastTurns(msgs, 2);
+
+    // Debe empezar en "turno 4" (el tercer turno contando desde atrás: 5, 4 => k=2)
+    expect(result.length).toBeGreaterThan(0);
+    expect(result[0]).toEqual(userText("turno 4"));
+    // Debe contener turno 4 y turno 5 completos
+    expect(result).toContainEqual(userText("turno 4"));
+    expect(result).toContainEqual(assistantText("respuesta 4"));
+    expect(result).toContainEqual(userText("turno 5"));
+    expect(result).toContainEqual(assistantText("respuesta 5"));
+    // NO debe contener el turno 3
+    expect(result).not.toContainEqual(userText("turno 3"));
+  });
+
+  it("con k mayor al total de turnos devuelve todo sin romper", () => {
+    const msgs: Message[] = [
+      userText("turno 1"),
+      assistantText("respuesta 1"),
+      userText("turno 2"),
+      assistantText("respuesta 2"),
+    ];
+
+    const result = lastTurns(msgs, 10);
+
+    expect(result.length).toBe(4);
+    expect(result[0]).toEqual(userText("turno 1"));
+    expect(result[result.length - 1]).toEqual(assistantText("respuesta 2"));
+  });
+
+  it("NUNCA empieza en un tool_result huérfano", () => {
+    // Simula: user("leé X"), assistant(tool_use read), user(tool_result ENORME),
+    //         assistant("listo"), user("gracias")
+    // Con k=1, sin orphan-safety empezaría en el tool_result.
+    // Con orphan-safety, debe avanzar hasta el user("gracias") o incluir el turno completo.
+    const msgs: Message[] = [
+      userText("leé el archivo"),
+      assistantToolUse([{ id: "t1", name: "read", input: { path: "x.ts" } }]),
+      userToolResult([{ tool_use_id: "t1", content: "contenido enorme ".repeat(500) }]),
+      assistantText("listo, ya lo leí"),
+      userText("gracias, ahora editá la línea 3"),
+    ];
+
+    const result = lastTurns(msgs, 1);
+
+    // No debe empezar con un tool_result huérfano
+    const first = result[0];
+    const isToolResult =
+      first.role === "user" &&
+      Array.isArray(first.content) &&
+      first.content.some(
+        (b: unknown) => b && typeof b === "object" && (b as Record<string, unknown>).type === "tool_result",
+      );
+    expect(isToolResult).toBe(false);
+
+    // Debe empezar en un user de texto real
+    expect(first.role).toBe("user");
+    expect(typeof first.content).toBe("string");
+  });
+
+  it("NUNCA deja un tool_use sin su tool_result (turn-aware)", () => {
+    // Caso crítico: el corte cae justo después de un assistant con tool_use
+    // pero antes del tool_result. Debe incluir el tool_result o no incluir el
+    // tool_use.
+    const msgs: Message[] = [
+      userText("turno 1"),
+      assistantText("respuesta 1"),
+      userText("hacé una búsqueda"),
+      assistantToolUse([{ id: "g1", name: "grep", input: { pattern: "foo" } }]),
+      userToolResult([{ tool_use_id: "g1", content: "resultados del grep" }]),
+      assistantText("encontré 3 matches, voy a leer uno"),
+      assistantToolUse([{ id: "r1", name: "read", input: { path: "a.ts" } }]),
+      userToolResult([{ tool_use_id: "r1", content: "contenido de a.ts" }]),
+      assistantText("listo, este es el contenido"),
+      userText("gracias"),
+    ];
+
+    const result = lastTurns(msgs, 2);
+
+    // Verificar que no hay tool_use sin su tool_result correspondiente
+    // Recorremos y trackeamos tool_use_ids vistos
+    const seenToolUses = new Set<string>();
+    const completedToolUses = new Set<string>();
+
+    for (const msg of result) {
+      if (msg.role === "assistant" && Array.isArray(msg.content)) {
+        for (const block of msg.content) {
+          if (block && typeof block === "object" && "type" in block && block.type === "tool_use" && "id" in block) {
+            seenToolUses.add(block.id as string);
+          }
+        }
+      }
+      if (msg.role === "user" && Array.isArray(msg.content)) {
+        for (const block of msg.content) {
+          if (block && typeof block === "object" && "type" in block && block.type === "tool_result" && "tool_use_id" in block) {
+            completedToolUses.add(block.tool_use_id as string);
+          }
+        }
+      }
+    }
+
+    // Todo tool_use presente debe tener su tool_result
+    for (const id of seenToolUses) {
+      expect(completedToolUses.has(id)).toBe(true);
+    }
+  });
+
+  it("devuelve solo el último turno con k=1", () => {
+    const msgs: Message[] = [
+      userText("turno 1"),
+      assistantText("respuesta 1"),
+      userText("turno 2"),
+      assistantText("respuesta 2"),
+      userText("turno 3"),
+      assistantText("respuesta 3"),
+    ];
+
+    const result = lastTurns(msgs, 1);
+
+    expect(result.length).toBeGreaterThan(0);
+    expect(result[0]).toEqual(userText("turno 3"));
+    expect(result[result.length - 1]).toEqual(assistantText("respuesta 3"));
+  });
+
+  it("no se rompe con mensajes que tienen content string (no array)", () => {
+    const msgs: Message[] = [
+      { role: "user", content: "texto simple" },
+      assistantText("respuesta simple"),
+    ];
+
+    const result = lastTurns(msgs, 1);
+    expect(result.length).toBe(2);
+    expect(result[0]).toEqual({ role: "user", content: "texto simple" });
   });
 });
