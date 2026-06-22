@@ -149,7 +149,7 @@ const main = async () => {
     llmProvider: llmprovider,
     agentConfig: haikuAgent,
     dossier: session.dossier,
-    lastKTurns: config.lastKTurns,
+    convTurns: config.convTurns,
     maxSteps: config.maxSteps,
     maxContextTokens: config.maxContextTokens,
   });
@@ -248,7 +248,7 @@ const main = async () => {
       llmProvider: llmprovider,
       agentConfig: haikuAgent,
       dossier: session.dossier,
-      lastKTurns: config.lastKTurns,
+      convTurns: config.convTurns,
       maxSteps: config.maxSteps,
       maxContextTokens: config.maxContextTokens,
       signal: abortController.signal,
@@ -329,6 +329,7 @@ const main = async () => {
       metrics.totalOutputTokens,
       metrics.totalCost,
     );
+    session.addStepUsage(run.getStepUsage());
     const durationSec = (metrics.durationMs / 1000).toFixed(1);
     const costStr =
       metrics.totalCost < 0.01 ? "<$0.01" : `${metrics.totalCost.toFixed(2)}`;

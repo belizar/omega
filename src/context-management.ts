@@ -346,7 +346,7 @@ function pruneContext(
  * disparó.
  *
  * Turn-aware: el resultado NUNCA empieza en un tool_result huérfano ni en un
- * mensaje assistant (reusa `isValidWindowStart`). Si k es mayor que el total
+ * mensaje assistant (reusa `isValidWindowStart`). Si K es mayor que el total
  * de turnos, devuelve el historial completo sin romper.
  */
 function lastTurns(messages: readonly Message[], k: number): Message[] {
@@ -383,6 +383,35 @@ function lastTurns(messages: readonly Message[], k: number): Message[] {
   return messages.slice(startIdx);
 }
 
+// ── Raw window (conversación preservada + ruido compactado) ─────────────────
+
+/**
+ * Arma la ventana de contexto crudo para el LLM cuando el dossier está activo.
+ *
+ * Dos capas:
+ *   1. CONTINUIDAD — lastTurns(messages, convTurns) preserva las últimas
+ *      K turnos de CONVERSACIÓN completos (user-text + assistant-text).
+ *      Esto garantiza que el agente nunca pierde la memoria entre turnos
+ *      aunque el historial sea gigante.
+ *   2. BOUND — compactStaleReads(...) encoge los tool_results de reads viejos
+ *      a marcadores de una línea, sin orfanear tool_use/tool_result.
+ *      El ruido de tools se acota; la conversación queda intacta.
+ *      Las entries `file` del dossier ya capturan la esencia del contenido
+ *      leído/editado.
+ *
+ * Invariantes:
+ *   - Nunca se dropea un mensaje user-text ni assistant-text de los últimos K turnos.
+ *   - Nunca queda un tool_result sin su tool_use (sin orphans, vía compactStaleReads).
+ *   - Al inicio de un turno nuevo, la ventana INCLUYE los turnos anteriores.
+ */
+function rawWindow(
+  messages: readonly Message[],
+  convTurns: number,
+): Message[] {
+  if (messages.length === 0 || convTurns <= 0) return [];
+  return compactStaleReads(lastTurns(messages, convTurns));
+}
+
 export {
   compactStaleReads,
   truncate,
@@ -392,4 +421,5 @@ export {
   estimateMessagesTokens,
   pruneContext,
   lastTurns,
+  rawWindow,
 };

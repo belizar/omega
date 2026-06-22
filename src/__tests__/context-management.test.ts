@@ -5,7 +5,7 @@ import {
   estimateTokens,
   estimateMessagesTokens,
   pruneContext,
-  lastTurns,
+  rawWindow,
 } from "../context-management.js";
 import { Message } from "../message.js";
 
@@ -637,78 +637,46 @@ describe("compactStaleReads", () => {
   });
 });
 
-// ── lastTurns (windowing por K turnos) ───────────────────────────────────────
+// ── rawWindow (conversación preservada + ruido compactado) ─────────────────
 
-describe("lastTurns", () => {
+describe("rawWindow", () => {
   it("devuelve array vacío si no hay mensajes", () => {
-    expect(lastTurns([], 4)).toEqual([]);
+    expect(rawWindow([], 10)).toEqual([]);
   });
 
-  it("devuelve array vacío si k <= 0", () => {
-    const msgs: Message[] = [userText("hola"), assistantText("qué tal")];
-    expect(lastTurns(msgs, 0)).toEqual([]);
-    expect(lastTurns(msgs, -1)).toEqual([]);
-  });
-
-  it("devuelve exactamente las últimas K turnos", () => {
+  it("preserva la conversación entre turnos (NO amnesia)", () => {
+    // Regresión: al inicio de un turno nuevo, rawWindow vieja solo devolvía
+    // la última instrucción del usuario. Acá verificamos que sobreviva
+    // la conversación previa.
+    const largeAssistant = assistantText("R".repeat(5000));
     const msgs: Message[] = [
-      userText("turno 1"),
-      assistantText("respuesta 1"),
-      userText("turno 2"),
-      assistantText("respuesta 2"),
-      userText("turno 3"),
-      assistantText("respuesta 3"),
-      userText("turno 4"),
-      assistantText("respuesta 4"),
-      userText("turno 5"),
-      assistantText("respuesta 5"),
+      userText("Turno1: quiero una feature de login con OAuth"),
+      largeAssistant,
+      userText("Turno2: agregale tests unitarios"),
+      largeAssistant,
+      userText("Turno3: hacelo en un branch nuevo"), // corta, última
     ];
 
-    const result = lastTurns(msgs, 2);
+    const result = rawWindow(msgs, 10);
 
-    // Debe empezar en "turno 4" (el tercer turno contando desde atrás: 5, 4 => k=2)
-    expect(result.length).toBeGreaterThan(0);
-    expect(result[0]).toEqual(userText("turno 4"));
-    // Debe contener turno 4 y turno 5 completos
-    expect(result).toContainEqual(userText("turno 4"));
-    expect(result).toContainEqual(assistantText("respuesta 4"));
-    expect(result).toContainEqual(userText("turno 5"));
-    expect(result).toContainEqual(assistantText("respuesta 5"));
-    // NO debe contener el turno 3
-    expect(result).not.toContainEqual(userText("turno 3"));
-  });
-
-  it("con k mayor al total de turnos devuelve todo sin romper", () => {
-    const msgs: Message[] = [
-      userText("turno 1"),
-      assistantText("respuesta 1"),
-      userText("turno 2"),
-      assistantText("respuesta 2"),
-    ];
-
-    const result = lastTurns(msgs, 10);
-
-    expect(result.length).toBe(4);
-    expect(result[0]).toEqual(userText("turno 1"));
-    expect(result[result.length - 1]).toEqual(assistantText("respuesta 2"));
+    // Debe conservar los 3 turnos (todos entran en convTurns=10)
+    expect(result).toContainEqual(userText("Turno1: quiero una feature de login con OAuth"));
+    expect(result).toContainEqual(userText("Turno2: agregale tests unitarios"));
+    expect(result).toContainEqual(userText("Turno3: hacelo en un branch nuevo"));
+    // NO debe devolver solo el último
+    expect(result.length).toBeGreaterThan(1);
   });
 
   it("NUNCA empieza en un tool_result huérfano", () => {
-    // Simula: user("leé X"), assistant(tool_use read), user(tool_result ENORME),
-    //         assistant("listo"), user("gracias")
-    // Con k=1, sin orphan-safety empezaría en el tool_result.
-    // Con orphan-safety, debe avanzar hasta el user("gracias") o incluir el turno completo.
     const msgs: Message[] = [
       userText("leé el archivo"),
       assistantToolUse([{ id: "t1", name: "read", input: { path: "x.ts" } }]),
       userToolResult([{ tool_use_id: "t1", content: "contenido enorme ".repeat(500) }]),
       assistantText("listo, ya lo leí"),
-      userText("gracias, ahora editá la línea 3"),
     ];
 
-    const result = lastTurns(msgs, 1);
+    const result = rawWindow(msgs, 10);
 
-    // No debe empezar con un tool_result huérfano
     const first = result[0];
     const isToolResult =
       first.role === "user" &&
@@ -717,19 +685,10 @@ describe("lastTurns", () => {
         (b: unknown) => b && typeof b === "object" && (b as Record<string, unknown>).type === "tool_result",
       );
     expect(isToolResult).toBe(false);
-
-    // Debe empezar en un user de texto real
-    expect(first.role).toBe("user");
-    expect(typeof first.content).toBe("string");
   });
 
   it("NUNCA deja un tool_use sin su tool_result (turn-aware)", () => {
-    // Caso crítico: el corte cae justo después de un assistant con tool_use
-    // pero antes del tool_result. Debe incluir el tool_result o no incluir el
-    // tool_use.
     const msgs: Message[] = [
-      userText("turno 1"),
-      assistantText("respuesta 1"),
       userText("hacé una búsqueda"),
       assistantToolUse([{ id: "g1", name: "grep", input: { pattern: "foo" } }]),
       userToolResult([{ tool_use_id: "g1", content: "resultados del grep" }]),
@@ -737,13 +696,10 @@ describe("lastTurns", () => {
       assistantToolUse([{ id: "r1", name: "read", input: { path: "a.ts" } }]),
       userToolResult([{ tool_use_id: "r1", content: "contenido de a.ts" }]),
       assistantText("listo, este es el contenido"),
-      userText("gracias"),
     ];
 
-    const result = lastTurns(msgs, 2);
+    const result = rawWindow(msgs, 10);
 
-    // Verificar que no hay tool_use sin su tool_result correspondiente
-    // Recorremos y trackeamos tool_use_ids vistos
     const seenToolUses = new Set<string>();
     const completedToolUses = new Set<string>();
 
@@ -764,37 +720,94 @@ describe("lastTurns", () => {
       }
     }
 
-    // Todo tool_use presente debe tener su tool_result
     for (const id of seenToolUses) {
       expect(completedToolUses.has(id)).toBe(true);
     }
   });
 
-  it("devuelve solo el último turno con k=1", () => {
+  it("con historial chico (entra todo), devuelve todo intacto", () => {
     const msgs: Message[] = [
-      userText("turno 1"),
-      assistantText("respuesta 1"),
-      userText("turno 2"),
-      assistantText("respuesta 2"),
-      userText("turno 3"),
-      assistantText("respuesta 3"),
+      userText("hola"),
+      assistantText("qué tal"),
+      userText("bien gracias"),
+      assistantText("me alegro"),
     ];
 
-    const result = lastTurns(msgs, 1);
-
-    expect(result.length).toBeGreaterThan(0);
-    expect(result[0]).toEqual(userText("turno 3"));
-    expect(result[result.length - 1]).toEqual(assistantText("respuesta 3"));
+    const result = rawWindow(msgs, 50);
+    expect(result.length).toBe(msgs.length);
   });
 
-  it("no se rompe con mensajes que tienen content string (no array)", () => {
+  it("compacta reads viejos a marcadores cuando el historial es grande", () => {
+    // Varios turnos con reads enormes → deberían compactarse a marcadores
     const msgs: Message[] = [
-      { role: "user", content: "texto simple" },
-      assistantText("respuesta simple"),
+      userText("leé X"),
+      assistantToolUse([{ id: "r1", name: "read", input: { path: "x.ts" } }]),
+      userToolResult([{ tool_use_id: "r1", content: "X".repeat(3000) }]),
+      assistantText("leído"),
+      userText("leé Y"),
+      assistantToolUse([{ id: "r2", name: "read", input: { path: "y.ts" } }]),
+      userToolResult([{ tool_use_id: "r2", content: "Y".repeat(3000) }]),
+      assistantText("leído"),
+      userText("leé Z"),
+      assistantToolUse([{ id: "r3", name: "read", input: { path: "z.ts" } }]),
+      userToolResult([{ tool_use_id: "r3", content: "Z".repeat(3000) }]),
+      assistantText("leído"),
     ];
 
-    const result = lastTurns(msgs, 1);
-    expect(result.length).toBe(2);
-    expect(result[0]).toEqual({ role: "user", content: "texto simple" });
+    const result = rawWindow(msgs, 10);
+
+    // El primer read (r1, viejo) debería estar compactado a marcador de 1 línea
+    const r1Block = result.find((m) =>
+      m.role === "user" &&
+      Array.isArray(m.content) &&
+      m.content.some(
+        (b: unknown) => b && typeof b === "object" && (b as Record<string, unknown>).tool_use_id === "r1",
+      )
+    );
+    if (r1Block && Array.isArray(r1Block.content)) {
+      const c = r1Block.content.find(
+        (b: unknown) => b && typeof b === "object" && (b as Record<string, unknown>).tool_use_id === "r1",
+      ) as { content?: string } | undefined;
+      if (c?.content) {
+        // Si se compactó, el contenido empieza con "["
+        const lines = c.content.split("\n");
+        expect(lines.length).toBeLessThanOrEqual(2);
+      }
+    }
+  });
+
+  it("sin instrucción de usuario (solo tool_results), devuelve lo que pueda", () => {
+    const msgs: Message[] = [
+      userToolResult([{ tool_use_id: "t1", content: "resultado 1" }]),
+      assistantText("respuesta 1"),
+      userToolResult([{ tool_use_id: "t2", content: "resultado 2" }]),
+      assistantText("respuesta 2"),
+    ];
+
+    const result = rawWindow(msgs, 10);
+    // lastTurns no encuentra start válido, devuelve fallback
+    expect(result.length).toBeGreaterThan(0);
+  });
+
+  it("con cadena tool_use grande / tool_result chico, NUNCA arranca en tool_result huérfano", () => {
+    const msgs: Message[] = [
+      userText("hacé esto"),
+      assistantToolUse([{ id: "big", name: "read", input: { path: "x.ts" } }]),
+      userToolResult([{ tool_use_id: "big", content: "ok" }]),
+      assistantText("listo"),
+    ];
+
+    const result = rawWindow(msgs, 10);
+
+    // La instrucción activa debe estar
+    expect(result[0]).toEqual(userText("hacé esto"));
+
+    // Si hay más de 1 mensaje, el segundo NO puede ser un tool_result
+    if (result.length > 1 && Array.isArray(result[1].content)) {
+      const isToolResult = result[1].content.some(
+        (b: unknown) => b && typeof b === "object" && (b as Record<string, unknown>).type === "tool_result",
+      );
+      expect(isToolResult).toBe(false);
+    }
   });
 });

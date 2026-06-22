@@ -4,7 +4,7 @@ import {
   pruneContext,
   truncateForContext,
   truncateForDisplay,
-  lastTurns,
+  rawWindow,
 } from "./context-management.js";
 import { Dossier } from "./dossier/dossier.js";
 import type { DossierEvent } from "./dossier/types.js";
@@ -17,7 +17,7 @@ type RunnerConstructorProps = {
   llmProvider: LLMProvider;
   agentConfig: AgentConfig;
   dossier?: Dossier;
-  lastKTurns?: number;
+  convTurns?: number;
   maxSteps?: number;
   maxContextTokens?: number;
   signal?: AbortSignal;
@@ -60,7 +60,8 @@ class Runner {
   #interrupted: boolean;
   #onAskUser: ((question: string) => Promise<string>) | undefined;
   #dossier: Dossier | undefined;
-  #lastKTurns: number;
+  #convTurns: number;
+  #stepUsage: Array<{ inputTokens: number; outputTokens: number; cachedTokens: number; cost: number }>;
   #metrics: {
     totalInputTokens: number;
     totalOutputTokens: number;
@@ -73,7 +74,7 @@ class Runner {
     llmProvider,
     agentConfig,
     dossier,
-    lastKTurns = 4,
+    convTurns = 10,
     maxSteps = 15,
     maxContextTokens = 100_000,
     signal,
@@ -82,7 +83,8 @@ class Runner {
     this.#llmProvider = llmProvider;
     this.#agentConfig = agentConfig;
     this.#dossier = dossier;
-    this.#lastKTurns = lastKTurns;
+    this.#convTurns = convTurns;
+    this.#stepUsage = [];
     this.#maxSteps = maxSteps;
     this.#maxContextTokens = maxContextTokens;
     this.#signal = signal;
@@ -172,6 +174,12 @@ class Runner {
           this.#metrics.totalInputTokens += event.usage.input_tokens;
           this.#metrics.totalOutputTokens += event.usage.output_tokens;
           this.#metrics.totalCost += event.cost;
+          this.#stepUsage.push({
+            inputTokens: event.usage.input_tokens,
+            outputTokens: event.usage.output_tokens,
+            cachedTokens: event.usage.cached_tokens ?? 0,
+            cost: event.cost,
+          });
         }
       }
 
@@ -188,6 +196,12 @@ class Runner {
       this.#metrics.totalInputTokens += data.usage.input_tokens;
       this.#metrics.totalOutputTokens += data.usage.output_tokens;
       this.#metrics.totalCost += data.cost;
+      this.#stepUsage.push({
+        inputTokens: data.usage.input_tokens,
+        outputTokens: data.usage.output_tokens,
+        cachedTokens: data.usage.cached_tokens ?? 0,
+        cost: data.cost,
+      });
 
       for (const block of data.content) {
         if (block.type === "text") {
@@ -332,10 +346,10 @@ class Runner {
         this.#agentConfig.dossierFold = text;
       }
 
-      // Windowing: con dossier activo, solo últimas K turnos (el fold cubre lo viejo).
+      // Windowing: con dossier activo, últimas K turnos de conversación + compactación de reads viejos.
       // Sin dossier, poda por tokens como siempre.
       const prunedContext = this.#dossier
-        ? lastTurns(workingContext, this.#lastKTurns)
+        ? rawWindow(workingContext, this.#convTurns)
         : pruneContext(workingContext, this.#maxContextTokens);
 
       const state = this.#newTurnState();
@@ -413,6 +427,15 @@ class Runner {
     };
   }
 
+  getStepUsage(): ReadonlyArray<{
+    inputTokens: number;
+    outputTokens: number;
+    cachedTokens: number;
+    cost: number;
+  }> {
+    return this.#stepUsage;
+  }
+
   resetMetrics() {
     this.#metrics = {
       totalInputTokens: 0,
@@ -421,6 +444,7 @@ class Runner {
       totalCost: 0,
       startTime: Date.now(),
     };
+    this.#stepUsage = [];
   }
 }
 

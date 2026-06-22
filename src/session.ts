@@ -35,6 +35,7 @@ class Session {
   #totalTokens: { input: number; output: number };
   #dossier: Dossier | null;
   #dossierOptions: DossierOptions;
+  #stepUsage: Array<{ inputTokens: number; outputTokens: number; cachedTokens: number; cost: number }>;
 
   constructor(options: SessionOptions = {}) {
     this.#id = options.id ?? randomUUID();
@@ -44,6 +45,7 @@ class Session {
     this.#maxContextTokens = options.maxContextTokens ?? 100_000;
     this.#totalCost = 0;
     this.#totalTokens = { input: 0, output: 0 };
+    this.#stepUsage = [];
     this.#sessionPath = options.dir
       ? join(options.dir, `${this.#id}.json`)
       : undefined;
@@ -62,6 +64,7 @@ class Session {
         this.#totalCost = parsed.totalCost ?? 0;
         this.#totalTokens = parsed.totalTokens ?? { input: 0, output: 0 };
         this.#name = parsed.name ?? "";
+        this.#stepUsage = parsed.stepUsage ?? [];
 
         // workingContext: si existe en disco, se carga; si no (formato viejo), se regenera
         if (parsed.workingContext && Array.isArray(parsed.workingContext)) {
@@ -188,7 +191,15 @@ class Session {
     this.#messages = [];
     this.#workingContext = [];
     this.#dossier = null;
+    this.#stepUsage = [];
     this.#save();
+  }
+
+  /** Agrega stepUsage de un turno del runner. */
+  addStepUsage(steps: ReadonlyArray<{ inputTokens: number; outputTokens: number; cachedTokens: number; cost: number }>): void {
+    for (const s of steps) {
+      this.#stepUsage.push(s);
+    }
   }
 
   /**
@@ -231,6 +242,7 @@ class Session {
             workingContext: this.#workingContext,
             totalCost: this.#totalCost,
             totalTokens: this.#totalTokens,
+            stepUsage: this.#stepUsage,
           },
           null,
           2,
