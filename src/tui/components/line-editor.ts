@@ -2,6 +2,7 @@ import { stdout } from "process";
 import { CursorPosition, InputComponent } from "../component.js";
 import { Key } from "../decodeKey.js";
 import { dim } from "../theme.js";
+import { findAtPathCompletion } from "../path-completer.js";
 
 class LineEditor implements InputComponent<string> {
   #buffer: string;
@@ -13,6 +14,14 @@ class LineEditor implements InputComponent<string> {
   #draftBuffer: string; // buffer que se guarda antes de navegar historia
   #draftCursor: number;
 
+  // Estado de autocompletado de paths con @
+  #completion: {
+    atIdx: number;
+    prefix: string;
+    matches: string[];
+    currentIdx: number;
+  } | null;
+
   constructor() {
     this.#buffer = "";
     this.#cursor = 0;
@@ -21,6 +30,7 @@ class LineEditor implements InputComponent<string> {
     this.#historyIndex = -1;
     this.#draftBuffer = "";
     this.#draftCursor = 0;
+    this.#completion = null;
   }
 
   /** Vuelve a modo edición tras un commit, conservando buffer y cursor.
@@ -121,45 +131,60 @@ class LineEditor implements InputComponent<string> {
   handleKey(key: Key): void {
     switch (key.type) {
       case "char":
+        this.#resetCompletion();
         this.#insertAtCursor(key.value);
         break;
       case "paste":
+        this.#resetCompletion();
         this.#insertAtCursor(key.text);
         break;
       case "newline":
+        this.#resetCompletion();
         this.#insertAtCursor("\n");
         break;
       case "backspace":
+        this.#resetCompletion();
         this.#backspaceAtCursor();
         break;
       case "delete":
+        this.#resetCompletion();
         this.#deleteAtCursor();
         break;
       case "enter":
+        this.#resetCompletion();
         this.#commit();
         break;
       case "left":
+        this.#resetCompletion();
         if (this.#cursor > 0) this.#cursor--;
         break;
       case "right":
+        this.#resetCompletion();
         if (this.#cursor < this.#buffer.length) this.#cursor++;
         break;
       case "home":
+        this.#resetCompletion();
         this.#cursor = this.#lineStart();
         break;
       case "end":
+        this.#resetCompletion();
         this.#cursor = this.#lineEnd();
         break;
       case "up":
+        this.#resetCompletion();
         this.#handleUp();
         break;
       case "down":
+        this.#resetCompletion();
         this.#handleDown();
         break;
       case "ctrl":
         this.#handleCtrl(key.key);
         break;
-      // escape, tab, unknown → ignorados
+      case "tab":
+        this.#handleTab();
+        break;
+      // escape, unknown → ignorados
     }
   }
 
@@ -310,6 +335,7 @@ class LineEditor implements InputComponent<string> {
   }
 
   #handleCtrl(key: string): void {
+    this.#resetCompletion();
     switch (key) {
       case "a":
         this.#cursor = this.#lineStart();
@@ -336,6 +362,40 @@ class LineEditor implements InputComponent<string> {
     if (from >= to) return;
     this.#buffer = this.#buffer.slice(0, from) + this.#buffer.slice(to);
     this.#cursor = from;
+  }
+
+  #handleTab(): void {
+    const result = findAtPathCompletion(this.#buffer, this.#cursor);
+    if (!result) {
+      this.#resetCompletion();
+      return;
+    }
+
+    // Si ya estabamos en un ciclo de completado, avanzar al siguiente match
+    if (this.#completion && this.#completion.matches === result.matches) {
+      this.#completion.currentIdx =
+        (this.#completion.currentIdx + 1) % result.matches.length;
+    } else {
+      this.#completion = {
+        atIdx: this.#buffer.lastIndexOf("@", this.#cursor - 1),
+        prefix: result.prefix,
+        matches: result.matches,
+        currentIdx: 0,
+      };
+    }
+
+    const selected = this.#completion.matches[this.#completion.currentIdx];
+    const atIdx = this.#completion.atIdx;
+
+    // Reemplazar desde @+1 hasta cursor con el match seleccionado
+    const before = this.#buffer.slice(0, atIdx + 1);
+    const after = this.#buffer.slice(this.#cursor);
+    this.#buffer = before + this.#completion.prefix + selected + after;
+    this.#cursor = atIdx + 1 + this.#completion.prefix.length + selected.length;
+  }
+
+  #resetCompletion(): void {
+    this.#completion = null;
   }
 
   // ---- API pública para comandos ----
