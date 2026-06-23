@@ -46,6 +46,8 @@ class DisplayAssistantText implements DisplayText {
   #buffer = "";
   #streaming = false;
   #parserState: ParserState;
+  /** Trackea si el último output fue un paragraphBreak para no duplicar. */
+  #lastWasBlank = false;
 
   constructor(screen: Screen, renderer?: MarkdownRenderer) {
     this.#screen = screen;
@@ -177,6 +179,7 @@ class DisplayAssistantText implements DisplayText {
     if (tableClean.includes("|") && !line.startsWith("> ")) {
       if (this.#isTableSeparator(line)) {
         // Separador sin header previo → línea suelta, párrafo
+        this.#lastWasBlank = false;
         this.#screen.printAbove(
           this.#renderer.text(this.#renderInline(line)),
         );
@@ -200,7 +203,10 @@ class DisplayAssistantText implements DisplayText {
     // ── línea vacía ─────────────────────────────────────────────
     if (line.trim() === "") {
       this.#flushBlockquote();
-      this.#screen.printAbove(this.#renderer.paragraphBreak());
+      if (!this.#lastWasBlank) {
+        this.#screen.printBlankLine();
+        this.#lastWasBlank = true;
+      }
       return;
     }
 
@@ -231,15 +237,23 @@ class DisplayAssistantText implements DisplayText {
     // ── heading ─────────────────────────────────────────────────
     const headingMatch = line.match(/^(#{1,6})\s+(.+)/);
     if (headingMatch) {
+      if (!this.#lastWasBlank) {
+        this.#screen.printBlankLine();
+      }
       const level = headingMatch[1].length;
       const text = this.#renderInline(headingMatch[2]);
       this.#screen.printAbove(this.#renderer.heading(text, level));
+      this.#screen.printBlankLine();
+      this.#lastWasBlank = true;
       return;
     }
 
-    // ── HR ──────────────────────────────────────────────────────
+    // ── HR → lo tratamos como una línea en blanco (sin raya full-width) ──
     if (/^(-{3,}|\*{3,})\s*$/.test(line.trim())) {
-      this.#screen.printAbove(this.#renderer.hr());
+      if (!this.#lastWasBlank) {
+        this.#screen.printBlankLine();
+        this.#lastWasBlank = true;
+      }
       return;
     }
 
@@ -270,6 +284,7 @@ class DisplayAssistantText implements DisplayText {
       }
 
       state.lastListDepth = depth;
+      this.#lastWasBlank = false;
       this.#screen.printAbove(this.#renderer.listItem(text, index, depth, checked));
       return;
     }
@@ -280,7 +295,22 @@ class DisplayAssistantText implements DisplayText {
       state.lastListDepth = 0;
     }
 
+    // ── línea que ARRANCA con **negrita** → título de sección, con espaciado.
+    //    El modelo escribe los títulos así ("**1. Entry point** (src/index.ts)")
+    //    en vez de usar ## headings. Renderizamos la línea normal (negrita + el
+    //    resto, ej. el path en cyan) pero con línea en blanco alrededor. ──
+    if (/^\*\*/.test(line.trim())) {
+      if (!this.#lastWasBlank) {
+        this.#screen.printBlankLine();
+      }
+      this.#screen.printAbove(this.#renderer.text(this.#renderInline(line)));
+      this.#screen.printBlankLine();
+      this.#lastWasBlank = true;
+      return;
+    }
+
     // ── párrafo ─────────────────────────────────────────────────
+    this.#lastWasBlank = false;
     this.#screen.printAbove(
       this.#renderer.text(this.#renderInline(line)),
     );
@@ -312,6 +342,7 @@ class DisplayAssistantText implements DisplayText {
       return;
     }
     const code = state.codeBlockLines.join("\n");
+    this.#lastWasBlank = false;
     this.#screen.printAbove(
       this.#renderer.codeBlock(code, state.codeBlockLang ?? undefined),
     );
@@ -327,6 +358,7 @@ class DisplayAssistantText implements DisplayText {
       .map((l) => this.#renderInline(l))
       .join("\n");
     // Cada línea como un blockquote individual
+    this.#lastWasBlank = false;
     for (const line of state.blockquoteLines) {
       this.#screen.printAbove(
         this.#renderer.blockquote(this.#renderInline(line)),
@@ -342,6 +374,7 @@ class DisplayAssistantText implements DisplayText {
       state.inTable = false;
       return;
     }
+    this.#lastWasBlank = false;
     this.#screen.printAbove(
       this.#renderer.table(state.tableHeaders, state.tableRows, state.tableAlignments),
     );
@@ -392,6 +425,7 @@ class DisplayAssistantText implements DisplayText {
     if (this.#pendingLine === null) return;
     const line = this.#pendingLine;
     this.#pendingLine = null;
+    this.#lastWasBlank = false;
     this.#screen.printAbove(
       this.#renderer.text(this.#renderInline(line)),
     );

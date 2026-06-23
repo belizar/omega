@@ -29,26 +29,163 @@ describe("EditTool", () => {
     expect(content).not.toContain("Line 2\n");
   });
 
-  it("should fail when text not found (0 occurrences)", async () => {
+  it("should fail when text not found (0 occurrences) with similar block hint", async () => {
+    // Archivo: "Line 1\nLine 2\nLine 3\nLine 4\nLine 5"
     const result = await editTool.execute({
       path: testFile,
       oldText: "This text does not exist",
       newText: "replacement",
     });
-    expect(result).toContain("Error");
-    expect(result).toContain("not found");
+    // Ahora findClosest SIEMPRE encuentra la línea más parecida (Dice difuso).
+    // "This text does not exist" vs "Line 1", "Line 2", etc. — score bajo (< 0.2)
+    // pero siempre muestra el contexto de la más cercana.
+    expect(result).toContain("Lo más parecido");
+    expect(result).toContain("puede no ser lo que buscás"); // score < 0.2
+    expect(result).toContain("línea");
   });
 
-  it("should fail on multiple occurrences (ambiguous)", async () => {
+  it("should show closest block with line numbers even for completely unrelated text", async () => {
+    // oldText que NO aparece como substring en el archivo
+    await writeFile(
+      testFile,
+      "  import { foo } from './bar';\n\n  export function baz() {\n    return foo();\n  }\n",
+      "utf-8",
+    );
+    const result = await editTool.execute({
+      path: testFile,
+      oldText: "completely different text\nthat does not exist\n",
+      newText: "replacement",
+    });
+    // findClosest rankea TODAS las líneas por Dice, siempre devuelve la más parecida.
+    // "completely different text" tiene score bajo contra cualquier línea, pero igual muestra.
+    expect(result).toContain("Lo más parecido");
+    expect(result).toContain("puede no ser lo que buscás"); // score < 0.2
+    expect(result).toContain("línea");
+  });
+
+  it("should show closest block when text partially matches a line", async () => {
+    // oldText cuya primera línea no vacía sea "export" → Dice alto contra "export function baz()"
+    await writeFile(
+      testFile,
+      "  import { foo } from './bar';\n\n  export function baz() {\n    return foo();\n  }\n",
+      "utf-8",
+    );
+    const result = await editTool.execute({
+      path: testFile,
+      oldText: "export\n  return foo();\n",
+      newText: "export\n  return qux();\n",
+    });
+    // "export" tiene Dice alto con "export function baz() {" (muchos bigramas en común)
+    // → score >= 0.2 → NO muestra "puede no ser lo que buscás"
+    expect(result).toContain("Lo más parecido");
+    expect(result).toContain("línea");
+    expect(result).not.toContain("puede no ser lo que buscás");
+  });
+
+  // ── CAMBIO 1 tests ──
+
+  it("should fail on multiple occurrences showing line numbers", async () => {
     const result = await editTool.execute({
       path: testFile,
       oldText: "Line",
       newText: "Row",
     });
-    expect(result).toContain("Error");
-    expect(result).toContain("ambiguous");
-    expect(result).toContain("5 times");
+    // Nuevo formato: "El texto aparece 5 veces... es ambiguo. Ocurrencias en líneas: 1, 2, 3, 4, 5"
+    expect(result).toContain("ambiguo");
+    expect(result).toContain("5 veces");
+    expect(result).toContain("líneas: 1, 2, 3, 4, 5");
   });
+
+  it("should fail on empty oldText showing ambiguity", async () => {
+    const result = await editTool.execute({
+      path: testFile,
+      oldText: "",
+      newText: "anything",
+    });
+    // Empty string aparece muchas veces → mensaje de >1 ocurrencias
+    expect(result).toContain("ambiguo");
+    expect(result).toContain("33 veces");
+  });
+
+  // ── CAMBIO 2: flexible whitespace match ──
+
+  it("should match oldText with wrong indentation via flexible fallback", async () => {
+    await writeFile(testFile, "    indented line 1\n    indented line 2\n", "utf-8");
+    // Modelo escribe oldText SIN indentación (o con menos)
+    const result = await editTool.execute({
+      path: testFile,
+      oldText: "indented line 1\nindented line 2",
+      newText: "fixed line 1\nfixed line 2",
+    });
+    expect(result).toContain("Editado");
+    expect(result).toContain("match flexible");
+
+    const content = await readFile(testFile, "utf-8");
+    // Debe quedar con la indentación correcta (4 espacios)
+    expect(content).toBe("    fixed line 1\n    fixed line 2");
+  });
+
+  it("should match oldText with extra indentation via flexible fallback", async () => {
+    await writeFile(testFile, "  small indent\n  second line\n", "utf-8");
+    // Modelo escribe oldText con MUCHA indentación
+    const result = await editTool.execute({
+      path: testFile,
+      oldText: "      small indent\n      second line",
+      newText: "      fixed\n      again",
+    });
+    expect(result).toContain("Editado");
+    expect(result).toContain("match flexible");
+
+    const content = await readFile(testFile, "utf-8");
+    // Debe quedar con 2 espacios (la indentación real del archivo)
+    // delta = 2 - 6 = -4, newText tenía 6 espacios → se le quitan 4 → 2 espacios
+    expect(content).toBe("  fixed\n  again");
+  });
+
+  it("should NOT flexible-match when multiple blocks have same trimmed content", async () => {
+    // oldText multilínea SIN indentación → exact match da 0 (no es substring)
+    // pero flexible match encuentra 2 bloques → cae a CAMBIO 1
+    await writeFile(testFile, "  same content\n  same content\n  same content\n", "utf-8");
+    const result = await editTool.execute({
+      path: testFile,
+      oldText: "same content\nsame content",
+      newText: "changed\nchanged",
+    });
+    // >1 match flexible → cae al CAMBIO 1 (fallo que enseña)
+    // findSimilarBlock encuentra "same content" en la línea 1
+    expect(result).toContain("Lo más parecido");
+  });
+
+  // ── CAMBIO 4: replaceAll ──
+
+  it("should replace all occurrences with replaceAll: true", async () => {
+    await writeFile(testFile, "TODO: fix\nblah\nTODO: fix\n", "utf-8");
+    const result = await editTool.execute({
+      path: testFile,
+      oldText: "TODO: fix",
+      newText: "DONE",
+      replaceAll: true,
+    });
+    expect(result).toContain("Editado");
+    expect(result).toContain("2 ocurrencias reemplazadas");
+
+    const content = await readFile(testFile, "utf-8");
+    expect(content).toBe("DONE\nblah\nDONE\n");
+  });
+
+  it("should fail on multiple occurrences without replaceAll", async () => {
+    await writeFile(testFile, "dup\nmiddle\ndup\n", "utf-8");
+    const result = await editTool.execute({
+      path: testFile,
+      oldText: "dup",
+      newText: "unique",
+    });
+    expect(result).toContain("ambiguo");
+    expect(result).toContain("2 veces");
+    expect(result).toContain("replaceAll: true");
+  });
+
+  // ── Tests existentes que deben seguir pasando ──
 
   it("should fail on non-existent file", async () => {
     const result = await editTool.execute({
@@ -173,17 +310,6 @@ describe("EditTool", () => {
     expect(result).toContain("bloqueado");
   });
 
-  it("should fail on empty oldText", async () => {
-    const result = await editTool.execute({
-      path: testFile,
-      oldText: "",
-      newText: "anything",
-    });
-    // Empty string appears many times (between every char), so ambiguous
-    expect(result).toContain("Error");
-    expect(result).toContain("ambiguous");
-  });
-
   it("should validate that all required fields are present", async () => {
     const result = await editTool.execute({ path: testFile, oldText: "x" } as unknown as EditInput);
     expect(result).toContain("Error");
@@ -243,5 +369,60 @@ describe("EditTool", () => {
     expect(result).toContain("Editado");
     const content = await readFile(testFile, "utf-8");
     expect(content).toContain("and replace me");
+  });
+
+  // ── CAMBIO 5: findClosest difuso ──
+
+  it("should show closest line for typo-like oldText (fuzzy match)", async () => {
+    // oldText con una línea parecida pero no exacta: "const z = 99;" vs "const x = 1;"
+    await writeFile(testFile, "const x = 1;\nlet y = 2;\n", "utf-8");
+    const result = await editTool.execute({
+      path: testFile,
+      oldText: "const z = 99;",
+      newText: "const z = 99;",
+    });
+    // Debe mostrar "const x = 1;" como la más parecida con su número de línea
+    expect(result).toContain("Lo más parecido");
+    expect(result).toContain("const x = 1;");
+    expect(result).toContain("← más parecida");
+    expect(result).toContain("línea"); // incluye número de línea
+  });
+
+  it("should handle empty file gracefully", async () => {
+    await writeFile(testFile, "", "utf-8");
+    const result = await editTool.execute({
+      path: testFile,
+      oldText: "anything",
+      newText: "else",
+    });
+    // Archivo vacío → mensaje razonable, no crash
+    expect(result).toContain("empty");
+  });
+
+  it("should always return a candidate when file has lines (low score)", async () => {
+    // oldText con needle que no comparte bigramas con las líneas del archivo
+    await writeFile(testFile, "alpha\nbeta\ngamma\n", "utf-8");
+    const result = await editTool.execute({
+      path: testFile,
+      oldText: "\n\nxyzzz\n",
+      newText: "replaced",
+    });
+    // needle = "xyzzz", score 0 contra "alpha"/"beta"/"gamma" → < 0.2
+    expect(result).toContain("Lo más parecido");
+    expect(result).toContain("puede no ser lo que buscás");
+  });
+
+  it("should find existing line with high score (exact trim match)", async () => {
+    // Caso donde findClosest debe rankear muy alto una línea existente
+    await writeFile(testFile, "import { foo } from './bar';\nexport default foo;\n", "utf-8");
+    const result = await editTool.execute({
+      path: testFile,
+      oldText: "import { foo } from './bar';",
+      newText: "import { bar } from './foo';",
+    });
+    // 1 ocurrencia exacta → edita normalmente, no debería pasar por findClosest
+    expect(result).toContain("Editado");
+    const content = await readFile(testFile, "utf-8");
+    expect(content).toContain("import { bar } from './foo';");
   });
 });

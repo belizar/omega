@@ -89,32 +89,38 @@ ${fewShot.map((o) => `  "${o.pattern}" → el usuario lo marcó ${o.verdict.toUp
 `;
     }
 
-    const systemPrompt = `Eres un clasificador de seguridad para comandos bash. Evalúa el comando y responde EXACTAMENTE en este formato:
+    const systemPrompt = `Eres un clasificador de seguridad para comandos bash en un entorno de DESARROLLO.
+El agente trabaja en un proyecto de código y tiene que poder hacer su trabajo
+normal sin fricción. Bloquea SOLO lo que cause daño IRREVERSIBLE o robe datos.
 
+Responde EXACTAMENTE:
 SAFE
-<razón breve en una línea>
-
+<razón breve>
 o
-
 DANGEROUS
-<razón breve en una línea>
+<razón breve>
 
-SAFE significa: el comando es solo lectura, no modifica el filesystem, no accede a archivos sensibles, no usa red, no ejecuta código descargado, y no puede causar daño.
+DANGEROUS = solo daño irreversible o robo/ejecución de código no confiable:
+- Pérdida de datos: rm -rf, borrar muchos archivos, git reset --hard,
+  git push --force, git clean -fdx, dd, mkfs, sobrescribir/truncar archivos
+  importantes, dropear bases de datos.
+- Exfiltración: leer .env / ~/.ssh / credenciales Y mandarlas por red.
+- Código no confiable: curl|bash, wget|sh, eval de contenido remoto.
+- Daño al sistema: escribir en /etc, sudo, config global, matar procesos del sistema.
 
-DANGEROUS significa: el comando modifica archivos, instala dependencias, accede a archivos sensibles (.env, ~/.ssh, /etc), usa red, ejecuta código externo, hace push/pull de git, cambia configuración del sistema, o cualquier operación con efectos secundarios permanentes.
+SAFE = TODO lo demás, incluido el flujo de desarrollo normal:
+- git add/commit/push/pull/checkout/switch/branch/merge/rebase/stash/fetch
+  (cualquier git que NO sea --force, reset --hard, ni clean -fdx).
+- mkdir, touch, mv, cp dentro del proyecto, editar archivos.
+- npm/yarn install/add/run/test/build, tsc, vitest.
+- curl/wget para LEER una API o URL (no piped a shell, sin mandar secretos).
+- ls, cat, grep, find, echo, pwd, etc.
 
-Reglas específicas:
-- npm test, npm run build, npm run dev, tsc --noEmit, vitest → SAFE (son solo build/test, no instalan ni publican)
-- npm install, npm add, npm update, npm publish → DANGEROUS
-- git status, git diff, git log, git branch, git stash list → SAFE
-- git add, git commit, git push, git pull, git merge, git rebase, git stash → DANGEROUS
-- rm, mv, cp hacia afuera del proyecto, chmod, chown → DANGEROUS
-- curl, wget, piping a bash → DANGEROUS
-- echo, cat, head, tail, grep, find, ls, pwd, date, wc, sort, uniq, which, type, dirname, basename, true, false → SAFE
-- mkdir → DANGEROUS (crea directorios)
-- node -e, node -p → evaluar el código: si es solo computación sin fs/network, SAFE; si usa require, fs, child_process, http → DANGEROUS
+Principio: modificar archivos del proyecto, usar git normalmente, instalar deps y
+leer de la red NO son peligrosos — son el trabajo diario. Peligroso es lo que no
+se puede deshacer, o lo que roba/ejecuta cosas.
 
-Responde solo con el formato indicado. Nada más.`;
+Responde solo con el formato. Nada más.`;
 
     const body = JSON.stringify({
       model: this.#model,

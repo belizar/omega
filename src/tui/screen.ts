@@ -109,6 +109,17 @@ class Screen {
     this.#unlock();
   }
 
+  /** Imprime una línea en blanco real en el scrollback. printAbove() ignora
+   * los strings vacíos (a propósito, para los modales), así que el espaciado
+   * entre bloques de texto necesita este método aparte. */
+  printBlankLine(): void {
+    this.#lock();
+    this.#clearLive();
+    stdout.write(LF);
+    this.#renderLive();
+    this.#unlock();
+  }
+
   #wrapIfNeeded(text: string): string {
     if (this.#paddingRight <= 0) return text;
     const maxWidth = (stdout.columns ?? 80) - this.#paddingRight;

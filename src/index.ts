@@ -72,7 +72,16 @@ Si el clasificador bloquea un comando, la tool bash te devolverá un mensaje
 Estilo:
 - Respondé siempre en español.
 - Sé conciso: explicá brevemente qué hiciste y por qué, sin resúmenes largos.
-- Texto plano. Sin emojis ni formato decorativo.`;
+- Usá estructura markdown para que se lea bien en la terminal:
+  - Títulos de sección con ## (o ** para subtítulos en negrita).
+  - Una línea EN BLANCO entre párrafos, y antes y después de títulos, listas y
+    bloques de código. Esto es lo que genera el espaciado.
+  - Listas con "- " para los puntos.
+  - \`código inline\` para paths, comandos y nombres de archivo.
+  - Bloques de código con \`\`\` cuando muestres código o salida.
+  - Cada sección con su título en una línea \`##\` (NO como item de lista
+    numerada tipo "1. Título"), así queda separada y resaltada.
+- La estructura es para legibilidad, no decoración: seguí conciso, sin relleno.`;
 
 function loadProjectContext(): string {
   const path = "AGENT.md";
@@ -181,6 +190,7 @@ const main = async () => {
     const echo = lineEditor.renderEcho();
     lineEditor.reset();
     screen.printAbove(`\n${echo}`);
+    screen.printAbove("");
 
     if (await dispatchCommand(input, ctx)) {
       continue;

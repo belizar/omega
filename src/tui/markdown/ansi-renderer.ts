@@ -27,7 +27,7 @@ class AnsiRenderer implements MarkdownRenderer {
   }
 
   codespan(text: string): string {
-    return dim(text);
+    return cyan(text);
   }
 
   codeBlock(code: string, language?: string): string {
@@ -99,7 +99,10 @@ class AnsiRenderer implements MarkdownRenderer {
   }
 
   hr(): string {
-    return dim("─".repeat((columns ?? 80) - 2));
+    // No dibujamos divisores full-width (quedaban feos). Un --- del modelo se
+    // vuelve simplemente una línea en blanco; las secciones ya se separan con
+    // los títulos + el espaciado.
+    return "";
   }
 
   link(text: string, url: string): string {
