@@ -307,6 +307,14 @@ class Screen {
     if (!this.#live) return;
 
     this.#live.handleKey(key);
+
+    // Drenar output pendiente del componente (ej. sugerencias de autocompletado)
+    // hacia el scrollback, ANTES de redibujar la región viva.
+    if (this.#live.takeOutput) {
+      const out = this.#live.takeOutput();
+      if (out) this.printAbove(out);
+    }
+
     this.#redraw();
 
     if (this.#live.isDone()) {

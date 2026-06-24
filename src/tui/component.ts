@@ -11,6 +11,9 @@ interface InputComponent<T> {
   isDone(): boolean;
   getResult(): T;
   getCursorPosition?(): CursorPosition;
+  /** Contenido pendiente para mostrar ARRIBA del editor (scrollback).
+   * El Screen lo drena después de handleKey y lo rutea por printAbove. */
+  takeOutput?(): string | null;
 }
 
 export { CursorPosition, InputComponent };

@@ -1,3 +1,5 @@
+import { readdirSync, statSync } from "fs";
+import { resolve, join } from "path";
 import { stdout } from "process";
 import { CursorPosition, InputComponent } from "../component.js";
 import { Key } from "../decodeKey.js";
@@ -336,6 +338,66 @@ class LineEditor implements InputComponent<string> {
     if (from >= to) return;
     this.#buffer = this.#buffer.slice(0, from) + this.#buffer.slice(to);
     this.#cursor = from;
+  }
+
+  // ---- API pública para file picker ----
+
+  /** Reemplaza un rango del buffer. Útil para que el Prompt inserte
+   * el path elegido en el file picker. */
+  replaceRange(from: number, to: number, text: string): void {
+    this.#buffer = this.#buffer.slice(0, from) + text + this.#buffer.slice(to);
+    this.#cursor = from + text.length;
+  }
+
+  /** Información de la mención @ activa (la que está justo antes del cursor).
+   * Devuelve null si el cursor no está sobre una mención. */
+  getAtMention(): { start: number; text: string } | null {
+    const atIdx = this.#buffer.lastIndexOf("@", this.#cursor - 1);
+    if (atIdx === -1) return null;
+    // No es mención si el @ está pegado a una palabra (ej: foo@bar)
+    if (atIdx > 0 && /\w/.test(this.#buffer[atIdx - 1])) return null;
+    return { start: atIdx, text: this.#buffer.slice(atIdx + 1, this.#cursor) };
+  }
+
+  /** Lista archivos en el directorio base del prefijo dado. */
+  static listFiles(partial: string): string[] {
+    const lastSlash = partial.lastIndexOf("/");
+    let dir: string;
+
+    try {
+      if (lastSlash === -1) {
+        dir = partial === "" ? resolve(".") : ".";
+        const prefix = partial;
+        const entries = readdirSync(dir);
+        return entries
+          .filter((e) => e.startsWith(prefix) && e !== "." && e !== "..")
+          .map((e) => {
+            try { return statSync(join(dir, e)).isDirectory() ? e + "/" : e; }
+            catch { return e; }
+          });
+      } else {
+        dir = resolve(partial.slice(0, lastSlash));
+        if (partial.lastIndexOf("/") !== partial.length - 1) {
+          const prefix = partial.slice(lastSlash + 1);
+          const entries = readdirSync(dir);
+          return entries
+            .filter((e) => e.startsWith(prefix) && e !== "." && e !== "..")
+            .map((e) => {
+              try { return statSync(join(dir, e)).isDirectory() ? e + "/" : e; }
+              catch { return e; }
+            });
+        } else {
+          return readdirSync(dir)
+            .filter((e) => e !== "." && e !== "..")
+            .map((e) => {
+              try { return statSync(join(dir, e)).isDirectory() ? e + "/" : e; }
+              catch { return e; }
+            });
+        }
+      }
+    } catch {
+      return [];
+    }
   }
 
   // ---- API pública para comandos ----
