@@ -29,6 +29,51 @@ const HARDBLOCK_PATTERNS = [
   /\b(shutdown|reboot|halt|poweroff)\b/i, // apagar/reiniciar la máquina
 ];
 
+// Whitelist determinista: comandos inofensivos que skipean el clasificador.
+// Solo se incluyen operaciones de solo-lectura o no destructivas que se usan
+// constantemente en desarrollo. El guardarraíl HARDBLOCK sigue activo siempre.
+const SAFE_PATTERNS = [
+  // Exploración / info
+  /^ls\b/, /^cat\s/, /^find\s/, /^pwd\b/, /^which\s/, /^type\s/, /^file\s/,
+  /^stat\s/, /^du\s/, /^df\b/, /^realpath\s/, /^readlink\s/, /^dirname\s/,
+  /^basename\s/,
+  // Procesamiento de texto (solo-lectura)
+  /^grep\s/, /^head\s/, /^tail\s/, /^sort\s/, /^wc\s/, /^echo\s/,
+  /^cut\s/, /^awk\s/, /^uniq\s/, /^comm\s/, /^diff\s/, /^tr\s/,
+  /^sed\s+(?!.*-i)/,  // sed sin -i (in-place)
+  // Utilidades
+  /^date\b/, /^seq\s/, /^printf\s/, /^true\b/, /^false\b/, /^sleep\s/,
+  /^env\b/, /^printenv\b/,
+  // Git (solo-lectura o no destructivo)
+  /^git\s+status\b/, /^git\s+log\b/, /^git\s+diff\b/, /^git\s+stash\b/,
+  /^git\s+branch\b/, /^git\s+remote\b/, /^git\s+show\b/, /^git\s+blame\b/,
+  /^git\s+tag\b/, /^git\s+ls-/, /^git\s+rev-/, /^git\s+reflog\b/,
+  /^git\s+config\s+--get\b/,
+  // npm/node (package management normal, no destructivo del sistema)
+  /^npm\s+(run|test|exec|ls|list|view|info|outdated|audit|find-dupes)\b/,
+  /^npm\s+install\b/, /^npm\s+ci\b/, /^npm\s+update\b/,
+  /^npx\s/, /^tsc\s/, /^vitest\s/,
+  /^node\s+(--version|--help|-e|-v)\b/,
+  // Operaciones de filesystem seguras (dentro del proyecto)
+  /^mkdir\s/, /^touch\s/, /^cp\s/, /^mv\s/, /^cd\s/, /^exit\b/,
+  // Archivos comprimidos (solo-lectura)
+  /^tar\s+(-t|--list)/, /^unzip\s+(-l|--list)/, /^zipinfo\s/,
+  // Lenguajes (solo-lectura)
+  /^pip\s+(list|show|freeze|check)\b/,
+  /^python\s+(--version|-c)\b/,
+  // gh CLI (solo-lectura)
+  /^gh\s+issue\s+(list|view|status)\b/,
+  /^gh\s+pr\s+(list|view|status|checks|diff)\b/,
+  /^gh\s+repo\s+(view|list)\b/,
+  /^gh\s+auth\s+status\b/,
+  /^gh\s+run\s+(list|view|watch)\b/,
+  /^gh\s+search\s/,
+  /^gh\s+api\s+(get|GET)\b/,
+  /^gh\b\s*$/,
+  // Hashes / checksums
+  /^shasum\b/, /^sha256sum\b/, /^md5sum\b/, /^cksum\b/,
+];
+
 export class BashTool extends Tool<BashInput, string> {
   #classifier?: CommandClassifier;
 
@@ -88,8 +133,12 @@ export class BashTool extends Tool<BashInput, string> {
       }
 
       // ── Clasificación ──────────────────────────────────────────
-      if (this.#classifier && !force) {
-        const classification = await this.#classifier.classify(command);
+      // Si el comando es claramente inofensivo (whitelist), skipea el
+      // clasificador para reducir latencia y falsos positivos.
+      const needsClassifier = this.#classifier && !force && !this.isSafe(command);
+
+      if (needsClassifier) {
+        const classification = await this.#classifier!.classify(command);
 
         if (classification.verdict === "dangerous") {
           const sourceTag = classification.source === "override"
@@ -149,6 +198,11 @@ export class BashTool extends Tool<BashInput, string> {
       logger.error("Bash command failed", { command, error: errorMsg });
       return errorMsg;
     }
+  }
+
+  /** Determine si el comando es claramente inofensivo y puede skipear el clasificador. */
+  private isSafe(command: string): boolean {
+    return SAFE_PATTERNS.some((p) => p.test(command));
   }
 
   private isHardblocked(command: string): boolean {

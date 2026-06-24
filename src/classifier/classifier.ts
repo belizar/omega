@@ -34,6 +34,7 @@ export class CommandClassifier {
   #model: string;
   #baseUrl: string;
   #learnEnabled: boolean;
+  #consecutiveFailures = 0;
 
   constructor(
     overrides: OverrideManager,
@@ -142,7 +143,7 @@ Responde solo con el formato. Nada más.`;
           "Content-Type": "application/json",
         },
         body,
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(10_000),
       });
 
       if (!resp.ok) {
@@ -170,14 +171,25 @@ Responde solo con el formato. Nada más.`;
       const verdict: Classification =
         verdictLine === "safe" ? "safe" : "dangerous";
 
+      // Clasificación exitosa → resetea el contador de fallos
+      this.#consecutiveFailures = 0;
+
       return { verdict, reason: reasonLine, source: "classifier" };
     } catch (err: unknown) {
-      // Si falla el clasificador, pecamos de seguros: todo DANGEROUS
+      // Si el clasificador falla, degradamos a SAFE después de N fallos
+      // consecutivos. Mientras tanto, marcamos DANGEROUS por seguridad.
+      this.#consecutiveFailures++;
       const msg = err instanceof Error ? err.message : String(err);
-      logger.warn("Classifier: LLM call failed, defaulting to DANGEROUS", { command, error: msg });
+      const fallbackVerdict = this.#consecutiveFailures >= 3
+        ? ("safe" as Classification)
+        : ("dangerous" as Classification);
+      logger.warn(
+        `Classifier: LLM call failed (${this.#consecutiveFailures}/3 consecutivas), defaulting to ${fallbackVerdict.toUpperCase()}`,
+        { command, error: msg },
+      );
       return {
-        verdict: "dangerous",
-        reason: `Error del clasificador: ${msg}. Asumiendo DANGEROUS.`,
+        verdict: fallbackVerdict,
+        reason: `Error del clasificador: ${msg}. Tras ${this.#consecutiveFailures} fallos consecutivos, asumiendo ${fallbackVerdict.toUpperCase()}.`,
         source: "classifier",
       };
     }

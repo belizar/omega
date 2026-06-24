@@ -24,10 +24,11 @@ describe("BashTool with classifier", () => {
 
     const tool = new BashTool({ classifier });
 
-    const result = await tool.execute({ command: "echo hello" });
+    // uso un comando NO en la whitelist para que pase por el clasificador
+    const result = await tool.execute({ command: "git add test.ts" });
 
-    expect(result).toContain("hello");
-    expect(mockClassify).toHaveBeenCalledWith("echo hello");
+    expect(result).not.toContain("BLOQUEADO");
+    expect(mockClassify).toHaveBeenCalledWith("git add test.ts");
   });
 
   it("should return BLOQUEADO message when classifier returns dangerous", async () => {
