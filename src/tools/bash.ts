@@ -14,7 +14,7 @@ export type BashToolOptions = {
   classifier?: CommandClassifier;
 };
 
-const TIMEOUT_MS = 30_000; // matar comandos colgados a los 30s
+const TIMEOUT_MS = 60_000; // matar comandos colgados a los 60s
 const MAX_BUFFER = 10 * 1024 * 1024; // 10MB de stdout/stderr
 
 // Guardarraíl determinista: patrones que nunca se ejecutan sin importar

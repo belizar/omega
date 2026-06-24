@@ -23,7 +23,7 @@ El entry point es `src/index.ts`.
 ANTHROPIC_API_KEY=sk-ant-...       # requerida
 OPENROUTER_API_KEY=sk-or-...       # opcional, usa OpenRouter si está presente
 MODEL=claude-haiku-4-5-20251001    # modelo (formato openrouter: anthropic/claude-...)
-MAX_TOKENS=1024
+MAX_TOKENS=4096
 MAX_STEPS=15
 MAX_CONTEXT_MESSAGES=50
 MAX_CONTEXT_TOKENS=100000

@@ -31,7 +31,7 @@ describe("Config", () => {
 
     expect(config.openrouterApiKey).toBe("test-key");
     expect(config.model).toBe("claude-haiku-4-5-20251001");
-    expect(config.maxTokens).toBe(1024);
+    expect(config.maxTokens).toBe(4096);
     expect(config.maxSteps).toBe(15);
     expect(config.nodeEnv).toBe("development");
   });

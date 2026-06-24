@@ -60,6 +60,12 @@ class Runner {
     totalCost: number;
     startTime: number;
   };
+  #stepUsage: Array<{
+    inputTokens: number;
+    outputTokens: number;
+    cachedTokens: number;
+    cost: number;
+  }>;
 
   constructor({
     llmProvider,
@@ -83,6 +89,7 @@ class Runner {
       totalCost: 0,
       startTime: Date.now(),
     };
+    this.#stepUsage = [];
   }
 
   /** Expone si el runner fue interrumpido (SIGINT) — el caller lo usa para
@@ -160,6 +167,12 @@ class Runner {
           this.#metrics.totalInputTokens += event.usage.input_tokens;
           this.#metrics.totalOutputTokens += event.usage.output_tokens;
           this.#metrics.totalCost += event.cost;
+          this.#stepUsage.push({
+            inputTokens: event.usage.input_tokens,
+            outputTokens: event.usage.output_tokens,
+            cachedTokens: event.usage.cached_tokens ?? 0,
+            cost: event.cost,
+          });
         }
       }
 
@@ -176,6 +189,12 @@ class Runner {
       this.#metrics.totalInputTokens += data.usage.input_tokens;
       this.#metrics.totalOutputTokens += data.usage.output_tokens;
       this.#metrics.totalCost += data.cost;
+      this.#stepUsage.push({
+        inputTokens: data.usage.input_tokens,
+        outputTokens: data.usage.output_tokens,
+        cachedTokens: data.usage.cached_tokens ?? 0,
+        cost: data.cost,
+      });
 
       for (const block of data.content) {
         if (block.type === "text") {
@@ -347,11 +366,35 @@ class Runner {
         yield { type: "state", message: toolMessage };
       }
 
+      // ── Auto-continuación ────────────────────────────────────
+      // Si el LLM se corta por max_tokens, mandamos un "Continue"
+      // automático (hasta 2 veces) en vez de frenar.
+      const MAX_AUTO_CONTINUES = 2;
+      let continueCount = 0;
+
       if (state.stopReason === "max_tokens") {
-        logger.warn("Respuesta cortada por max_tokens");
+        continueCount++;
+        if (continueCount <= MAX_AUTO_CONTINUES) {
+          logger.info(
+            `Auto-continuing after max_tokens (${continueCount}/${MAX_AUTO_CONTINUES})`,
+          );
+          yield { type: "text", text: "⏳ Continuando..." };
+          workingContext.push({
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: "Continue from where you left off.",
+              },
+            ],
+          });
+          continue; // no consume step, vuelve al loop
+        }
+
+        logger.warn("Max auto-continues reached");
         yield {
           type: "text",
-          text: "⚠ La respuesta se cortó (max_tokens). Subí el límite o pedí algo más chico.",
+          text: "⚠ Límite de auto-continuaciones alcanzado. La respuesta quedó incompleta.",
         };
         break;
       }
@@ -382,6 +425,15 @@ class Runner {
     };
   }
 
+  getStepUsage(): readonly {
+    inputTokens: number;
+    outputTokens: number;
+    cachedTokens: number;
+    cost: number;
+  }[] {
+    return this.#stepUsage;
+  }
+
   resetMetrics() {
     this.#metrics = {
       totalInputTokens: 0,
@@ -390,6 +442,7 @@ class Runner {
       totalCost: 0,
       startTime: Date.now(),
     };
+    this.#stepUsage = [];
   }
 }
 

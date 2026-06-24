@@ -15,6 +15,8 @@ interface Config {
   classifierModel: string;
   /** Habilita el aprendizaje automático de overrides (default: false) */
   classifierLearn: boolean;
+  /** Líneas sobre las que read devuelve outline en vez del archivo entero */
+  outlineThreshold: number;
 }
 
 function validateEnv(): Config {
@@ -27,7 +29,7 @@ function validateEnv(): Config {
   }
 
   const model = process.env.MODEL || "claude-haiku-4-5-20251001";
-  const maxTokens = parseInt(process.env.MAX_TOKENS || "1024", 10);
+  const maxTokens = parseInt(process.env.MAX_TOKENS || "4096", 10);
   const maxSteps = parseInt(process.env.MAX_STEPS || "15", 10);
   const maxContextMessages = parseInt(process.env.MAX_CONTEXT_MESSAGES || "50", 10);
   const maxContextTokens = parseInt(process.env.MAX_CONTEXT_TOKENS || "100000", 10);
@@ -36,6 +38,7 @@ function validateEnv(): Config {
   const classifierMode = (process.env.CLASSIFIER_MODE || "on") as "on" | "off";
   const classifierModel = process.env.CLASSIFIER_MODEL || "anthropic/claude-haiku-4-5";
   const classifierLearn = process.env.CLASSIFIER_LEARN === "true";
+  const outlineThreshold = parseInt(process.env.OUTLINE_THRESHOLD || "200", 10);
 
   const config: Config = {
     openrouterApiKey,
@@ -49,6 +52,7 @@ function validateEnv(): Config {
     classifierMode,
     classifierModel,
     classifierLearn,
+    outlineThreshold,
   };
 
   logger.info("Config loaded successfully", {
