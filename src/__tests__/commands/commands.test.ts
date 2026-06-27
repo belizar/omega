@@ -11,6 +11,7 @@ import { AgentConfig } from "../../agent-config.js";
 import { Runner } from "../../runner.js";
 import { LLMProvider } from "../../providers/llm-provider.js";
 import { BashTool } from "../../tools/bash.js";
+import { ToolRegistry } from "../../tools/tool-registry.js";
 
 // ── Mock mínimos ─────────────────────────────────────────────────────────────
 
@@ -51,18 +52,20 @@ class MockLLMProvider extends LLMProvider {
 
 function createMockContext(): Context {
   const session = new Session();
+  const registry = new ToolRegistry();
+  registry.registerLocal(new BashTool());
   const agentConfig = new AgentConfig({
     systemPrompt: "test",
     model: "test-model",
     maxTokens: 512,
+    toolRegistry: registry,
   });
-  agentConfig.addTool(new BashTool());
   const runner = new Runner({
     llmProvider: new MockLLMProvider(),
     agentConfig,
   });
   const screen = new MockScreen() as unknown as Context["screen"];
-  return new Context({ session, agentConfig, runner, screen });
+  return new Context({ session, agentConfig, runner, screen, toolRegistry: registry });
 }
 
 // ── ClearCommand ─────────────────────────────────────────────────────────────

@@ -15,7 +15,7 @@ type Block = TextBlock | ToolUseBlock;
 type LLMResponse = {
   content: Block[];
   stop_reason: "end_turn" | "tool_use" | "max_tokens";
-  usage: { input_tokens: number; output_tokens: number };
+  usage: { input_tokens: number; output_tokens: number; cached_tokens?: number };
   cost: number; // USD
 };
 
@@ -26,7 +26,7 @@ type StreamEvent =
   | {
       type: "done";
       stop_reason: "end_turn" | "tool_use" | "max_tokens";
-      usage: { input_tokens: number; output_tokens: number };
+      usage: { input_tokens: number; output_tokens: number; cached_tokens?: number };
       cost: number;
     };
 

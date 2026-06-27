@@ -4,6 +4,7 @@ import { AgentConfig } from "../agent-config.js";
 import { LLMProvider, LLMResponse, StreamEvent } from "../providers/llm-provider.js";
 import { BashTool } from "../tools/bash.js";
 import { ReadTool } from "../tools/read.js";
+import { ToolRegistry } from "../tools/tool-registry.js";
 import { Message } from "../message.js";
 
 // ── Mock LLM Provider ────────────────────────────────────────────────────────
@@ -48,14 +49,14 @@ class MockLLMProvider extends LLMProvider {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function mockAgent(): AgentConfig {
-  const agent = new AgentConfig({
+  const registry = new ToolRegistry();
+  registry.registerLocal(new BashTool()).registerLocal(new ReadTool(200));
+  return new AgentConfig({
     systemPrompt: "Test",
     model: "claude-haiku-4-5-20251001",
     maxTokens: 1024,
+    toolRegistry: registry,
   });
-  agent.addTool(new BashTool());
-  agent.addTool(new ReadTool());
-  return agent;
 }
 
 function textResponse(text: string): LLMResponse {

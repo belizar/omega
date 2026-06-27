@@ -1,31 +1,34 @@
 import { Tool } from "./tools/tool.js";
+import { ToolRegistry } from "./tools/tool-registry.js";
 
 type AgentConfigConstructorProps = {
   systemPrompt: string;
   model: string;
   maxTokens: number;
+  toolRegistry: ToolRegistry;
 };
 
 class AgentConfig {
   #systemPrompt: string;
   #model: string;
   #max_tokens: number;
-  #tools: Record<string, Tool<unknown, unknown>>;
+  #registry: ToolRegistry;
 
-  constructor({ model, maxTokens, systemPrompt }: AgentConfigConstructorProps) {
+  constructor({ model, maxTokens, systemPrompt, toolRegistry }: AgentConfigConstructorProps) {
     this.#systemPrompt = systemPrompt;
     this.#model = model;
     this.#max_tokens = maxTokens;
-    this.#tools = {};
+    this.#registry = toolRegistry;
   }
 
+  /** Agrega una tool local (siempre visible para el LLM). */
   addTool(tool: Tool<unknown, unknown>): AgentConfig {
-    this.#tools = { ...this.#tools, [tool.name]: tool };
+    this.#registry.registerLocal(tool);
     return this;
   }
 
   getTool(name: string) {
-    return this.#tools[name];
+    return this.#registry.get(name);
   }
 
   get systemPrompt() {
@@ -40,15 +43,16 @@ class AgentConfig {
     return this.#max_tokens;
   }
 
+  /** Tools activas para mandar al LLM en cada request. */
   tools() {
-    return this.#tools;
+    return this.#registry.getActiveTools();
   }
 
   toJSON() {
     return {
       model: this.#model,
       max_tokens: this.#max_tokens,
-      tools: Object.values(this.#tools).map((t) => t.toJSON()),
+      tools: Object.values(this.#registry.getActiveTools()).map((t) => t.toJSON()),
     };
   }
 }

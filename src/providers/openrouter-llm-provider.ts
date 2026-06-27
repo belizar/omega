@@ -232,6 +232,7 @@ export function parseResponse(
     usage: {
       input_tokens: usageData.prompt_tokens,
       output_tokens: usageData.completion_tokens,
+      cached_tokens: (usageData["prompt_tokens_details"] as unknown as Record<string, number> | undefined)?.cached_tokens,
     },
     cost,
   };
@@ -422,6 +423,7 @@ class OpenRouterProvider extends LLMProvider {
     let finishReason: string | null = null;
     let inputTokens = 0;
     let outputTokens = 0;
+    let cachedTokens = 0;
 
     try {
       while (true) {
@@ -473,6 +475,10 @@ class OpenRouterProvider extends LLMProvider {
           if (usage) {
             inputTokens = usage.prompt_tokens ?? inputTokens;
             outputTokens = usage.completion_tokens ?? outputTokens;
+            const details = usage["prompt_tokens_details"] as unknown as Record<string, number> | undefined;
+            if (details?.cached_tokens) {
+              cachedTokens = details.cached_tokens;
+            }
           }
 
           const choices = parsed.choices as Array<Record<string, unknown>> | undefined;
@@ -548,12 +554,12 @@ class OpenRouterProvider extends LLMProvider {
           ? "max_tokens"
           : "end_turn";
 
-    const cost = calculateCost("", inputTokens, outputTokens);
+    const cost = calculateCost(agent.model, inputTokens, outputTokens);
 
     yield {
       type: "done",
       stop_reason: stopReason,
-      usage: { input_tokens: inputTokens, output_tokens: outputTokens },
+      usage: { input_tokens: inputTokens, output_tokens: outputTokens, cached_tokens: cachedTokens },
       cost,
     };
   }

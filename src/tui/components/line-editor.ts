@@ -4,6 +4,7 @@ import { stdout } from "process";
 import { CursorPosition, InputComponent } from "../component.js";
 import { Key } from "../decodeKey.js";
 import { dim } from "../theme.js";
+import { readClipboardImage, saveTempImage } from "../clipboard-image.js";
 
 class LineEditor implements InputComponent<string> {
   #buffer: string;
@@ -14,6 +15,9 @@ class LineEditor implements InputComponent<string> {
   #historyIndex: number; // -1 = no navegando; 0..len-1 = posición en historia
   #draftBuffer: string; // buffer que se guarda antes de navegar historia
   #draftCursor: number;
+
+  /** Imágenes pendientes pegadas con Ctrl+V. Se consumen desde afuera tras commit. */
+  #pendingImages: Array<{ data: Buffer; ext: string; path: string }> = [];
 
   constructor() {
     this.#buffer = "";
@@ -40,6 +44,7 @@ class LineEditor implements InputComponent<string> {
     this.#historyIndex = -1;
     this.#draftBuffer = "";
     this.#draftCursor = 0;
+    this.#pendingImages = [];
   }
 
   // ---- helpers de línea ----
@@ -319,19 +324,45 @@ class LineEditor implements InputComponent<string> {
       case "e":
         this.#cursor = this.#lineEnd();
         break;
+      case "k":
+        // borrar desde cursor hasta fin de línea
+        this.#deleteRange(this.#cursor, this.#lineEnd());
+        break;
       case "u":
         // borrar desde inicio de línea hasta cursor
         this.#deleteRange(this.#lineStart(), this.#cursor);
         break;
-      case "k":
-        // borrar desde cursor hasta fin de línea
-        this.#deleteRange(this.#cursor, this.#lineEnd());
+      case "v":
+        this.#pasteFromClipboard();
         break;
       case "w":
         this.#deleteRange(this.#prevWordBoundary(), this.#cursor);
         break;
       // ctrl+c se maneja en render.ts, así que acá no llega
     }
+  }
+
+  /** Intenta pegar una imagen del portapapeles. Si no hay imagen, no hace nada. */
+  #pasteFromClipboard(): void {
+    try {
+      const img = readClipboardImage();
+      if (img) {
+        const filePath = saveTempImage(img.data, img.ext);
+        // Insertar el @path relativo para que expandFileMentions lo procese
+        const mention = `@${filePath}`;
+        this.#insertAtCursor(mention);
+        this.#pendingImages.push({ data: img.data, ext: img.ext, path: filePath });
+      }
+    } catch {
+      // Silencioso: si falla, simplemente no pega nada
+    }
+  }
+
+  /** Devuelve y limpia las imágenes pendientes pegadas durante este input. */
+  consumePendingImages(): Array<{ data: Buffer; ext: string; path: string }> {
+    const images = [...this.#pendingImages];
+    this.#pendingImages = [];
+    return images;
   }
 
   #deleteRange(from: number, to: number): void {

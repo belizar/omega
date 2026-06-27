@@ -15,6 +15,9 @@ export class ConfigFactory {
       classifierMode: overrides?.classifierMode || "off",
       classifierModel: overrides?.classifierModel || "anthropic/claude-haiku-4-5",
       classifierLearn: overrides?.classifierLearn ?? false,
+      outlineThreshold: overrides?.outlineThreshold ?? 200,
+      visionModel: overrides?.visionModel ?? null,
+      visionMaxTokens: overrides?.visionMaxTokens ?? 512,
     };
   }
 

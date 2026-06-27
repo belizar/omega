@@ -5,9 +5,16 @@ import { isEnvFile, ENV_BLOCK_MESSAGE } from "./env-guard.js";
 
 export type EditInput = {
   path: string;
-  oldText: string;
-  newText: string;
+  oldText?: string;
+  newText?: string;
   replaceAll?: boolean;
+  /** Línea inicial del rango a reemplazar (1-indexed, inclusive). Úsala como alternativa a oldText. */
+  startLine?: number;
+  /** Línea final del rango a reemplazar (1-indexed, inclusive). */
+  endLine?: number;
+  /** Opcional. Array de ediciones a aplicar secuencialmente: [{oldText, newText}, ...].
+   *  Alternativa a oldText/newText simple para múltiples cambios en una sola llamada. */
+  edits?: Array<{ oldText: string; newText: string }>;
 };
 
 // ── helpers ──────────────────────────────────────────────────────────
@@ -172,7 +179,8 @@ export class EditTool extends Tool<EditInput, string> {
   constructor() {
     super({
       name: "edit",
-      description: "Reemplaza quirúrgicamente texto exacto dentro de un archivo",
+      description:
+        "Reemplaza quirúrgicamente texto exacto dentro de un archivo, o aplica múltiples ediciones de una vez (modo edits). Cuando necesites varios cambios en un mismo archivo, usá el array edits en vez de llamar a edit varias veces.",
       schema: {
         type: "object",
         properties: {
@@ -180,7 +188,7 @@ export class EditTool extends Tool<EditInput, string> {
           oldText: {
             type: "string",
             description:
-              "Texto exacto a reemplazar (debe matchear carácter por carácter, incluido el whitespace)",
+              "Texto exacto a reemplazar (debe matchear carácter por carácter, incluido el whitespace). Usalo solo si necesitás match exacto; para reemplazar por rango usá startLine/endLine.",
           },
           newText: {
             type: "string",
@@ -191,8 +199,34 @@ export class EditTool extends Tool<EditInput, string> {
             description:
               "Opcional. Si es true y hay más de una ocurrencia de oldText, reemplaza todas en vez de fallar.",
           },
+          startLine: {
+            type: "number",
+            description:
+              "Opcional. Línea inicial del rango a reemplazar (1-indexed, inclusive). Alternativa a oldText para editar por rango sin necesidad de match exacto.",
+          },
+          endLine: {
+            type: "number",
+            description:
+              "Opcional. Línea final del rango a reemplazar (1-indexed, inclusive). Debe usarse junto con startLine.",
+          },
+          edits: {
+            type: "array",
+            description:
+              "Opcional. Array de ediciones a aplicar secuencialmente al mismo archivo. Cada elemento tiene {oldText, newText}. Las ediciones se aplican una tras otra sobre el resultado de la anterior. Útil cuando necesitás varios cambios quirúrgicos en un archivo en una sola llamada.",
+            items: {
+              type: "object",
+              properties: {
+                oldText: { type: "string", description: "Texto exacto a reemplazar" },
+                newText: {
+                  type: "string",
+                  description: "Texto nuevo que reemplaza al viejo",
+                },
+              },
+              required: ["oldText", "newText"],
+            },
+          },
         },
-        required: ["path", "oldText", "newText"],
+        required: ["path"],
       },
     });
   }
@@ -200,13 +234,56 @@ export class EditTool extends Tool<EditInput, string> {
   async execute(input: unknown): Promise<string> {
     try {
       if (typeof input !== "object" || input === null) {
-        throw new Error("Input must be an object with path, oldText, and newText");
+        throw new Error(
+          "Input must be an object with path, and either oldText+newText, startLine+endLine, or edits array",
+        );
       }
 
-      const { path, oldText, newText, replaceAll } = input as EditInput;
+      const { path, oldText, newText, replaceAll, startLine, endLine, edits } =
+        input as EditInput;
 
-      if (typeof path !== "string" || typeof oldText !== "string" || typeof newText !== "string") {
-        throw new Error("path, oldText, and newText must be strings");
+      if (typeof path !== "string") {
+        throw new Error("path must be a string");
+      }
+
+      // ── Modo edits (array de múltiples ediciones) ──
+      if (Array.isArray(edits) && edits.length > 0) {
+        return this.#executeMultiEdit(path, edits);
+      }
+
+      if (typeof newText !== "string") {
+        throw new Error(
+          "newText must be a string (or use edits array)",
+        );
+      }
+
+      // Validación: o oldText, o startLine+endLine (pero no ambos ni ninguno)
+      const hasOldText = typeof oldText === "string";
+      const hasRange =
+        typeof startLine === "number" && typeof endLine === "number";
+
+      if (!hasOldText && !hasRange) {
+        throw new Error(
+          "Debe especificar oldText o startLine/endLine (rango de líneas).",
+        );
+      }
+
+      if (hasOldText && hasRange) {
+        // Si ambos: validamos que oldText matchee el rango indicado
+        isEnvFileGuard(path);
+        const content = await readFileOrThrow(path);
+        const fileLines = content.split("\n");
+        if (startLine < 1 || endLine > fileLines.length || startLine > endLine) {
+          return `Error: startLine=${startLine}, endLine=${endLine} fuera de rango (1-${fileLines.length}).`;
+        }
+        const rangeText = fileLines.slice(startLine - 1, endLine).join("\n");
+        if (rangeText !== oldText) {
+          return (
+            `Error: oldText no coincide con las líneas ${startLine}-${endLine}. ` +
+            `Usá read para verificar el contenido actual, o usá solo startLine/endLine sin oldText.`
+          );
+        }
+        return this.#replaceRange(path, fileLines, startLine, endLine, newText);
       }
 
       if (isEnvFile(path)) {
@@ -214,25 +291,164 @@ export class EditTool extends Tool<EditInput, string> {
         return ENV_BLOCK_MESSAGE;
       }
 
-      logger.info("Editing file", { path, oldTextLength: oldText.length, newTextLength: newText.length });
-
-      let content: string;
-      try {
-        content = await readFile(path, "utf-8");
-      } catch (err: unknown) {
-        throw new Error(`Could not read ${path}: ${err instanceof Error ? err.message : String(err)}`);
+      // ── Modo rango (startLine/endLine sin oldText) ──
+      if (hasRange) {
+        const content = await readFileOrThrow(path);
+        const fileLines = content.split("\n");
+        if (startLine < 1 || endLine > fileLines.length || startLine > endLine) {
+          return `Error: startLine=${startLine}, endLine=${endLine} fuera de rango (archivo tiene ${fileLines.length} líneas).`;
+        }
+        return this.#replaceRange(path, fileLines, startLine, endLine, newText);
       }
 
-      const occurrences = content.split(oldText).length - 1;
+      // ── Modo oldText (existente) ──
+      return await this.#executeSingleEdit(path, oldText as string, newText, replaceAll);
+    } catch (err: unknown) {
+      const errorMsg =
+        err instanceof Error ? err.message : `Unknown error editing file`;
+      logger.error(errorMsg, { error: err });
+      return `Error: ${errorMsg}`;
+    }
+  }
 
-      // ── CAMBIO 2: si 0 ocurrencias exactas, probar flexible ──
+  /** Ejecuta un único reemplazo oldText → newText con match flexible y feedback de error. */
+  async #executeSingleEdit(
+    path: string,
+    oldText: string,
+    newText: string,
+    replaceAll?: boolean,
+  ): Promise<string> {
+    logger.info("Editing file", {
+      path,
+      oldTextLength: oldText.length,
+      newTextLength: newText.length,
+    });
+
+    let content: string;
+    content = await readFileOrThrow(path);
+
+    const occurrences = content.split(oldText).length - 1;
+
+    // ── 0 ocurrencias exactas → probar flexible → mostrar match más cercano ──
+    if (occurrences === 0) {
+      return this.#handleNoMatch(path, content, oldText, newText);
+    }
+
+    // ── Múltiples ocurrencias ──
+    if (occurrences > 1) {
+      if (replaceAll) {
+        const updated = content.split(oldText).join(newText);
+        await writeFile(path, updated, "utf-8");
+        logger.info("File edited (replaceAll)", { path, occurrences });
+        return `Editado ${path} correctamente (${occurrences} ocurrencias reemplazadas).`;
+      }
+
+      const linums = findOccurrenceLines(content, oldText);
+      logger.warn("Multiple occurrences found", { path, occurrences, linums });
+      return (
+        `El texto aparece ${occurrences} veces en ${path}, es ambiguo. ` +
+        `Ocurrencias en líneas: ${linums.join(", ")}.\n` +
+        `Incluí más contexto en oldText para que sea único, o usá replaceAll: true ` +
+        `para reemplazar todas las ocurrencias, o usá startLine/endLine para especificar el rango.`
+      );
+    }
+
+    // ── Exactamente 1 ocurrencia ──
+    const updated = content.replace(oldText, newText);
+    await writeFile(path, updated, "utf-8");
+    logger.info("File edited successfully", { path });
+    return `Editado ${path} correctamente.`;
+  }
+
+  /** Maneja el caso de 0 matches exactos: prueba flexible, luego findClosest. */
+  async #handleNoMatch(
+    path: string,
+    content: string,
+    oldText: string,
+    newText: string,
+  ): Promise<string> {
+    const fileLines = content.split("\n");
+    const oldLines = oldText.split("\n");
+    const flexibleMatches = findFlexibleMatches(fileLines, oldLines);
+
+    if (flexibleMatches.length === 1) {
+      const match = flexibleMatches[0];
+      const fileIndent = getIndent(fileLines[match.start]);
+      const oldIndent = getIndent(oldLines[0]);
+      const delta = fileIndent - oldIndent;
+      const indentedNewText = reindent(newText, delta);
+
+      const before = fileLines.slice(0, match.start).join("\n");
+      const after = fileLines.slice(match.end + 1).join("\n");
+      const updated =
+        [before, indentedNewText, after].filter((s) => s !== "").join("\n") ||
+        indentedNewText;
+
+      await writeFile(path, updated, "utf-8");
+      logger.info("File edited (flexible match)", { path, delta });
+      return `Editado ${path} correctamente (match flexible, delta indentación: ${delta > 0 ? "+" : ""}${delta}).`;
+    }
+
+    const similar = findClosest(content, oldText);
+    if (similar) {
+      const prefix =
+        similar.score < 0.2
+          ? `No encontré el texto exacto en ${path}. ` +
+            `Lo más parecido que encontré (puede no ser lo que buscás) ` +
+            `está cerca de la línea ${similar.lineNum}:`
+          : `No encontré el texto exacto en ${path}. ` +
+            `Lo más parecido está cerca de la línea ${similar.lineNum}:`;
+      logger.warn("Text not found; showing closest block", {
+        path,
+        score: similar.score,
+      });
+      return (
+        `${prefix}\n\n${similar.text}\n\n` +
+        `Reintentá el edit copiando el texto EXACTO de ahí (incluida la indentación), o usá startLine/endLine para reemplazar por rango.`
+      );
+    }
+
+    logger.warn("Text not found in file", { path });
+    return (
+      `Text to replace not found in ${path}. The file appears to be empty. ` +
+        `Usá read para revisar el contenido actual del archivo.`
+    );
+  }
+
+  /** Aplica múltiples ediciones secuencialmente al mismo archivo. */
+  async #executeMultiEdit(
+    path: string,
+    edits: Array<{ oldText: string; newText: string }>,
+  ): Promise<string> {
+    if (isEnvFile(path)) {
+      logger.warn("Blocked multi-edit of env file", { path });
+      return ENV_BLOCK_MESSAGE;
+    }
+
+    logger.info("Multi-editing file", { path, editCount: edits.length });
+
+    let content: string;
+    try {
+      content = await readFileOrThrow(path);
+    } catch (err: unknown) {
+      if (err instanceof Error) throw err;
+      throw new Error(`Could not read ${path}: ${String(err)}`);
+    }
+
+    const results: string[] = [];
+    let current = content;
+
+    for (let i = 0; i < edits.length; i++) {
+      const { oldText, newText } = edits[i];
+      const occurrences = current.split(oldText).length - 1;
+
       if (occurrences === 0) {
-        const fileLines = content.split("\n");
+        // Intentar match flexible
+        const fileLines = current.split("\n");
         const oldLines = oldText.split("\n");
         const flexibleMatches = findFlexibleMatches(fileLines, oldLines);
 
         if (flexibleMatches.length === 1) {
-          // Una sola coincidencia flexible → aplicar con reindentación
           const match = flexibleMatches[0];
           const fileIndent = getIndent(fileLines[match.start]);
           const oldIndent = getIndent(oldLines[0]);
@@ -241,72 +457,90 @@ export class EditTool extends Tool<EditInput, string> {
 
           const before = fileLines.slice(0, match.start).join("\n");
           const after = fileLines.slice(match.end + 1).join("\n");
-          const updated = [before, indentedNewText, after].filter((s) => s !== "").join("\n") ||
-            indentedNewText;
-
-          await writeFile(path, updated, "utf-8");
-          logger.info("File edited (flexible match)", { path, delta });
-          return `Editado ${path} correctamente (match flexible, delta indentación: ${delta > 0 ? "+" : ""}${delta}).`;
+          current =
+            [before, indentedNewText, after]
+              .filter((s) => s !== "")
+              .join("\n") || indentedNewText;
+          results.push(
+            `Edit #${i + 1}: OK (flexible, delta=${delta > 0 ? "+" : ""}${delta})`,
+          );
+          continue;
         }
 
-        // ── CAMBIO 1: fallo que enseña ──
-        const similar = findClosest(content, oldText);
+        const similar = findClosest(current, oldText);
         if (similar) {
-          const prefix =
-            similar.score < 0.2
-              ? `No encontré el texto exacto en ${path}. ` +
-                `Lo más parecido que encontré (puede no ser lo que buscás) ` +
-                `está cerca de la línea ${similar.lineNum}:`
-              : `No encontré el texto exacto en ${path}. ` +
-                `Lo más parecido está cerca de la línea ${similar.lineNum}:`;
-          logger.warn("Text not found; showing closest block", { path, score: similar.score });
-          return `${prefix}\n\n${similar.text}\n\n` +
-            `Reintentá el edit copiando el texto EXACTO de ahí (incluida la indentación).`;
+          return (
+            `Error en edit #${i + 1} de ${edits.length}: ` +
+            `no encontré "${oldText.slice(0, 60)}${oldText.length > 60 ? "..." : ""}" en ${path}. ` +
+            `Lo más parecido está cerca de la línea ${similar.lineNum}:\n\n` +
+            `${similar.text}\n\n` +
+            `No se aplicó ninguna edición. Releé el archivo y reintentá.`
+          );
         }
-
-        // Nada parecido (archivo vacío)
-        logger.warn("Text not found in file", { path });
-        throw new Error(
-          `Text to replace not found in ${path}. The file appears to be empty. ` +
-            `Usá read para revisar el contenido actual del archivo.`,
-        );
-      }
-
-      // ── Múltiples ocurrencias ──
-      if (occurrences > 1) {
-        if (replaceAll) {
-          // CAMBIO 4: replaceAll
-          const updated = content.split(oldText).join(newText);
-          await writeFile(path, updated, "utf-8");
-          logger.info("File edited (replaceAll)", { path, occurrences });
-          return `Editado ${path} correctamente (${occurrences} ocurrencias reemplazadas).`;
-        }
-
-        // Error con números de línea (CAMBIO 1 — parte de >1)
-        const linums = findOccurrenceLines(content, oldText);
-        logger.warn("Multiple occurrences found", { path, occurrences, linums });
         return (
-          `El texto aparece ${occurrences} veces en ${path}, es ambiguo. ` +
-          `Ocurrencias en líneas: ${linums.join(", ")}.\n` +
-          `Incluí más contexto en oldText para que sea único, o usá replaceAll: true ` +
-          `para reemplazar todas las ocurrencias.`
+          `Error en edit #${i + 1} de ${edits.length}: ` +
+          `"${oldText.slice(0, 60)}${oldText.length > 60 ? "..." : ""}" no encontrado en ${path}. ` +
+          `No se aplicó ninguna edición.`
         );
       }
 
-      // ── Exactamente 1 ocurrencia ──
-      const updated = content.replace(oldText, newText);
-      try {
-        await writeFile(path, updated, "utf-8");
-      } catch (err: unknown) {
-        throw new Error(`Could not write ${path}: ${err instanceof Error ? err.message : String(err)}`);
+      if (occurrences > 1) {
+        const linums = findOccurrenceLines(current, oldText);
+        return (
+          `Error en edit #${i + 1} de ${edits.length}: ` +
+          `el texto aparece ${occurrences} veces en ${path}, es ambiguo. ` +
+          `Ocurrencias en líneas: ${linums.join(", ")}.\n` +
+          `Incluí más contexto en oldText para que sea único. ` +
+          `No se aplicó ninguna edición.`
+        );
       }
 
-      logger.info("File edited successfully", { path });
-      return `Editado ${path} correctamente.`;
-    } catch (err: unknown) {
-      const errorMsg = err instanceof Error ? err.message : `Unknown error editing file`;
-      logger.error(errorMsg, { error: err });
-      return `Error: ${errorMsg}`;
+      // 1 ocurrencia exacta
+      current = current.replace(oldText, newText);
+      results.push(`Edit #${i + 1}: OK`);
     }
+
+    await writeFile(path, current, "utf-8");
+    logger.info("Multi-edit completed", { path, count: edits.length });
+    return (
+      `Editado ${path} correctamente (${edits.length} ediciones):\n` +
+      results.join("\n")
+    );
+  }
+
+  /** Reemplaza líneas startLine a endLine (1-indexed, inclusive) por newText. */
+  async #replaceRange(
+    path: string,
+    fileLines: string[],
+    startLine: number,
+    endLine: number,
+    newText: string,
+  ): Promise<string> {
+    const before = fileLines.slice(0, startLine - 1);
+    const after = fileLines.slice(endLine);
+    const updated =
+      [...before, newText, ...after].filter((s) => s !== "").join("\n") ||
+      newText;
+    await writeFile(path, updated, "utf-8");
+    logger.info("File edited (range)", { path, startLine, endLine });
+    return `Editado ${path} correctamente (líneas ${startLine}-${endLine}).`;
+  }
+}
+
+/** Lee un archivo o tira error descriptivo. */
+async function readFileOrThrow(path: string): Promise<string> {
+  try {
+    return await readFile(path, "utf-8");
+  } catch (err: unknown) {
+    throw new Error(
+      `Could not read ${path}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
+/** Guardrail de env file, tira si es .env. */
+function isEnvFileGuard(path: string): void {
+  if (isEnvFile(path)) {
+    throw new Error(ENV_BLOCK_MESSAGE);
   }
 }

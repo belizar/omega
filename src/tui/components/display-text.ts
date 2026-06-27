@@ -459,6 +459,8 @@ class DisplayToolCall {
         return `write ${this.#pathStr(obj)}`;
       case "edit":
         return `edit ${this.#pathStr(obj)}`;
+      case "outline":
+        return `outline ${this.#pathStr(obj)}`;
       case "bash":
         if (typeof obj.command === "string") {
           return `bash ${this.#truncateCmd(obj.command)}`;
@@ -466,6 +468,21 @@ class DisplayToolCall {
         return "bash";
       case "grep":
         return `grep "${obj.pattern ?? "?"}" ${this.#pathStr(obj)}`;
+      case "vision_ask":
+        if (typeof obj.question === "string") {
+          return `vision_ask "${obj.question.slice(0, 60)}${obj.question.length > 60 ? "..." : ""}"`;
+        }
+        return "vision_ask";
+      case "tool_search":
+        if (typeof obj.query === "string") {
+          return `tool_search "${obj.query}"`;
+        }
+        return "tool_search";
+      case "ask_user":
+        if (typeof obj.question === "string") {
+          return `ask_user "${obj.question.slice(0, 60)}${obj.question.length > 60 ? "..." : ""}"`;
+        }
+        return "ask_user";
       default:
         return name;
     }

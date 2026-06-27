@@ -16,6 +16,8 @@ type SessionOptions = {
   dir?: string;
   /** Máximo de tokens de contexto a exponer al modelo (default 100000). */
   maxContextTokens?: number;
+  /** Modelo usado (para auditoría de costos). */
+  model?: string;
 };
 
 class Session {
@@ -28,8 +30,17 @@ class Session {
   #name: string;
   #sessionPath?: string;
   #maxContextTokens: number;
+  #model: string;
   #totalCost: number;
   #totalTokens: { input: number; output: number };
+  #stepUsage: Array<{
+    inputTokens: number;
+    outputTokens: number;
+    cachedTokens: number;
+    cost: number;
+  }>;
+  /** Flag: un comando modal inyectó un user message y hay que disparar el runner. */
+  #pendingRunner: boolean;
 
   constructor(options: SessionOptions = {}) {
     this.#id = options.id ?? randomUUID();
@@ -37,8 +48,11 @@ class Session {
     this.#messages = [];
     this.#workingContext = [];
     this.#maxContextTokens = options.maxContextTokens ?? 100_000;
+    this.#model = options.model ?? "";
     this.#totalCost = 0;
     this.#totalTokens = { input: 0, output: 0 };
+    this.#stepUsage = [];
+    this.#pendingRunner = false;
     this.#sessionPath = options.dir
       ? join(options.dir, `${this.#id}.json`)
       : undefined;
@@ -51,7 +65,9 @@ class Session {
         this.#messages = parsed.messages || [];
         this.#totalCost = parsed.totalCost ?? 0;
         this.#totalTokens = parsed.totalTokens ?? { input: 0, output: 0 };
+        this.#stepUsage = parsed.stepUsage ?? [];
         this.#name = parsed.name ?? "";
+        this.#model = parsed.model ?? "";
 
         // workingContext: si existe en disco, se carga; si no (formato viejo), se regenera
         if (parsed.workingContext && Array.isArray(parsed.workingContext)) {
@@ -82,6 +98,36 @@ class Session {
 
   get name() {
     return this.#name;
+  }
+
+  /** Modelo usado en esta sesión (para auditoría). */
+  get model() {
+    return this.#model;
+  }
+
+  /** Setea el modelo (llamado por index.ts al iniciar). */
+  setModel(model: string): void {
+    this.#model = model;
+    this.#save();
+  }
+
+  /** Comando modal inyectó un user message → el REPL debe disparar el runner. */
+  get pendingRunner(): boolean {
+    return this.#pendingRunner;
+  }
+
+  /** Consume el flag (llamado por el REPL después de disparar el runner). */
+  consumePendingRunner(): void {
+    this.#pendingRunner = false;
+  }
+
+  /** Agrega un user message y marca para que el runner lo procese. */
+  injectUserMessage(content: Message["content"]): void {
+    const msg: Message = { role: "user", content };
+    this.#messages.push(msg);
+    this.#workingContext.push(msg);
+    this.#pendingRunner = true;
+    this.#save();
   }
 
   /** Renombra la sesión y persiste el cambio */
@@ -155,6 +201,28 @@ class Session {
     this.#save();
   }
 
+  /** Acumula el stepUsage que el Runner midió por step. */
+  addStepUsage(
+    steps: Array<{
+      inputTokens: number;
+      outputTokens: number;
+      cachedTokens: number;
+      cost: number;
+    }>,
+  ): void {
+    this.#stepUsage.push(...steps);
+    this.#save();
+  }
+
+  get stepUsage(): readonly {
+    inputTokens: number;
+    outputTokens: number;
+    cachedTokens: number;
+    cost: number;
+  }[] {
+    return this.#stepUsage;
+  }
+
   get totalCost() {
     return this.#totalCost;
   }
@@ -169,6 +237,7 @@ class Session {
   clear(): void {
     this.#messages = [];
     this.#workingContext = [];
+    this.#stepUsage = [];
     this.#save();
   }
 
@@ -183,6 +252,7 @@ class Session {
     path?: string;
     totalCost: number;
     totalTokens: { input: number; output: number };
+    model?: string;
   } {
     return {
       id: this.#id,
@@ -192,6 +262,7 @@ class Session {
       path: this.#sessionPath,
       totalCost: this.#totalCost,
       totalTokens: this.#totalTokens,
+      model: this.#model || undefined,
     };
   }
 
@@ -212,6 +283,8 @@ class Session {
             workingContext: this.#workingContext,
             totalCost: this.#totalCost,
             totalTokens: this.#totalTokens,
+            stepUsage: this.#stepUsage,
+            model: this.#model || undefined,
           },
           null,
           2,
@@ -234,6 +307,7 @@ class Session {
     messageCount: number;
     totalCost: number;
     totalTokens: { input: number; output: number };
+    model?: string;
   }> {
     const results: Array<{
       id: string;
@@ -242,6 +316,7 @@ class Session {
       messageCount: number;
       totalCost: number;
       totalTokens: { input: number; output: number };
+      model?: string;
     }> = [];
 
     try {
@@ -263,6 +338,7 @@ class Session {
             messageCount: Array.isArray(parsed.messages) ? parsed.messages.length : 0,
             totalCost: parsed.totalCost ?? 0,
             totalTokens: parsed.totalTokens ?? { input: 0, output: 0 },
+            model: parsed.model ?? undefined,
           });
         } catch {
           // Archivo corrupto, lo salteamos

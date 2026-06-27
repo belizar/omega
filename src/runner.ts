@@ -266,8 +266,11 @@ class Runner {
   ): Promise<{ output: string; isError: boolean }> {
     const tool = this.#agentConfig.getTool(name);
     if (!tool) {
-      const msg = `Error: unknown tool "${name}"`;
-      logger.error(msg);
+      const msg =
+        `Error: tool desconocida "${name}".\n` +
+        `Si necesitás una tool que no está entre las esenciales (read, write, edit, bash, grep, outline, ask_user, tool_search), ` +
+        `usá tool_search para buscarla.`;
+      logger.error(`Unknown tool "${name}"`);
       return { output: msg, isError: true };
     }
     try {

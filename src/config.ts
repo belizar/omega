@@ -17,6 +17,10 @@ interface Config {
   classifierLearn: boolean;
   /** Líneas sobre las que read devuelve outline en vez del archivo entero */
   outlineThreshold: number;
+  /** Modelo de visión para preprocesar imágenes (opcional). Sin él, imágenes no se procesan. */
+  visionModel: string | null;
+  /** Máximo de tokens para respuestas del modelo de visión */
+  visionMaxTokens: number;
 }
 
 function validateEnv(): Config {
@@ -37,8 +41,10 @@ function validateEnv(): Config {
   const screenPadding = parseInt(process.env.SCREEN_PADDING || "0", 10);
   const classifierMode = (process.env.CLASSIFIER_MODE || "on") as "on" | "off";
   const classifierModel = process.env.CLASSIFIER_MODEL || "anthropic/claude-haiku-4-5";
-  const classifierLearn = process.env.CLASSIFIER_LEARN === "true";
+  const classifierLearn = process.env.CLASSIFIER_LEARN !== "false";
   const outlineThreshold = parseInt(process.env.OUTLINE_THRESHOLD || "200", 10);
+  const visionModel = process.env.VISION_MODEL || null;
+  const visionMaxTokens = parseInt(process.env.VISION_MAX_TOKENS || "512", 10);
 
   const config: Config = {
     openrouterApiKey,
@@ -53,6 +59,8 @@ function validateEnv(): Config {
     classifierModel,
     classifierLearn,
     outlineThreshold,
+    visionModel,
+    visionMaxTokens,
   };
 
   logger.info("Config loaded successfully", {

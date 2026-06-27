@@ -1,9 +1,12 @@
 import { Context } from "../app-context.js";
+import { AnalyzeCommand } from "./analyze.js";
 import { ClearCommand } from "./clear.js";
+import { analyzeModalCommand } from "./analyze.js";
 import { Command } from "./command.js";
 import { ExitCommand } from "./exit.js";
 import { HelpCommand } from "./help.js";
 import { ModalCommand } from "./modal-command.js";
+import { McpCommand } from "./mcp.js";
 import { OverridesCommand } from "./overrides.js";
 import { RenameCommand } from "./rename.js";
 import { ResumeCommand } from "./resume.js";
@@ -11,8 +14,10 @@ import { VerboseCommand } from "./verbose.js";
 import { resumeModalCommand } from "./session-resume.js";
 
 const commandsMap: Record<string, Command<unknown>> = {
+  "/analyze": new AnalyzeCommand(),
   "/clear": new ClearCommand(),
   "/exit": new ExitCommand(),
+  "/mcp": new McpCommand(),
   "/overrides": new OverridesCommand(),
   "/rename": new RenameCommand(),
   "/resume": new ResumeCommand(),
@@ -25,6 +30,7 @@ commandsMap["/help"] = new HelpCommand(commandsMap);
 // El "/resume" pelado se resuelve acá; "/resume 3" cae al commandsMap de arriba.
 const modalCommandsMap: Record<string, ModalCommand> = {
   "/resume": resumeModalCommand,
+  "/analyze": analyzeModalCommand,
 };
 
 const dispatchCommand = async (

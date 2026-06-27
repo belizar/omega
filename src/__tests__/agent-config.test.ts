@@ -24,7 +24,7 @@ describe("AgentConfig", () => {
     const agent = AgentFactory.createBasicAgent();
     const bashTool = agent.getTool("bash");
     expect(bashTool).toBeDefined();
-    expect(bashTool.name).toBe("bash");
+    expect(bashTool!.name).toBe("bash");
   });
 
   it("should convert to JSON for API", () => {

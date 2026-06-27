@@ -206,7 +206,7 @@ describe("EditTool", () => {
   it("should validate that path, oldText, newText are strings", async () => {
     const result = await editTool.execute({ path: 123, oldText: "a", newText: "b" });
     expect(result).toContain("Error");
-    expect(result).toContain("must be strings");
+    expect(result).toContain("must be a string");
   });
 
   it("should block editing .env files", async () => {
@@ -313,13 +313,13 @@ describe("EditTool", () => {
   it("should validate that all required fields are present", async () => {
     const result = await editTool.execute({ path: testFile, oldText: "x" } as unknown as EditInput);
     expect(result).toContain("Error");
-    expect(result).toContain("must be strings");
+    expect(result).toContain("must be a string");
   });
 
   it("should fail when oldText is missing (undefined)", async () => {
     const result = await editTool.execute({ path: testFile, newText: "y" } as unknown as EditInput);
     expect(result).toContain("Error");
-    expect(result).toContain("must be strings");
+    expect(result).toContain("Debe especificar oldText o startLine/endLine");
   });
 
   it("should replace text at the very beginning of the file", async () => {
@@ -424,5 +424,108 @@ describe("EditTool", () => {
     expect(result).toContain("Editado");
     const content = await readFile(testFile, "utf-8");
     expect(content).toContain("import { bar } from './foo';");
+  });
+
+  // ── startLine/endLine (rango de líneas) ──
+
+  it("should replace lines by range (startLine/endLine)", async () => {
+    const result = await editTool.execute({
+      path: testFile,
+      startLine: 2,
+      endLine: 3,
+      newText: "REPLACED_LINE_2\nREPLACED_LINE_3",
+    });
+    expect(result).toContain("Editado");
+    expect(result).toContain("líneas 2-3");
+
+    const content = await readFile(testFile, "utf-8");
+    expect(content).toBe("Line 1\nREPLACED_LINE_2\nREPLACED_LINE_3\nLine 4\nLine 5");
+  });
+
+  it("should replace single line by range", async () => {
+    const result = await editTool.execute({
+      path: testFile,
+      startLine: 3,
+      endLine: 3,
+      newText: "SINGLE_REPLACED",
+    });
+    expect(result).toContain("Editado");
+    expect(result).toContain("líneas 3-3");
+
+    const content = await readFile(testFile, "utf-8");
+    expect(content).toBe("Line 1\nLine 2\nSINGLE_REPLACED\nLine 4\nLine 5");
+  });
+
+  it("should replace entire file by range", async () => {
+    const result = await editTool.execute({
+      path: testFile,
+      startLine: 1,
+      endLine: 5,
+      newText: "COMPLETELY\nNEW\nFILE",
+    });
+    expect(result).toContain("Editado");
+
+    const content = await readFile(testFile, "utf-8");
+    expect(content).toBe("COMPLETELY\nNEW\nFILE");
+  });
+
+  it("should fail when range is out of bounds", async () => {
+    const result = await editTool.execute({
+      path: testFile,
+      startLine: 1,
+      endLine: 100,
+      newText: "replacement",
+    });
+    expect(result).toContain("fuera de rango");
+  });
+
+  it("should fail when startLine > endLine", async () => {
+    const result = await editTool.execute({
+      path: testFile,
+      startLine: 4,
+      endLine: 2,
+      newText: "replacement",
+    });
+    expect(result).toContain("fuera de rango");
+  });
+
+  it("should validate oldText against range when both specified (match)", async () => {
+    // Ambos: oldText + range, y el texto coincide → procede
+    const result = await editTool.execute({
+      path: testFile,
+      oldText: "Line 2\nLine 3",
+      startLine: 2,
+      endLine: 3,
+      newText: "VERIFIED_MATCH",
+    });
+    expect(result).toContain("Editado");
+    expect(result).toContain("líneas 2-3");
+
+    const content = await readFile(testFile, "utf-8");
+    expect(content).toBe("Line 1\nVERIFIED_MATCH\nLine 4\nLine 5");
+  });
+
+  it("should reject when oldText + range mismatch", async () => {
+    const result = await editTool.execute({
+      path: testFile,
+      oldText: "Line 5\nLine 1",
+      startLine: 2,
+      endLine: 3,
+      newText: "replacement",
+    });
+    expect(result).toContain("Error: oldText no coincide");
+  });
+
+  it("should append to end when startLine is one past last line", async () => {
+    await writeFile(testFile, "Line 1\nLine 2\n", "utf-8");
+    const result = await editTool.execute({
+      path: testFile,
+      startLine: 1,
+      endLine: 2,
+      newText: "Line 1\nLine 2\nLine 3",
+    });
+    expect(result).toContain("Editado");
+    const content = await readFile(testFile, "utf-8");
+    expect(content).toBe("Line 1\nLine 2\nLine 3");
   });
 });

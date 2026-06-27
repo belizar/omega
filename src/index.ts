@@ -18,8 +18,18 @@ import { AskUserTool } from "./tools/ask-user.js";
 import { BashTool } from "./tools/bash.js";
 import { EditTool } from "./tools/edit.js";
 import { GrepTool } from "./tools/grep.js";
+import { OutlineTool } from "./tools/outline.js";
 import { ReadTool } from "./tools/read.js";
+import { ToolRegistry } from "./tools/tool-registry.js";
+import { ToolSearchTool } from "./tools/tool-search.js";
 import { WriteTool } from "./tools/write.js";
+import { loadMcpConfig } from "./mcp/mcp-client.js";
+import {
+  preprocessImages,
+  cleanupTurnTemps,
+  cleanOldVisionTemps,
+  VisionAskTool,
+} from "./vision.js";
 import {
   DisplayAssistantText,
   DisplayToolCall,
@@ -43,19 +53,35 @@ dotenv.config({ path: join(homedir(), ".omega", ".env") });
 const SYSTEM_PROMPT = `Sos omega, un asistente de coding que trabaja en el proyecto del usuario.
 Tenés tools para leer, escribir, editar y ejecutar comandos.
 
-Tools:
+Tools esenciales (siempre disponibles):
 - read: leé un archivo antes de editarlo.
+- outline: vé la estructura de un archivo (firmas + rangos) sin leerlo entero.
+  Usalo antes de read en archivos grandes; después read del rango que necesites.
 - bash: explorá el proyecto (ls, grep, find) y ejecutá comandos.
 - edit: para cambios quirúrgicos; el texto a reemplazar debe matchear exacto.
 - write: solo para archivos nuevos o reescrituras completas.
 - ask_user: pedí confirmación al usuario antes de acciones destructivas o cuando
   necesites que elija entre opciones.
+- tool_search: buscá tools adicionales cuando necesites algo que las tools
+  esenciales no cubren (ej: APIs, bases de datos, servicios externos).
+  Después de encontrar una tool, usala directamente: ya queda registrada.
+- vision_ask: si el usuario pegó una imagen y la descripción preliminar no
+  cubre algo, preguntale al modelo de visión. Hacé todas tus preguntas en una
+  sola llamada. Las imágenes persisten durante la sesión.
 
 Cómo trabajás:
 - Explorá lo necesario antes de cambiar nada: leé los archivos relevantes
   para entender el contexto.
+- Si la tarea toca 3 o más archivos, emití un plan breve como texto antes de
+  ejecutar: qué archivos vas a modificar, en qué orden y qué cambio en cada uno.
+  No uses ask_user para esto; el plan es solo texto informativo. Después procedé.
 - Después de editar código, verificá que no rompiste nada (typecheck, tests
   o lint según el proyecto) y corregí si hace falta.
+- Typecheck y tests son necesarios pero no suficientes. Para cambios de
+  comportamiento (features interactivas, cambios de lógica, flujos de usuario),
+  escribí un plan de prueba manual de 2-3 pasos y pedile al usuario que lo
+  ejecute con ask_user antes de declarar la tarea terminada. "Compila" no
+  significa "funciona".
 - Antes de instalar dependencias, borrar archivos, ejecutar comandos destructivos
   o hacer cambios irreversibles, usá ask_user para pedir confirmación.
 
@@ -97,6 +123,7 @@ const main = async () => {
   const session = new Session({
     dir: ".omega/sessions",
     maxContextTokens: config.maxContextTokens,
+    model: config.model,
   });
   logger.setLogFile(`.omega/logs/${session.id}.log`);
   logger.info("Omega agent starting", { session: session.id });
@@ -121,19 +148,46 @@ const main = async () => {
     classifier,
   });
 
+  const toolRegistry = new ToolRegistry(logger);
+
+  // Tool de visión (solo si VISION_MODEL está configurado)
+  const visionAskTool = config.visionModel
+    ? new VisionAskTool(config.visionModel, config.visionMaxTokens, config.openrouterApiKey)
+    : null;
+
+  toolRegistry
+    .registerLocal(new AskUserTool())
+    .registerLocal(bashTool)
+    .registerLocal(new GrepTool())
+    .registerLocal(new OutlineTool())
+    .registerLocal(new ReadTool(config.outlineThreshold))
+    .registerLocal(new EditTool())
+    .registerLocal(new WriteTool())
+    // Servidores MCP desde .omega/mcp.json (carga lazy: no conectan hasta que se buscan)
+    .configureMcp(loadMcpConfig(".omega"));
+
+  // Registrar vision_ask si hay modelo de visión (incluso sin VISION_MODEL,
+  // así el agente recibe un error manejado en vez de tool desconocida)
+  if (visionAskTool) {
+    toolRegistry.registerLocal(visionAskTool);
+  }
+
+  // Limpiar temp files de visión viejos (> 1 hora)
+  cleanOldVisionTemps();
+
+  // Matar procesos MCP hijos cuando omega sale (todos los caminos: exit, Ctrl+C, SIGTERM)
+  process.on("exit", () => toolRegistry.disconnectAll());
+  process.on("SIGTERM", () => process.exit(0));
+
   const haikuAgent = new AgentConfig({
     systemPrompt: fullSystemPrompt,
     model: config.model,
     maxTokens: config.maxTokens,
+    toolRegistry,
   });
 
-  haikuAgent
-    .addTool(new AskUserTool())
-    .addTool(bashTool)
-    .addTool(new GrepTool())
-    .addTool(new ReadTool())
-    .addTool(new EditTool())
-    .addTool(new WriteTool());
+  // tool_search va al AgentConfig (como tool local) para que el agente la use
+  haikuAgent.addTool(new ToolSearchTool(toolRegistry));
 
   const llmprovider = new OpenRouterProvider(config.openrouterApiKey);
 
@@ -155,10 +209,92 @@ const main = async () => {
     agentConfig: haikuAgent,
     runner,
     screen,
+    toolRegistry,
     classifier,
   });
 
   const lineEditor = new LineEditor();
+
+  /** Ejecuta un turno del runner: el user message ya está en la sesión. */
+  const runTurn = async () => {
+    const abortController = new AbortController();
+    screen.setAbortController(abortController);
+
+    const run = new Runner({
+      llmProvider: llmprovider,
+      agentConfig: haikuAgent,
+      maxSteps: config.maxSteps,
+      maxContextTokens: config.maxContextTokens,
+      signal: abortController.signal,
+      onAskUser: async (question: string) => {
+        spinner.stop();
+        const answer = await screen.askUser(question);
+        spinner.start();
+        return answer;
+      },
+    });
+
+    try {
+      const iterator = run.run(session.getContext());
+      spinner.start();
+      let item = await iterator.next();
+
+      while (!item.done) {
+        const { value } = item as { value: RunnerEvent };
+
+        if (value.type === "text_stream") {
+          spinner.stop();
+          assistantText.displayStream(value.text);
+        }
+        if (value.type === "text_stream_end") {
+          assistantText.endStream();
+        }
+        if (value.type === "text") {
+          spinner.stop();
+          assistantText.display(value.text);
+        }
+        if (value.type === "tool_use") {
+          spinner.stop();
+          toolCallText.call(value.name, value.input, ctx.verbose);
+        }
+        if (value.type === "tool_result") {
+          toolResultText.result(value.output, ctx.verbose, value.rawOutput);
+          spinner.start();
+        }
+        if (value.type === "state") {
+          session.addMessage(value.message);
+        }
+        item = await iterator.next();
+      }
+      spinner.stop();
+      screen.redrawLive();
+      session.compactWorkingContext();
+    } catch (err: unknown) {
+      spinner.stop();
+      screen.redrawLive();
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error("Runner error", msg);
+      screen.printAbove(dim(`Error: ${msg}`));
+    } finally {
+      screen.clearAbortController();
+    }
+
+    const metrics = run.getMetrics();
+    session.addUsage(
+      metrics.totalInputTokens,
+      metrics.totalOutputTokens,
+      metrics.totalCost,
+    );
+    session.addStepUsage(run.getStepUsage().slice());
+    const durationSec = (metrics.durationMs / 1000).toFixed(1);
+    const costStr =
+      metrics.totalCost < 0.01 ? "<$0.01" : `${metrics.totalCost.toFixed(2)}`;
+    const runningStr =
+      session.totalCost < 0.01 ? "<$0.01" : `${session.totalCost.toFixed(2)}`;
+    const metricsLine = `~ ctx: ${session.contextTokens} tk · ${metrics.totalToolCalls} tools · in: ${metrics.totalInputTokens} · out: ${metrics.totalOutputTokens} tokens · ${durationSec}s · ${costStr} (total: ${runningStr})`;
+    screen.printAbove(dim(`\n${metricsLine}`));
+    run.resetMetrics();
+  };
 
   while (true) {
     const prompt = new Prompt({
@@ -180,6 +316,10 @@ const main = async () => {
     if (result.kind === "modal") {
       lineEditor.reset();
       screen.printAbove(result.message ?? "");
+      if (ctx.session.pendingRunner) {
+        ctx.session.consumePendingRunner();
+        await runTurn();
+      }
       continue;
     }
 
@@ -207,7 +347,7 @@ const main = async () => {
 
     const session = ctx.session;
 
-    const resolvedInput = expandFileMentions(input);
+    const resolvedInput = await expandFileMentions(input);
     const userContent: Message["content"] = [];
     if (resolvedInput.text) {
       userContent.push({ type: "text", text: resolvedInput.text });
@@ -215,6 +355,73 @@ const main = async () => {
     for (const img of resolvedInput.images) {
       userContent.push(img);
     }
+
+    // Imágenes pegadas con Ctrl+V (no procesadas por expandFileMentions)
+    const pendingImages = lineEditor.consumePendingImages();
+    for (const img of pendingImages) {
+      userContent.push({
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: img.ext === "png" ? "image/png" :
+                      img.ext === "jpg" || img.ext === "jpeg" ? "image/jpeg" :
+                      img.ext === "gif" ? "image/gif" :
+                      img.ext === "webp" ? "image/webp" :
+                      `image/${img.ext}`,
+          data: img.data.toString("base64"),
+        },
+      });
+    }
+
+    // ── Preprocesador de visión ──────────────────────────────────────────────
+    const hasImages = userContent.some(
+      (b) => typeof b === "object" && "type" in b && b.type === "image",
+    );
+    let turnTempPaths: string[] = [];
+
+    if (hasImages && config.visionModel) {
+      const visionResult = await preprocessImages(
+        userContent as Record<string, unknown>[],
+        config.visionModel,
+        config.visionMaxTokens,
+        config.openrouterApiKey,
+      );
+      turnTempPaths = visionResult.savedPaths;
+
+      // Inyectar descripción preliminar al inicio
+      if (visionResult.description) {
+        userContent.unshift({ type: "text", text: visionResult.description });
+      }
+
+      // Acumular imágenes en vision_ask para que las pueda reenviar
+      // en turnos futuros (no solo el actual).
+      // IMPORTANTE: debe hacerse ANTES de quitar las imágenes de userContent.
+      if (visionAskTool && visionResult.savedImages.length > 0) {
+        // Las imágenes todavía están en userContent — las capturamos ahora
+        const imgBlocks = userContent.filter(
+          (b) => typeof b === "object" && "type" in b && b.type === "image",
+        ) as unknown as import("./message.js").ImageMessage[];
+        visionAskTool.addImages(imgBlocks);
+      }
+
+      // Remover los bloques de imagen del userContent — el modelo principal
+      // (ej: DeepSeek) no es multimodal y crashearía con un 404.
+      // Las imágenes ya fueron descrita por VISION_MODEL y vision_ask
+      // puede reenviarlas si el agente necesita más detalle.
+      for (let i = userContent.length - 1; i >= 0; i--) {
+        const b = userContent[i];
+        if (typeof b === "object" && "type" in b && b.type === "image") {
+          userContent.splice(i, 1);
+        }
+      }
+    } else if (hasImages) {
+      // Sin VISION_MODEL: placeholder de degradación
+      userContent.unshift({
+        type: "text",
+        text: "[Imagen pegada — VISION_MODEL no configurado. No puedo ver la imagen.]",
+      });
+    }
+    // ──────────────────────────────────────────────────────────────────────────
 
     // Si solo hay texto, lo pasamos como string simple para mantener
     // compatibilidad con el formato legacy
@@ -230,102 +437,11 @@ const main = async () => {
       session.addUserMessage(userContent);
     }
 
-    let iterator: AsyncGenerator<unknown>;
-    const abortController = new AbortController();
-    screen.setAbortController(abortController);
+    // ── Runner ──
+    await runTurn();
 
-    // Crear un runner por iteración con el signal de abort
-    const run = new Runner({
-      llmProvider: llmprovider,
-      agentConfig: haikuAgent,
-      maxSteps: config.maxSteps,
-      maxContextTokens: config.maxContextTokens,
-      signal: abortController.signal,
-      onAskUser: async (question: string) => {
-        spinner.stop();
-        // Mostrar prompt inline y esperar respuesta del usuario
-        const answer = await screen.askUser(question);
-        spinner.start();
-        return answer;
-      },
-    });
-
-    try {
-      iterator = run.run(session.getContext());
-
-      spinner.start();
-      let item = await iterator.next();
-
-      while (!item.done) {
-        const { value } = item as { value: RunnerEvent };
-
-        if (value.type === "text_stream") {
-          // Apenas empieza a salir texto, frenamos el spinner: ya estás viendo
-          // la respuesta, "Pensando" sobra (y si no, queda colgado en la cola
-          // del stream esperando el chunk final de usage). stop() es idempotente.
-          spinner.stop();
-          assistantText.displayStream(value.text);
-        }
-
-        if (value.type === "text_stream_end") {
-          assistantText.endStream();
-        }
-
-        if (value.type === "text") {
-          spinner.stop();
-          assistantText.display(value.text);
-        }
-
-        if (value.type === "tool_use") {
-          spinner.stop();
-          toolCallText.call(value.name, value.input, ctx.verbose);
-        }
-
-        if (value.type === "tool_result") {
-          toolResultText.result(value.output, ctx.verbose, value.rawOutput);
-          spinner.start();
-        }
-
-        if (value.type === "state") {
-          session.addMessage(value.message);
-        }
-
-        item = await iterator.next();
-      }
-      spinner.stop();
-      // Redundante: screen.redrawLive() garantiza que la línea de estado
-      // del spinner se limpie aunque algún timer encolado haya pintado
-      // justo antes del stop.
-      screen.redrawLive();
-
-      // Compactar reads viejos en el workingContext para mantenerlo filoso
-      session.compactWorkingContext();
-    } catch (err: unknown) {
-      // Nos aseguramos de que el spinner se detenga ante cualquier error
-      spinner.stop();
-      screen.redrawLive();
-      const msg = err instanceof Error ? err.message : String(err);
-      logger.error("Runner error", msg);
-      screen.printAbove(dim(`Error: ${msg}`));
-    } finally {
-      screen.clearAbortController();
-    }
-
-    // Métricas de la iteración
-    const metrics = run.getMetrics();
-    session.addUsage(
-      metrics.totalInputTokens,
-      metrics.totalOutputTokens,
-      metrics.totalCost,
-    );
-    const durationSec = (metrics.durationMs / 1000).toFixed(1);
-    const costStr =
-      metrics.totalCost < 0.01 ? "<$0.01" : `${metrics.totalCost.toFixed(2)}`;
-    const runningStr =
-      session.totalCost < 0.01 ? "<$0.01" : `${session.totalCost.toFixed(2)}`;
-    const metricsLine = `~ ctx: ${session.contextTokens} tk · ${metrics.totalToolCalls} tools · in: ${metrics.totalInputTokens} · out: ${metrics.totalOutputTokens} tokens · ${durationSec}s · ${costStr} (total: ${runningStr})`;
-    screen.printAbove(dim(`\n${metricsLine}`));
-    run.resetMetrics();
+    // Limpiar temp files de visión del turno
+    cleanupTurnTemps(turnTempPaths);
   }
 };
 
