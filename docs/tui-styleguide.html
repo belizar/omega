@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Omega — TUI Style Guide</title>
+<style>
+  :root{
+    /* Paleta del terminal (mapea src/tui/theme.ts) */
+    --bg:#0f1115;
+    --panel:#161922;
+    --panel-2:#1b1f2a;
+    --term:#12151c;
+    --border:#252a36;
+    --fg:#c8cdd6;         /* foreground: contenido del agente */
+    --dim:#6b7280;        /* dim: metadata / plomería */
+    --gray:#7a828e;       /* gray: output crudo de tools */
+    --cyan:#56b6c2;       /* acción / nombres de tool */
+    --green:#98c379;      /* éxito */
+    --yellow:#e5c07b;     /* advertencia recuperable */
+    --red:#e06c75;        /* error */
+    --accent:#8ab4f8;
+    --mono:"SF Mono",ui-monospace,"JetBrains Mono","Fira Code",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);line-height:1.55;
+       -webkit-font-smoothing:antialiased}
+  .wrap{max-width:1040px;margin:0 auto;padding:48px 24px 96px}
+  header.hero{border-bottom:1px solid var(--border);padding-bottom:28px;margin-bottom:40px}
+  .brand{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+  .brand h1{font-family:var(--mono);font-size:30px;margin:0;letter-spacing:-.5px}
+  .brand h1 .caret{color:var(--cyan)}
+  .brand .tag{color:var(--dim);font-family:var(--mono);font-size:13px}
+  .lede{color:var(--dim);max-width:70ch;margin-top:12px;font-size:15px}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:1.5px;color:var(--accent);
+     margin:56px 0 6px;font-weight:600}
+  h2 .n{color:var(--dim);margin-right:8px}
+  .sub{color:var(--dim);font-size:14px;margin:0 0 20px;max-width:72ch}
+
+  /* Terminal mock */
+  .term{background:var(--term);border:1px solid var(--border);border-radius:10px;
+        overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.35);margin:14px 0}
+  .term .bar{display:flex;align-items:center;gap:7px;padding:10px 14px;background:var(--panel);
+             border-bottom:1px solid var(--border)}
+  .dot{width:11px;height:11px;border-radius:50%}
+  .dot.r{background:#e06c75}.dot.y{background:#e5c07b}.dot.g{background:#98c379}
+  .bar .ttl{margin-left:10px;color:var(--dim);font-family:var(--mono);font-size:12px}
+  .term pre{margin:0;padding:16px 18px;font-family:var(--mono);font-size:13.5px;
+            line-height:1.7;white-space:pre-wrap;word-break:break-word;overflow-x:auto}
+
+  /* clases de color = semántica */
+  .fg{color:var(--fg)} .dim{color:var(--dim)} .gray{color:var(--gray)}
+  .cyan{color:var(--cyan)} .green{color:var(--green)} .yellow{color:var(--yellow)}
+  .red{color:var(--red)} .b{font-weight:700} .u{cursor:default}
+
+  /* Paleta */
+  .swatches{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-top:16px}
+  .sw{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:14px;display:flex;gap:12px;align-items:flex-start}
+  .chip{width:34px;height:34px;border-radius:7px;flex:0 0 auto;border:1px solid rgba(255,255,255,.08)}
+  .sw .meta{font-size:12.5px}
+  .sw .meta .name{font-family:var(--mono);font-weight:700;font-size:13px}
+  .sw .meta .hex{font-family:var(--mono);color:var(--dim);font-size:11.5px}
+  .sw .meta .use{color:var(--dim);margin-top:3px;display:block}
+
+  /* layers legend */
+  .legend{display:flex;gap:18px;flex-wrap:wrap;margin:10px 0 4px}
+  .legend span{font-size:12.5px;color:var(--dim);display:flex;align-items:center;gap:7px}
+  .tagpill{font-family:var(--mono);font-size:11px;padding:2px 7px;border-radius:20px;border:1px solid var(--border)}
+
+  /* do/don't */
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:14px}
+  @media(max-width:720px){.grid2{grid-template-columns:1fr}}
+  .card{border:1px solid var(--border);border-radius:10px;overflow:hidden}
+  .card .head{padding:9px 14px;font-family:var(--mono);font-size:12.5px;font-weight:700;
+              display:flex;align-items:center;gap:8px}
+  .card.do .head{background:rgba(152,195,121,.10);color:var(--green);border-bottom:1px solid var(--border)}
+  .card.dont .head{background:rgba(224,108,117,.10);color:var(--red);border-bottom:1px solid var(--border)}
+  .card pre{margin:0;padding:14px;font-family:var(--mono);font-size:13px;line-height:1.65;
+            background:var(--term);white-space:pre-wrap}
+  .note{color:var(--dim);font-size:12.5px;padding:10px 14px;border-top:1px dashed var(--border)}
+  footer{margin-top:64px;border-top:1px solid var(--border);padding-top:20px;color:var(--dim);
+         font-size:12.5px;font-family:var(--mono)}
+  .rule-list{color:var(--dim);font-size:13.5px;max-width:74ch}
+  .rule-list b{color:var(--fg);font-weight:600}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <div class="brand">
+      <h1><span class="caret">&gt;</span> omega</h1>
+      <span class="tag">tui style guide · v1</span>
+    </div>
+    <p class="lede">La TUI la lee un ingeniero mientras supervisa a un agente que trabaja rápido.
+      Se escanea, no se contempla. Todo acá optimiza para responder tres preguntas en menos de un
+      segundo: <span class="fg">¿qué hace ahora?</span> · <span class="fg">¿qué decidió y qué cambió?</span> ·
+      <span class="fg">¿algo requiere mi atención?</span></p>
+  </header>
+
+  <!-- 1. PALETA -->
+  <h2><span class="n">01</span>Paleta &amp; semántica de color</h2>
+  <p class="sub">Un color = un significado. Siempre. Si un color empieza a significar dos cosas,
+     perdió su valor de escaneo. Mapea <code>src/tui/theme.ts</code>.</p>
+  <div class="swatches">
+    <div class="sw"><div class="chip" style="background:#c8cdd6"></div><div class="meta"><span class="name">foreground</span><span class="hex">#c8cdd6</span><span class="use">Contenido del agente: su texto, razonamiento, respuestas.</span></div></div>
+    <div class="sw"><div class="chip" style="background:#56b6c2"></div><div class="meta"><span class="name">cyan</span><span class="hex">#56b6c2 · 36m</span><span class="use">Acción: nombres de tool (read, edit, bash…).</span></div></div>
+    <div class="sw"><div class="chip" style="background:#7a828e"></div><div class="meta"><span class="name">gray</span><span class="hex">#7a828e · 90m</span><span class="use">Output crudo de tools (stdout, grep).</span></div></div>
+    <div class="sw"><div class="chip" style="background:#6b7280"></div><div class="meta"><span class="name">dim</span><span class="hex">#6b7280 · 2m</span><span class="use">Metadata / plomería: paths, ids, statusline, recap.</span></div></div>
+    <div class="sw"><div class="chip" style="background:#98c379"></div><div class="meta"><span class="name">green</span><span class="hex">#98c379 · 32m</span><span class="use">Éxito / confirmación (✓ commit, sesión retomada).</span></div></div>
+    <div class="sw"><div class="chip" style="background:#e5c07b"></div><div class="meta"><span class="name">yellow</span><span class="hex">#e5c07b · 33m</span><span class="use">Advertencia recuperable (reintento, degradación).</span></div></div>
+    <div class="sw"><div class="chip" style="background:#e06c75"></div><div class="meta"><span class="name">red</span><span class="hex">#e06c75 · 31m</span><span class="use">Error: algo se rompió (tool falló, excepción).</span></div></div>
+  </div>
+
+  <!-- 2. TRES CAPAS -->
+  <h2><span class="n">02</span>Las tres capas</h2>
+  <p class="sub">Todo lo que emite el agente cae en una de tres capas, y cada capa tiene un
+     tratamiento visual fijo. Si el humano no lo va a leer palabra por palabra, va en dim.</p>
+  <div class="legend">
+    <span><span class="tagpill" style="color:var(--fg)">contenido</span> foreground — se lee</span>
+    <span><span class="tagpill" style="color:var(--cyan)">acción</span> cyan — qué tool y con qué</span>
+    <span><span class="tagpill" style="color:var(--dim)">plomería</span> dim/gray — se escanea</span>
+  </div>
+  <div class="term">
+    <div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="ttl">omega — sesión medra-functions</span></div>
+<pre><span class="fg">Voy a revisar el handler que persiste el mensaje rechazado.</span>
+
+<span class="cyan">&gt; read</span> <span class="dim">apps/medra-web/…/bubble/content/content-factory.tsx</span>
+<span class="gray">  = 25 líneas · 666 chars</span>
+
+<span class="fg">Encontré el bug: para </span><span class="fg b">role=user</span><span class="fg"> se renderiza el mime type crudo
+en vez del banner. Lo arreglo diferenciando emisor.</span></pre>
+  </div>
+
+  <!-- 3. COMPONENTES -->
+  <h2><span class="n">03</span>Galería de componentes</h2>
+  <p class="sub">La forma corta es el default; la larga se pide (verbose). La plomería
+     (tool call + result) va pegada: es una unidad. El contenido respira.</p>
+
+  <div class="term">
+    <div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="ttl">tool calls — acción + plomería</span></div>
+<pre><span class="cyan">&gt; edit</span> <span class="dim">packages/medra-core/src/index.ts</span>
+<span class="gray">  = 1 línea · 205 chars</span>
+<span class="cyan">&gt; bash</span> <span class="fg">'git add -A &amp;&amp; git commit --no-verify -m "fix"'</span>
+<span class="gray">  = 8 líneas · 569 chars</span>
+<span class="cyan">&gt; grep</span> <span class="fg">"unsupported_media"</span> <span class="dim">apps/medra-web/src</span>
+<span class="gray">  = 3 coincidencias</span></pre>
+  </div>
+
+  <div class="term">
+    <div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="ttl">edit como diff — propuesto (acción + contenido)</span></div>
+<pre><span class="cyan">&gt; edit</span> <span class="dim">apps/medra-web/…/content-factory.tsx</span>
+<span class="dim">  @@ toBubbleType @@</span>
+<span class="red">- return message</span>
+<span class="green">+ return sender === "user"</span>
+<span class="green">+   ? t("unsupportedMedia.userBubble")</span>
+<span class="green">+   : message</span></pre>
+  </div>
+
+  <div class="term">
+    <div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="ttl">recap al retomar sesión — /resume</span></div>
+<pre><span class="dim">── Últimos mensajes ──────────────────────────────
+🧑 vos    Tengo que desplegar back y front?
+🤖 omega  Sí, los dos. Backend por documentFilename; front
+          por el banner ámbar y el ícono.
+🧑 vos    Build error: Turbopack failed with 1 error…
+🤖 omega  Había una llave } de más tras MessageMedia. Ya
+          está. El build debería pasar.
+──────────────────────────────────────────────────</span>
+<span class="fg">Sesión </span><span class="green">unsupported-media</span><span class="fg"> retomada </span><span class="dim">(589 mensajes, $7.56).</span></pre>
+  </div>
+
+  <!-- 4. ESTADOS -->
+  <h2><span class="n">04</span>Estados &amp; feedback</h2>
+  <p class="sub">Cada estado tiene un signo inconfundible. Nunca fallar en silencio: el humano
+     siempre tiene que saber si el agente piensa, se recupera, terminó o murió.</p>
+  <div class="term">
+    <div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="ttl">el ciclo de vida de un turno</span></div>
+<pre><span class="dim">⠋ pensando…</span>
+<span class="fg">Ahí va el análisis…</span>            <span class="dim">← streaming, foreground</span>
+<span class="yellow">⏳ Continuando…</span>                  <span class="dim">← auto-continue (max_tokens)</span>
+<span class="yellow">⟳ Respuesta vacía, reintentando (2/3)…</span>
+<span class="green">✓ commit ea6820df</span>
+<span class="yellow">⚠ 3 errores consecutivos — cambiando de estrategia</span>
+<span class="red">Error: fetch failed — sin conexión al provider</span>
+<span class="dim">⏹ Interrumpido por el usuario.</span></pre>
+  </div>
+  <div class="term">
+    <div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="ttl">statusline — plomería pura, siempre dim, al pie</span></div>
+<pre><span class="dim">~ ctx: 90138 tk · 5 tools · in: 465488 · out: 1090 · 32.6s · $0.07 (total: $7.63)</span></pre>
+  </div>
+
+  <!-- 5. ESPACIADO -->
+  <h2><span class="n">05</span>Densidad &amp; espaciado</h2>
+  <p class="sub">El markdown se lee: respira, una línea en blanco entre bloques. La plomería se
+     escanea: va pegada. Tratarlos con la misma vara fue la pelea histórica de espaciados.</p>
+  <div class="grid2">
+    <div class="card do">
+      <div class="head">✓ correcto</div>
+<pre><span class="fg b">Plan</span>
+
+<span class="fg">1. Persistir el inbound como unsupported_media.</span>
+<span class="fg">2. Darle tratamiento en la UI.</span>
+
+<span class="cyan">&gt; read</span> <span class="dim">handler/handle-message-document.ts</span>
+<span class="gray">  = 40 líneas</span></pre>
+      <div class="note">Aire entre bloques de contenido; tool call + result pegados.</div>
+    </div>
+    <div class="card dont">
+      <div class="head">✗ evitar</div>
+<pre><span class="fg b">Plan</span>
+<span class="fg">1. Persistir el inbound como unsupported_media.</span>
+<span class="fg">2. Darle tratamiento en la UI.</span>
+<span class="cyan">&gt; read</span> <span class="dim">/Users/benja/Workspace/Medra/medra-functions/MED-1992-…/handler/handle-message-document.ts</span>
+
+<span class="gray">  = 40 líneas</span></pre>
+      <div class="note">Contenido apretado, path absoluto en foreground, aire dentro de la unidad de plomería.</div>
+    </div>
+  </div>
+
+  <!-- 6. DO / DON'T -->
+  <h2><span class="n">06</span>Anti-patrones</h2>
+  <p class="rule-list">
+    <b>· Un color, dos significados</b> → el escaneo deja de funcionar. &nbsp;
+    <b>· Forma larga por default</b> → ahoga la señal en detalle. &nbsp;
+    <b>· Paths absolutos / ids / timestamps en foreground</b> → ruido puro. &nbsp;
+    <b>· Fallar en silencio</b> (turno vacío, red caída) → el humano no sabe si murió o piensa. &nbsp;
+    <b>· Escribir directo a stdout</b> en vez de <code>printAbove</code> → pisa el editor. &nbsp;
+    <b>· Asumir 80 columnas</b> → se rompe en terminal angosta (una tabla rota es peor que una fea).
+  </p>
+
+  <footer>
+    omega · tui style guide · derivado de docs/tui-design.md<br>
+    contenido = foreground &nbsp;·&nbsp; acción = cyan &nbsp;·&nbsp; plomería = dim/gray &nbsp;·&nbsp;
+    éxito = green &nbsp;·&nbsp; warning = yellow &nbsp;·&nbsp; error = red
+  </footer>
+
+</div>
+</body>
+</html>
