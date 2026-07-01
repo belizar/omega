@@ -2,7 +2,7 @@ import { statSync, readFileSync } from "fs";
 import { Tool } from "./tool.js";
 import { logger } from "../logger.js";
 import { isEnvFile, ENV_BLOCK_MESSAGE } from "./env-guard.js";
-import { outlineFile, outlineDir } from "../outline/extract.js";
+import { outlineFile, outlineDir } from "../tools/outline-extract.js";
 
 type OutlineInput = { path: string };
 

@@ -1,6 +1,6 @@
 import { Tool } from "../tools/tool.js";
-import { McpClient } from "./mcp-client.js";
-import { McpToolDescriptor } from "./mcp-types.js";
+import { McpClient } from "./client.js";
+import { McpToolDescriptor } from "./types.js";
 
 /**
  * Wrapper que convierte un descriptor de tool MCP en una Tool de Omega.

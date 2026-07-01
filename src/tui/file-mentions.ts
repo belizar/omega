@@ -1,9 +1,9 @@
 import { existsSync, readFileSync, statSync, readdirSync } from "fs";
 import { glob } from "fs/promises";
 import { resolve, relative, basename, join } from "path";
-import { isEnvFile } from "./tools/env-guard.js";
-import { ImageMessage } from "./message.js";
-import { logger } from "./logger.js";
+import { isEnvFile } from "../tools/env-guard.js";
+import { ImageMessage } from "../message.js";
+import { logger } from "../logger.js";
 
 const MAX_FILE_SIZE = 100_000; // ~100KB, para no volar el contexto
 const MAX_TOTAL_INJECTED = 200_000; // máximo total entre todos los @files

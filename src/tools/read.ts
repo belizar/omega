@@ -3,7 +3,7 @@ import { extname } from "path";
 import { Tool } from "./tool.js";
 import { logger } from "../logger.js";
 import { isEnvFile, ENV_BLOCK_MESSAGE } from "./env-guard.js";
-import { outlineFile } from "../outline/extract.js";
+import { outlineFile } from "../tools/outline-extract.js";
 
 type ReadInput = {
   path: string;

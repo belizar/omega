@@ -2,9 +2,9 @@ import { writeFileSync, readFileSync, unlinkSync, readdirSync, statSync, mkdirSy
 import { join } from "path";
 import { homedir } from "os";
 import { randomBytes } from "crypto";
-import { logger } from "./logger.js";
-import type { ImageMessage } from "./message.js";
-import { Tool } from "./tools/tool.js";
+import { logger } from "../logger.js";
+import type { ImageMessage } from "../message.js";
+import { Tool } from "./tool.js";
 
 // ── Constantes ───────────────────────────────────────────────────────────────
 
@@ -171,6 +171,16 @@ export class VisionAskTool extends Tool<VisionAskInput, string> {
 
   clearImages(): void {
     this.#sessionImages = [];
+  }
+
+  /** Modelo de visión actual. */
+  get model(): string {
+    return this.#visionModel;
+  }
+
+  /** Cambia el modelo de visión (ej: override por sesión vía /model). */
+  setModel(model: string): void {
+    this.#visionModel = model;
   }
 
   async execute(input: VisionAskInput): Promise<string> {

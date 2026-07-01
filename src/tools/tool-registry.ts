@@ -1,8 +1,8 @@
 import { Tool } from "./tool.js";
 import { Logger } from "../logger.js";
-import { McpClient } from "../mcp/mcp-client.js";
-import { McpServerConfig } from "../mcp/mcp-types.js";
-import { McpToolWrapper } from "../mcp/mcp-tool-wrapper.js";
+import { McpClient } from "../mcp/client.js";
+import { McpServerConfig } from "../mcp/types.js";
+import { McpToolWrapper } from "../mcp/tool-wrapper.js";
 import { rmSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
@@ -96,7 +96,14 @@ export class ToolRegistry {
         await client.connect();
         const mcpTools = await client.listTools();
 
+        // Cachear TODAS las tools del servidor (no solo las que matchean),
+        // para que futuras búsquedas y llamadas directas funcionen sin reconectar.
         for (const mcpTool of mcpTools) {
+          if (!this.#tools.has(mcpTool.name)) {
+            const wrapped = new McpToolWrapper(client, mcpTool);
+            this.register(wrapped);
+          }
+          // Matchear contra el query para los resultados de esta búsqueda
           const desc = mcpTool.description ?? "";
           if (mcpTool.name.toLowerCase().includes(q) || desc.toLowerCase().includes(q)) {
             results.push({
@@ -105,12 +112,6 @@ export class ToolRegistry {
               source: "mcp",
               serverName,
             });
-
-            // Cachear la tool si no está registrada ya
-            if (!this.#tools.has(mcpTool.name)) {
-              const wrapped = new McpToolWrapper(client, mcpTool);
-              this.register(wrapped);
-            }
           }
         }
       } catch (err: unknown) {

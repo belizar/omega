@@ -1,8 +1,8 @@
 import { spawn, ChildProcess } from "child_process";
-import { readFileSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import path from "path";
 import { Logger } from "../logger.js";
-import { McpServerConfig, McpToolDescriptor } from "./mcp-types.js";
+import { McpServerConfig, McpToolDescriptor } from "./types.js";
 
 /**
  * Cliente MCP que habla JSON-RPC 2.0 sobre stdio.
@@ -238,4 +238,34 @@ export function loadMcpConfig(root: string): Record<string, McpServerConfig> | n
   } catch {
     return null;
   }
+}
+
+/** Guarda la config MCP en .omega/mcp.json. */
+export function saveMcpConfig(root: string, servers: Record<string, McpServerConfig>): void {
+  const dir = path.join(root, ".omega");
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  writeFileSync(path.join(dir, "mcp.json"), JSON.stringify({ servers }, null, 2) + "\n", "utf-8");
+}
+
+/** Agrega (o reemplaza) un servidor MCP en .omega/mcp.json. */
+export function addMcpServer(root: string, name: string, config: McpServerConfig): void {
+  const existing = loadMcpConfig(path.join(root, ".omega")) ?? {};
+  existing[name] = config;
+  saveMcpConfig(root, existing);
+}
+
+/** Elimina un servidor MCP de .omega/mcp.json. */
+export function removeMcpServer(root: string, name: string): boolean {
+  const existing = loadMcpConfig(path.join(root, ".omega"));
+  if (!existing || !existing[name]) return false;
+  delete existing[name];
+  saveMcpConfig(root, existing);
+  return true;
+}
+
+/** Lista los servidores MCP configurados. */
+export function listMcpServers(root: string): Array<{ name: string; config: McpServerConfig }> {
+  const existing = loadMcpConfig(path.join(root, ".omega"));
+  if (!existing) return [];
+  return Object.entries(existing).map(([name, config]) => ({ name, config }));
 }
