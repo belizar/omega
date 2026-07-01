@@ -8,6 +8,7 @@ import {
   estimateMessagesTokens,
   pruneContext,
 } from "./context-management.js";
+import { record as recordTelemetry } from "./telemetry.js";
 
 type SessionOptions = {
   id?: string;
@@ -38,9 +39,18 @@ class Session {
     outputTokens: number;
     cachedTokens: number;
     cost: number;
+    model?: string;
   }>;
   /** Flag: un comando modal inyectó un user message y hay que disparar el runner. */
   #pendingRunner: boolean;
+  /** Perfil activo al inicio de la sesión. */
+  #profile: string;
+  /** Transiciones de perfil: qué step y qué perfil se activó. */
+  #profileTimeline: Array<{ step: number; profile: string }>;
+  /** Overrides de modelo por agente (temporales, en sesión). */
+  #modelOverrides: { primary?: string; vision?: string; classifier?: string };
+  /** Metadata arbitraria (ej: formato de statusline). Se persiste con la sesión. */
+  #meta: Record<string, unknown> = {};
 
   constructor(options: SessionOptions = {}) {
     this.#id = options.id ?? randomUUID();
@@ -53,6 +63,10 @@ class Session {
     this.#totalTokens = { input: 0, output: 0 };
     this.#stepUsage = [];
     this.#pendingRunner = false;
+    this.#profile = "default";
+    this.#profileTimeline = [];
+    this.#modelOverrides = {};
+    this.#meta = {};
     this.#sessionPath = options.dir
       ? join(options.dir, `${this.#id}.json`)
       : undefined;
@@ -68,12 +82,22 @@ class Session {
         this.#stepUsage = parsed.stepUsage ?? [];
         this.#name = parsed.name ?? "";
         this.#model = parsed.model ?? "";
+        this.#profile = parsed.profile ?? "default";
+        this.#profileTimeline = parsed.profileTimeline ?? [];
+        this.#modelOverrides = parsed.modelOverrides ?? {};
+        this.#meta = parsed.meta ?? {};
+        // Migración: stepUsage viejo sin model → agregar model vacío
+        if (Array.isArray(parsed.stepUsage) && parsed.stepUsage.length > 0 && !("model" in parsed.stepUsage[0])) {
+          this.#stepUsage = parsed.stepUsage.map((s: Record<string, unknown>) => ({ ...s, model: (s.model as string) ?? "" }));
+        }
 
         // workingContext: si existe en disco, se carga; si no (formato viejo), se regenera
         if (parsed.workingContext && Array.isArray(parsed.workingContext)) {
           this.#workingContext = parsed.workingContext;
         } else {
-          this.#workingContext = compactStaleReads(this.#messages);
+          // Usar staleSteps alto: al resumir una sesión, no queremos compactar
+          // todo el contexto — perderíamos la conversación anterior.
+          this.#workingContext = compactStaleReads(this.#messages, { staleSteps: 50, minLines: 200 });
         }
 
         logger.info("Session loaded from file", {
@@ -105,9 +129,63 @@ class Session {
     return this.#model;
   }
 
+  /** Profile getter. */
+  get profile(): string {
+    return this.#profile;
+  }
+
+  /** Timeline de transiciones de perfil. */
+  get profileTimeline(): readonly { step: number; profile: string }[] {
+    return this.#profileTimeline;
+  }
+
+  /** Overrides de modelo activos. */
+  get modelOverrides(): Readonly<{ primary?: string; vision?: string; classifier?: string }> {
+    return this.#modelOverrides;
+  }
+
+  /** Cantidad de steps (para indexar timeline). */
+  get stepCount(): number {
+    return this.#stepUsage.length;
+  }
+
+  /** Metadata arbitraria de sesión (se persiste). */
+  getMeta(key: string): unknown {
+    return this.#meta[key];
+  }
+
+  setMeta(key: string, value: unknown): void {
+    this.#meta[key] = value;
+    this.#save();
+  }
+
   /** Setea el modelo (llamado por index.ts al iniciar). */
   setModel(model: string): void {
     this.#model = model;
+    this.#save();
+  }
+
+  /** Activa un perfil (registra transición en el timeline). */
+  activateProfile(name: string): void {
+    const currentStep = this.#stepUsage.length;
+    this.#profile = name;
+    this.#profileTimeline.push({ step: currentStep, profile: name });
+    this.#save();
+  }
+
+  /** Setea un override de modelo para un agente. */
+  setModelOverride(agent: "primary" | "vision" | "classifier", model: string | null): void {
+    if (model === null) {
+      delete this.#modelOverrides[agent];
+    } else {
+      this.#modelOverrides[agent] = model;
+    }
+    this.#save();
+  }
+
+  /** Limpia todos los overrides. */
+  resetModelOverrides(): void {
+    this.#modelOverrides = {};
     this.#save();
   }
 
@@ -208,6 +286,7 @@ class Session {
       outputTokens: number;
       cachedTokens: number;
       cost: number;
+      model?: string;
     }>,
   ): void {
     this.#stepUsage.push(...steps);
@@ -219,6 +298,7 @@ class Session {
     outputTokens: number;
     cachedTokens: number;
     cost: number;
+    model?: string;
   }[] {
     return this.#stepUsage;
   }
@@ -285,6 +365,7 @@ class Session {
             totalTokens: this.#totalTokens,
             stepUsage: this.#stepUsage,
             model: this.#model || undefined,
+            meta: Object.keys(this.#meta).length > 0 ? this.#meta : undefined,
           },
           null,
           2,
@@ -293,6 +374,22 @@ class Session {
       );
     } catch (err: unknown) {
       logger.error("Failed to save session", { error: err instanceof Error ? err.message : String(err) });
+    }
+
+    // Registrar telemetría global (solo metadatos, sobrevive al worktree)
+    try {
+      recordTelemetry({
+        id: this.#id,
+        name: this.#name || "",
+        savedAt: new Date().toISOString(),
+        totalCost: this.#totalCost,
+        totalTokens: { ...this.#totalTokens },
+        model: this.#model || "",
+        cwd: process.cwd(),
+      });
+    } catch (err: unknown) {
+      // La telemetría es secundaria: si falla, no queremos romper el flujo
+      logger.debug("Failed to record telemetry", { error: err instanceof Error ? err.message : String(err) });
     }
   }
 

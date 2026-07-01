@@ -1,6 +1,5 @@
 import { AgentConfig } from "./agent-config.js";
 import { CommandClassifier } from "./classifier/classifier.js";
-import { Runner } from "./runner.js";
 import { Session } from "./session.js";
 import { Screen } from "./tui/screen.js";
 import { ToolRegistry } from "./tools/tool-registry.js";
@@ -8,7 +7,6 @@ import { ToolRegistry } from "./tools/tool-registry.js";
 type ContextConstructorProps = {
   session: Session;
   agentConfig: AgentConfig;
-  runner: Runner;
   screen: Screen;
   toolRegistry: ToolRegistry;
   classifier?: CommandClassifier;
@@ -17,16 +15,14 @@ type ContextConstructorProps = {
 class Context {
   #session: Session;
   #agentConfig: AgentConfig;
-  #runner: Runner;
   #screen: Screen;
   #toolRegistry: ToolRegistry;
   #classifier?: CommandClassifier;
   #verbose = false;
 
-  constructor({ session, agentConfig, runner, screen, toolRegistry, classifier }: ContextConstructorProps) {
+  constructor({ session, agentConfig, screen, toolRegistry, classifier }: ContextConstructorProps) {
     this.#session = session;
     this.#agentConfig = agentConfig;
-    this.#runner = runner;
     this.#screen = screen;
     this.#toolRegistry = toolRegistry;
     this.#classifier = classifier;
@@ -69,8 +65,9 @@ class Context {
     return this.#agentConfig;
   }
 
-  get runner() {
-    return this.#runner;
+  /** El nombre del perfil activo. */
+  get profile(): string {
+    return this.#session.profile;
   }
 }
 

@@ -2,13 +2,14 @@ import { existsSync, readFileSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
 import { stdout } from "process";
+import { execSync } from "child_process";
 import dotenv from "dotenv";
 import { AgentConfig } from "./agent-config.js";
 import { Context } from "./app-context.js";
 import { CommandClassifier } from "./classifier/classifier.js";
 import { OverrideManager } from "./classifier/overrides.js";
 import { dispatchCommand, modalCommandsMap } from "./commands/index.js";
-import { validateEnv } from "./config.js";
+import { validateEnv, resolveAgentModel, getProfileByName } from "./config.js";
 import { logger } from "./logger.js";
 import { OpenRouterProvider } from "./providers/openrouter-llm-provider.js";
 import { Runner, RunnerEvent } from "./runner.js";
@@ -23,13 +24,13 @@ import { ReadTool } from "./tools/read.js";
 import { ToolRegistry } from "./tools/tool-registry.js";
 import { ToolSearchTool } from "./tools/tool-search.js";
 import { WriteTool } from "./tools/write.js";
-import { loadMcpConfig } from "./mcp/mcp-client.js";
+import { loadMcpConfig } from "./mcp/client.js";
 import {
   preprocessImages,
   cleanupTurnTemps,
   cleanOldVisionTemps,
   VisionAskTool,
-} from "./vision.js";
+} from "./tools/vision-ask.js";
 import {
   DisplayAssistantText,
   DisplayToolCall,
@@ -42,7 +43,10 @@ import { Spinner } from "./tui/components/spinner.js";
 import { Screen } from "./tui/screen.js";
 import { disableRawMode, enableRawMode } from "./tui/terminal.js";
 import { dim, bold, yellow } from "./tui/theme.js";
-import { expandFileMentions } from "./file-mentions.js";
+import { resolveStatusline, STATUSLINE_KEY } from "./commands/statusline.js";
+import { buildCabinetContext } from "./cabinet.js";
+import { expandFileMentions } from "./tui/file-mentions.js";
+import { collectHeroInfo, printHero } from "./tui/hero.js";
 
 // Carga la .env del cwd (overrides por proyecto) y, como fallback, la global
 // ~/.omega/.env. dotenv NO pisa vars ya seteadas, así que el cwd gana y la
@@ -65,6 +69,9 @@ Tools esenciales (siempre disponibles):
 - tool_search: buscá tools adicionales cuando necesites algo que las tools
   esenciales no cubren (ej: APIs, bases de datos, servicios externos).
   Después de encontrar una tool, usala directamente: ya queda registrada.
+  **IMPORTANTE**: Si el usuario menciona un servicio externo (Supabase, Linear,
+  Datadog, GitHub, etc.), usá tool_search **proactivamente** para ver si hay
+  tools MCP disponibles, antes de intentar resolverlo con bash o read.
 - vision_ask: si el usuario pegó una imagen y la descripción preliminar no
   cubre algo, preguntale al modelo de visión. Hacé todas tus preguntas en una
   sola llamada. Las imágenes persisten durante la sesión.
@@ -110,11 +117,41 @@ Estilo:
 - La estructura es para legibilidad, no decoración: seguí conciso, sin relleno.`;
 
 function loadProjectContext(): string {
-  const path = "AGENT.md";
-  if (!existsSync(path)) return "";
-  const content = readFileSync(path, "utf-8").trim();
-  if (!content) return "";
-  return `\n\n## Contexto del proyecto (${path})\n\n${content}`;
+  const parts: string[] = [];
+
+  // Git info: rama y nombre del proyecto
+  try {
+    const branch = execSync("git branch --show-current", { encoding: "utf-8", timeout: 2000 }).trim();
+    if (branch) parts.push(`Rama: ${branch}`);
+  } catch { /* no es repo git */ }
+
+  try {
+    const remote = execSync("git remote get-url origin", { encoding: "utf-8", timeout: 2000 }).trim();
+    // Extraer nombre del repo: git@github.com:user/repo.git → user/repo, https://github.com/user/repo → user/repo
+    const match = remote.match(/[:/]([^/]+\/[^/]+?)(?:\.git)?$/);
+    if (match) parts.push(`Repo: ${match[1]}`);
+  } catch { /* no remote */ }
+
+  // AGENT.md si existe
+  const agentPath = "AGENT.md";
+  if (existsSync(agentPath)) {
+    const content = readFileSync(agentPath, "utf-8").trim();
+    if (content) {
+      const firstLine = content.split("\n")[0].replace(/^#\s*/, "").trim();
+      const sizeKB = Math.round(content.length / 1024);
+      parts.push(`AGENT.md: ${firstLine} (${sizeKB} KB)`);
+    }
+  }
+
+  if (parts.length === 0) return "";
+  return `\n\n## Contexto del proyecto\n\n${parts.map(p => `- ${p}`).join("\n")}\n\n${existsSync(agentPath) ? "Leé AGENT.md con read cuando necesites contexto de reglas y convenciones. " : ""}No asumas nada sobre el proyecto sin haberlo explorado.`;
+}
+
+function loadMcpContext(): string {
+  const servers = loadMcpConfig(".omega");
+  if (!servers || Object.keys(servers).length === 0) return "";
+  const names = Object.keys(servers).join(", ");
+  return `\n\n## Servicios MCP disponibles\n\nTenés tools MCP configuradas para: ${names}.\nCuando el usuario mencione alguno de estos servicios, usá \`tool_search\` con el nombre del servicio para descubrir las tools disponibles y usalas directamente.`;
 }
 
 const main = async () => {
@@ -128,7 +165,16 @@ const main = async () => {
   logger.setLogFile(`.omega/logs/${session.id}.log`);
   logger.info("Omega agent starting", { session: session.id });
 
-  const fullSystemPrompt = SYSTEM_PROMPT + loadProjectContext();
+  const fullSystemPrompt = SYSTEM_PROMPT + loadProjectContext() + loadMcpContext() + buildCabinetContext();
+
+  // ── Hero ──────────────────────────────────────────────────────────
+  const toolCount = 8; // read, write, edit, bash, grep, outline, tool_search, ask_user
+  printHero(collectHeroInfo({
+    profile: session.profile,
+    model: config.model,
+    visionModel: config.visionModel,
+    toolCount,
+  }));
 
   // ── Clasificador de comandos ──────────────────────────────────────
   let classifier: CommandClassifier | undefined;
@@ -191,12 +237,21 @@ const main = async () => {
 
   const llmprovider = new OpenRouterProvider(config.openrouterApiKey);
 
-  const runner = new Runner({
-    llmProvider: llmprovider,
-    agentConfig: haikuAgent,
-    maxSteps: config.maxSteps,
-    maxContextTokens: config.maxContextTokens,
-  });
+  // Resuelve el modelo efectivo por turno considerando overrides de /model.
+  // Se leen desde ctx.session (no una captura) para que /resume tome efecto.
+  const resolvePrimaryModel = (): string =>
+    resolveAgentModel(
+      "primary",
+      getProfileByName(ctx.session.profile)!,
+      ctx.session.modelOverrides as Record<string, string>,
+    );
+  // Classifier y vision NO usan resolveAgentModel: su fallback no es el modelo
+  // primario (texto) sino su default resuelto (haiku / null). El override de
+  // sesión los pisa; sin override, quedan con el default del perfil.
+  const resolveClassifierModel = (): string =>
+    ctx.session.modelOverrides.classifier ?? config.classifierModel;
+  const resolveVisionModel = (): string | null =>
+    ctx.session.modelOverrides.vision ?? config.visionModel;
 
   const screen = new Screen(config.screenPadding);
   const spinner = new Spinner(screen);
@@ -207,16 +262,25 @@ const main = async () => {
   const ctx = new Context({
     session,
     agentConfig: haikuAgent,
-    runner,
     screen,
     toolRegistry,
     classifier,
   });
 
+  // Restaurar statusline si la sesión tiene un formato guardado
+  const savedFormat = session.getMeta(STATUSLINE_KEY) as string | undefined;
+  if (savedFormat) {
+    const resolved = resolveStatusline(savedFormat, ctx);
+    screen.setStatusline(dim(resolved));
+  }
+
   const lineEditor = new LineEditor();
 
-  /** Ejecuta un turno del runner: el user message ya está en la sesión. */
+  /** Ejecuta un turno del runner: el user message ya está en la sesión.
+   *  Lee ctx.session (no la variable capturada del arranque) para que
+   *  /resume, que reemplaza la sesión activa vía ctx.setSession, tome efecto. */
   const runTurn = async () => {
+    const session = ctx.session;
     const abortController = new AbortController();
     screen.setAbortController(abortController);
 
@@ -226,6 +290,7 @@ const main = async () => {
       maxSteps: config.maxSteps,
       maxContextTokens: config.maxContextTokens,
       signal: abortController.signal,
+      model: resolvePrimaryModel(),
       onAskUser: async (question: string) => {
         spinner.stop();
         const answer = await screen.askUser(question);
@@ -233,6 +298,10 @@ const main = async () => {
         return answer;
       },
     });
+
+    // Aplicar overrides de /model para este turno (primary + classifier).
+    haikuAgent.setModel(resolvePrimaryModel());
+    classifier?.setModel(resolveClassifierModel());
 
     try {
       const iterator = run.run(session.getContext());
@@ -291,7 +360,21 @@ const main = async () => {
       metrics.totalCost < 0.01 ? "<$0.01" : `${metrics.totalCost.toFixed(2)}`;
     const runningStr =
       session.totalCost < 0.01 ? "<$0.01" : `${session.totalCost.toFixed(2)}`;
-    const metricsLine = `~ ctx: ${session.contextTokens} tk · ${metrics.totalToolCalls} tools · in: ${metrics.totalInputTokens} · out: ${metrics.totalOutputTokens} tokens · ${durationSec}s · ${costStr} (total: ${runningStr})`;
+
+    // Indicadores de thrashing (solo visibles cuando hay algo que reportar)
+    const thrashParts: string[] = [];
+    if (metrics.totalToolErrors > 0) {
+      thrashParts.push(`⚠ ${metrics.totalToolErrors} errores`);
+    }
+    if (metrics.rereads.length > 0) {
+      const rereadPaths = metrics.rereads
+        .map((r: { path: string }) => r.path)
+        .join(", ");
+      thrashParts.push(`⟳ re-leídos: ${rereadPaths}`);
+    }
+    const thrashStr = thrashParts.length > 0 ? ` · ${thrashParts.join(" · ")}` : "";
+
+    const metricsLine = `~ ctx: ${session.contextTokens} tk · ${metrics.totalToolCalls} tools · in: ${metrics.totalInputTokens} · out: ${metrics.totalOutputTokens} tokens · ${durationSec}s · ${costStr} (total: ${runningStr})${thrashStr}`;
     screen.printAbove(dim(`\n${metricsLine}`));
     run.resetMetrics();
   };
@@ -379,10 +462,16 @@ const main = async () => {
     );
     let turnTempPaths: string[] = [];
 
-    if (hasImages && config.visionModel) {
+    // Modelo de visión efectivo para este turno (override de /model ?? perfil).
+    const turnVisionModel = resolveVisionModel();
+    if (visionAskTool && turnVisionModel) {
+      visionAskTool.setModel(turnVisionModel);
+    }
+
+    if (hasImages && turnVisionModel) {
       const visionResult = await preprocessImages(
         userContent as Record<string, unknown>[],
-        config.visionModel,
+        turnVisionModel,
         config.visionMaxTokens,
         config.openrouterApiKey,
       );

@@ -1,7 +1,33 @@
+import { existsSync, readFileSync } from "fs";
+import { join } from "path";
+import { homedir } from "os";
 import { logger } from "./logger.js";
 
-interface Config {
+// ── Tipos ────────────────────────────────────────────────────────────────────
+
+interface AgentProfile {
+  /** Modelo por defecto para todos los agentes del perfil. */
+  model: string;
+  maxTokens?: number;
+  maxSteps?: number;
+  maxContextTokens?: number;
+  /** Modelo específico para el agente de visión (hereda model si no se setea). */
+  vision?: { model?: string; maxTokens?: number };
+  /** Modelo específico para el clasificador de comandos (hereda model si no se setea). */
+  classifier?: { model?: string; maxTokens?: number; learn?: boolean };
+}
+
+interface OmegaConfig {
+  /** Perfil activo por defecto. */
+  defaultProfile: string;
+  /** Perfiles nombrados. */
+  profiles: Record<string, AgentProfile>;
+}
+
+interface ResolvedConfig {
   openrouterApiKey: string;
+  /** Perfil activo (nombre). */
+  profile: string;
   model: string;
   maxTokens: number;
   maxSteps: number;
@@ -9,67 +35,189 @@ interface Config {
   maxContextTokens: number;
   nodeEnv: string;
   screenPadding: number;
-  /** Modo del clasificador de comandos: "on" (default) o "off" */
   classifierMode: "on" | "off";
-  /** Modelo usado para clasificar comandos (debe ser rápido y barato) */
   classifierModel: string;
-  /** Habilita el aprendizaje automático de overrides (default: false) */
   classifierLearn: boolean;
-  /** Líneas sobre las que read devuelve outline en vez del archivo entero */
   outlineThreshold: number;
-  /** Modelo de visión para preprocesar imágenes (opcional). Sin él, imágenes no se procesan. */
   visionModel: string | null;
-  /** Máximo de tokens para respuestas del modelo de visión */
   visionMaxTokens: number;
 }
 
-function validateEnv(): Config {
-  logger.info("Validating environment variables...");
+// ── Defaults ─────────────────────────────────────────────────────────────────
 
-  const openrouterApiKey = process.env.OPENROUTER_API_KEY;
-  if (!openrouterApiKey) {
-    logger.error("Missing required env var: OPENROUTER_API_KEY");
-    throw new Error("OPENROUTER_API_KEY environment variable is required. Create a .env file or set it in ~/.omega/.env");
+const DEFAULT_CONFIG: OmegaConfig = {
+  defaultProfile: "default",
+  profiles: {
+    default: {
+      model: "anthropic/claude-haiku-4-5-20251001",
+      maxTokens: 4096,
+      maxSteps: 15,
+      maxContextTokens: 100_000,
+    },
+  },
+};
+
+// ── Carga y merge ────────────────────────────────────────────────────────────
+
+function loadJsonFile(path: string): Record<string, unknown> | null {
+  if (!existsSync(path)) return null;
+  try {
+    return JSON.parse(readFileSync(path, "utf-8"));
+  } catch (err: unknown) {
+    logger.warn(`Failed to parse ${path}`, { error: err instanceof Error ? err.message : String(err) });
+    return null;
   }
-
-  const model = process.env.MODEL || "claude-haiku-4-5-20251001";
-  const maxTokens = parseInt(process.env.MAX_TOKENS || "4096", 10);
-  const maxSteps = parseInt(process.env.MAX_STEPS || "15", 10);
-  const maxContextMessages = parseInt(process.env.MAX_CONTEXT_MESSAGES || "50", 10);
-  const maxContextTokens = parseInt(process.env.MAX_CONTEXT_TOKENS || "100000", 10);
-  const nodeEnv = process.env.NODE_ENV || "development";
-  const screenPadding = parseInt(process.env.SCREEN_PADDING || "0", 10);
-  const classifierMode = (process.env.CLASSIFIER_MODE || "on") as "on" | "off";
-  const classifierModel = process.env.CLASSIFIER_MODEL || "anthropic/claude-haiku-4-5";
-  const classifierLearn = process.env.CLASSIFIER_LEARN !== "false";
-  const outlineThreshold = parseInt(process.env.OUTLINE_THRESHOLD || "200", 10);
-  const visionModel = process.env.VISION_MODEL || null;
-  const visionMaxTokens = parseInt(process.env.VISION_MAX_TOKENS || "512", 10);
-
-  const config: Config = {
-    openrouterApiKey,
-    model,
-    maxTokens,
-    maxSteps,
-    maxContextMessages,
-    maxContextTokens,
-    nodeEnv,
-    screenPadding,
-    classifierMode,
-    classifierModel,
-    classifierLearn,
-    outlineThreshold,
-    visionModel,
-    visionMaxTokens,
-  };
-
-  logger.info("Config loaded successfully", {
-    model,
-    maxTokens,
-    maxSteps,
-    nodeEnv,
-  });
-  return config;
 }
 
-export { Config, validateEnv };
+/** Carga ~/.omega/config.json y .omega/config.json, mergea.
+ *  En modo test no lee archivos: devuelve los defaults hardcodeados. */
+export function loadOmegaConfig(): OmegaConfig {
+  if (process.env.NODE_ENV === "test") {
+    return { ...DEFAULT_CONFIG, profiles: { ...DEFAULT_CONFIG.profiles } };
+  }
+
+  const globalPath = join(homedir(), ".omega", "config.json");
+  const projectPath = join(process.cwd(), ".omega", "config.json");
+
+  let merged: OmegaConfig = { ...DEFAULT_CONFIG, profiles: { ...DEFAULT_CONFIG.profiles } };
+
+  // 1. Global
+  const global = loadJsonFile(globalPath);
+  if (global) {
+    if (typeof global.defaultProfile === "string") merged.defaultProfile = global.defaultProfile;
+    if (global.profiles && typeof global.profiles === "object") {
+      for (const [name, p] of Object.entries(global.profiles as Record<string, unknown>)) {
+        merged.profiles[name] = { ...merged.profiles[name], ...(p as AgentProfile) };
+      }
+    }
+  }
+
+  // 2. Proyecto (pisa)
+  const project = loadJsonFile(projectPath);
+  if (project) {
+    if (typeof project.defaultProfile === "string") merged.defaultProfile = project.defaultProfile;
+    if (project.profiles && typeof project.profiles === "object") {
+      for (const [name, p] of Object.entries(project.profiles as Record<string, unknown>)) {
+        merged.profiles[name] = { ...merged.profiles[name], ...(p as AgentProfile) };
+      }
+    }
+  }
+
+  return merged;
+}
+
+// ── Resolver perfil ──────────────────────────────────────────────────────────
+
+/** Dado un nombre de perfil, devuelve la configuración resuelta. */
+function resolveProfile(
+  profileName: string,
+  config: OmegaConfig,
+  apiKey: string,
+): ResolvedConfig {
+  const profile = config.profiles[profileName];
+  if (!profile) {
+    logger.warn(`Profile "${profileName}" not found, falling back to "${config.defaultProfile}"`);
+    return resolveProfile(config.defaultProfile, config, apiKey);
+  }
+
+  const model = profile.model;
+  const maxTokens = profile.maxTokens ?? 4096;
+  const maxSteps = profile.maxSteps ?? 15;
+  const maxContextTokens = profile.maxContextTokens ?? 100_000;
+
+  // Visión: hereda model del perfil si no se especifica
+  const visionModel = profile.vision?.model ?? model;
+  const visionMaxTokens = profile.vision?.maxTokens ?? 512;
+
+  // Clasificador: hereda model del perfil si no se especifica
+  const classifierModel = profile.classifier?.model ?? "anthropic/claude-haiku-4-5";
+  const classifierLearn = profile.classifier?.learn ?? false;
+
+  // Si no hay modelo de visión configurado explícitamente, null (desactivado)
+  const effectiveVisionModel = profile.vision?.model ? visionModel : null;
+
+  return {
+    openrouterApiKey: apiKey,
+    profile: profileName,
+    model,
+    maxTokens,
+    maxSteps,
+    maxContextMessages: 50, // no va en perfil por ahora
+    maxContextTokens,
+    nodeEnv: process.env.NODE_ENV || "development",
+    screenPadding: parseInt(process.env.SCREEN_PADDING || "20", 10),
+    classifierMode: (process.env.CLASSIFIER_MODE || "on") as "on" | "off",
+    classifierModel,
+    classifierLearn,
+    outlineThreshold: parseInt(process.env.OUTLINE_THRESHOLD || "200", 10),
+    visionModel: effectiveVisionModel,
+    visionMaxTokens,
+  };
+}
+
+// ── Validación principal ─────────────────────────────────────────────────────
+
+function validateEnv(): ResolvedConfig {
+  logger.info("Validating environment and loading config...");
+
+  const apiKey = process.env.OPENROUTER_API_KEY || "";
+  const omegaConfig = loadOmegaConfig();
+  const profileName = process.env.OMEGA_PROFILE || omegaConfig.defaultProfile;
+  const resolved = resolveProfile(profileName, omegaConfig, apiKey);
+
+  logger.info("Config loaded", {
+    profile: resolved.profile,
+    model: resolved.model,
+    visionModel: resolved.visionModel,
+    classifierModel: resolved.classifierModel,
+  });
+
+  return resolved;
+}
+
+// ── Helpers públicos ─────────────────────────────────────────────────────────
+
+/** Recarga y devuelve los perfiles disponibles (para el comando /profile list). */
+function listProfiles(activeProfile?: string): { names: string[]; active: string; defaultProfile: string } {
+  const config = loadOmegaConfig();
+  const active = activeProfile ?? process.env.OMEGA_PROFILE ?? config.defaultProfile;
+  return {
+    names: Object.keys(config.profiles),
+    active,
+    defaultProfile: config.defaultProfile,
+  };
+}
+
+/** Devuelve un perfil resuelto por nombre (para /profile switch). */
+function getProfileByName(name: string): AgentProfile | null {
+  const config = loadOmegaConfig();
+  return config.profiles[name] ?? null;
+}
+
+/** Resuelve el modelo para un agente específico dado un perfil y overrides. */
+function resolveAgentModel(
+  agent: "primary" | "vision" | "classifier",
+  profile: AgentProfile,
+  overrides: { primary?: string; vision?: string; classifier?: string },
+): string {
+  // Override tiene prioridad absoluta
+  if (agent === "primary" && overrides.primary) return overrides.primary;
+  if (agent === "vision" && overrides.vision) return overrides.vision;
+  if (agent === "classifier" && overrides.classifier) return overrides.classifier;
+
+  // Spec del agente en el perfil
+  if (agent === "vision") return profile.vision?.model ?? profile.model;
+  if (agent === "classifier") return profile.classifier?.model ?? profile.model;
+
+  return profile.model;
+}
+
+export {
+  AgentProfile,
+  OmegaConfig,
+  ResolvedConfig,
+  validateEnv,
+  listProfiles,
+  getProfileByName,
+  resolveAgentModel,
+};

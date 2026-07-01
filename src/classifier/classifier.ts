@@ -57,6 +57,16 @@ export class CommandClassifier {
     return this.#learnEnabled;
   }
 
+  /** Modelo actual del clasificador. */
+  get model(): string {
+    return this.#model;
+  }
+
+  /** Cambia el modelo del clasificador (ej: override por sesión vía /model). */
+  setModel(model: string): void {
+    this.#model = model;
+  }
+
   async classify(command: string): Promise<ClassifierResult> {
     // 1. Chequear overrides
     const override = this.#overrides.lookup(command);

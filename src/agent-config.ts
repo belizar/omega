@@ -39,6 +39,10 @@ class AgentConfig {
     return this.#model;
   }
 
+  setModel(model: string): void {
+    this.#model = model;
+  }
+
   get maxTokens() {
     return this.#max_tokens;
   }
