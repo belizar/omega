@@ -8,8 +8,6 @@ import { Command } from "../../commands/command.js";
 import { Context } from "../../app-context.js";
 import { Session } from "../../session.js";
 import { AgentConfig } from "../../agent-config.js";
-import { Runner } from "../../runner.js";
-import { LLMProvider } from "../../providers/llm-provider.js";
 import { BashTool } from "../../tools/bash.js";
 import { ToolRegistry } from "../../tools/tool-registry.js";
 
@@ -38,18 +36,6 @@ class MockScreen {
   }
 }
 
-class MockLLMProvider extends LLMProvider {
-  constructor() {
-    super({ apiKey: "mock", url: "http://mock" });
-  }
-  async call() {
-    return { content: [], stop_reason: "end_turn" as const, usage: { input_tokens: 0, output_tokens: 0 }, cost: 0 };
-  }
-  async *callStream() {
-    yield { type: "done" as const, stop_reason: "end_turn" as const, usage: { input_tokens: 0, output_tokens: 0 }, cost: 0 };
-  }
-}
-
 function createMockContext(): Context {
   const session = new Session();
   const registry = new ToolRegistry();
@@ -60,12 +46,8 @@ function createMockContext(): Context {
     maxTokens: 512,
     toolRegistry: registry,
   });
-  const runner = new Runner({
-    llmProvider: new MockLLMProvider(),
-    agentConfig,
-  });
   const screen = new MockScreen() as unknown as Context["screen"];
-  return new Context({ session, agentConfig, runner, screen, toolRegistry: registry });
+  return new Context({ session, agentConfig, screen, toolRegistry: registry });
 }
 
 // ── ClearCommand ─────────────────────────────────────────────────────────────

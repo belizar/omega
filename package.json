@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "type": "module",
   "bin": {
-    "omega": "./dist/index.js"
+    "omega": "./bin/omega.mjs"
   },
   "scripts": {
     "build": "tsc",

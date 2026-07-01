@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { outlineFile, outlineDir } from "../../outline/extract.js";
+import { outlineFile, outlineDir } from "../../tools/outline-extract.js";
 
 // ── outlineFile ───────────────────────────────────────────────────────
 

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { writeFile, unlink } from "fs/promises";
 import { ReadTool } from "../../tools/read.js";
-import { outlineFile } from "../../outline/extract.js";
+import { outlineFile } from "../../tools/outline-extract.js";
 
 describe("ReadTool", () => {
   const testFile = "./test-file-read.txt";

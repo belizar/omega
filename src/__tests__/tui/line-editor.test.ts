@@ -26,19 +26,26 @@ function typeChars(editor: LineEditor, text: string): void {
 const DIM = "\x1b[2m";
 const RST = "\x1b[0m";
 
-/** Render esperado: barra superior + contenido + barra inferior. Ancho default 80. */
+/** Render esperado: recuadro con box-drawing. Ancho default 80. */
 function barContent(buffer: string, width = 80): string {
-  const bar = `${DIM}${"─".repeat(width)}${RST}`;
+  const innerW = width - 2; // sin bordes laterales
+  const topBar = `${DIM}┌${"─".repeat(innerW)}┐${RST}`;
+  const botBar = `${DIM}└${"─".repeat(innerW)}┘${RST}`;
   const promptLen = 2; // "> "
   const indent = " ".repeat(promptLen);
   const lines = buffer.split("\n");
-  const content = lines.map((l, i) => (i === 0 ? "> " : indent) + l);
-  return [bar, ...content, bar].join("\n");
+  const content = lines.map((l, i) => {
+    const prefix = i === 0 ? "> " : indent;
+    const visible = prefix + l;
+    const pad = innerW - visible.length;
+    return `${DIM}│${RST}` + visible + (pad > 0 ? " ".repeat(pad) : "") + `${DIM}│${RST}`;
+  });
+  return [topBar, ...content, botBar].join("\n");
 }
 
-/** Posición del cursor: row = línea lógica + 1 (barra superior), col = 2 + cursorCol */
+/** Posición del cursor: row + 1 (borde superior), col = prompt(2) + borde(1) + cursorCol */
 function cpos(row: number, cursorCol: number) {
-  return { row: row + 1, col: 2 + cursorCol };
+  return { row: row + 1, col: 3 + cursorCol };
 }
 
 describe("LineEditor", () => {
@@ -314,7 +321,7 @@ describe("LineEditor", () => {
     editor.handleKey(newline);
     expect(editor.render()).toBe(barContent("Primero\n"));
     expect(editor.getCursorPosition().row).toBe(2);
-    expect(editor.getCursorPosition().col).toBe(2);
+    expect(editor.getCursorPosition().col).toBe(3);
 
     typeChars(editor, "Segundo");
     expect(editor.render()).toBe(barContent("Primero\nSegundo"));

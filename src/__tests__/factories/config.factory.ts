@@ -1,17 +1,18 @@
 import { faker } from "@faker-js/faker";
-import { Config } from "../../config.js";
+import { ResolvedConfig } from "../../config.js";
 
 export class ConfigFactory {
-  static createConfig(overrides?: Partial<Config>): Config {
+  static createConfig(overrides?: Partial<ResolvedConfig>): ResolvedConfig {
     return {
       openrouterApiKey: overrides?.openrouterApiKey || faker.string.alphanumeric(32),
-      model: overrides?.model || "claude-haiku-4-5-20251001",
+      profile: overrides?.profile || "default",
+      model: overrides?.model || "anthropic/claude-haiku-4-5-20251001",
       maxTokens: overrides?.maxTokens || faker.number.int({ min: 512, max: 4096 }),
       maxSteps: overrides?.maxSteps || faker.number.int({ min: 5, max: 20 }),
       maxContextMessages: overrides?.maxContextMessages ?? 50,
       maxContextTokens: overrides?.maxContextTokens ?? 100_000,
       nodeEnv: overrides?.nodeEnv || "test",
-      screenPadding: overrides?.screenPadding ?? 0,
+      screenPadding: overrides?.screenPadding ?? 20,
       classifierMode: overrides?.classifierMode || "off",
       classifierModel: overrides?.classifierModel || "anthropic/claude-haiku-4-5",
       classifierLearn: overrides?.classifierLearn ?? false,
@@ -21,7 +22,7 @@ export class ConfigFactory {
     };
   }
 
-  static createProductionConfig(overrides?: Partial<Config>): Config {
+  static createProductionConfig(overrides?: Partial<ResolvedConfig>): ResolvedConfig {
     return this.createConfig({
       nodeEnv: "production",
       maxTokens: 1024,
@@ -30,7 +31,7 @@ export class ConfigFactory {
     });
   }
 
-  static createDevelopmentConfig(overrides?: Partial<Config>): Config {
+  static createDevelopmentConfig(overrides?: Partial<ResolvedConfig>): ResolvedConfig {
     return this.createConfig({
       nodeEnv: "development",
       maxTokens: 2048,
