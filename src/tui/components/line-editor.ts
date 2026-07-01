@@ -3,7 +3,7 @@ import { resolve, join } from "path";
 import { stdout } from "process";
 import { CursorPosition, InputComponent } from "../component.js";
 import { Key } from "../decodeKey.js";
-import { dim } from "../theme.js";
+import { bold, dim, magenta } from "../theme.js";
 import { readClipboardImage, saveTempImage } from "../clipboard-image.js";
 
 class LineEditor implements InputComponent<string> {
@@ -223,10 +223,13 @@ class LineEditor implements InputComponent<string> {
   /** Render del mensaje enviado SIN la caja (barras), para ecoarlo en el
    * historial. Así el mensaje no se ve igual que el prompt de input de abajo. */
   renderEcho(): string {
-    const indent = " ".repeat(this.#promptStr.length);
+    // Tu turno: barra magenta + texto en bold, distinto de los tool calls
+    // (cyan `> `). Cada línea lleva la barra para que sea un ancla scaneable
+    // en el scrollback, no se mimetiza con la respuesta del agente.
+    const bar = magenta("▌");
     return this.#buffer
       .split("\n")
-      .map((l, i) => (i === 0 ? this.#promptStr : indent) + l)
+      .map((l) => `${bar} ${bold(l)}`)
       .join("\n");
   }
 

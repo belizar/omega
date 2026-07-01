@@ -413,7 +413,7 @@ const main = async () => {
     const echo = lineEditor.renderEcho();
     lineEditor.reset();
     screen.printAbove(`\n${echo}`);
-    screen.printAbove("");
+    screen.printBlankLine(); // espacio real entre tu prompt y la respuesta (printAbove("") es no-op)
 
     if (await dispatchCommand(input, ctx)) {
       continue;
