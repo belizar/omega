@@ -3,3 +3,9 @@ dist/
 .omega/
 _omega/
 .env
+
+# debug traces (pesados, locales)
+trace/
+
+# settings locales de Claude Code
+.claude/settings.local.json
