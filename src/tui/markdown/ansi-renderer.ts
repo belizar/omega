@@ -4,6 +4,82 @@ import { stdout } from "process";
 
 const { columns } = stdout;
 
+// ── Helpers de ancho visible (para tablas) ───────────────────────────────────
+const ANSI_RE = /\x1b\[[0-9;]*m/g;
+function stripAnsi(s: string): string {
+  return s.replace(ANSI_RE, "");
+}
+/** Ancho de un codepoint: emojis y CJK ocupan 2 celdas en el terminal. */
+function charWidth(cp: number): number {
+  if (
+    (cp >= 0x1100 && cp <= 0x115f) || // Hangul Jamo
+    (cp >= 0x2600 && cp <= 0x27bf) || // símbolos misc / dingbats (✅ ⚠ ⏳ …)
+    (cp >= 0x2e80 && cp <= 0xa4cf) || // CJK
+    (cp >= 0xac00 && cp <= 0xd7a3) || // Hangul
+    (cp >= 0xf900 && cp <= 0xfaff) || // CJK compat
+    (cp >= 0xfe30 && cp <= 0xfe4f) ||
+    (cp >= 0xff00 && cp <= 0xff60) || // fullwidth
+    (cp >= 0xffe0 && cp <= 0xffe6) ||
+    (cp >= 0x1f000 && cp <= 0x1faff) // emoji (🔴 🟡 …)
+  ) {
+    return 2;
+  }
+  return 1;
+}
+/** Ancho visible de un string, ignorando ANSI y contando emojis como 2. */
+function visibleWidth(s: string): number {
+  let w = 0;
+  for (const ch of stripAnsi(s)) w += charWidth(ch.codePointAt(0) ?? 0);
+  return w;
+}
+/** Rellena a un ancho visible dado (no cuenta ANSI ni sub-cuenta emojis). */
+function padVisible(s: string, w: number, align: ColumnAlign): string {
+  const diff = w - visibleWidth(s);
+  if (diff <= 0) return s;
+  if (align === "right") return " ".repeat(diff) + s;
+  if (align === "center") {
+    const left = Math.floor(diff / 2);
+    return " ".repeat(left) + s + " ".repeat(diff - left);
+  }
+  return s + " ".repeat(diff);
+}
+/** Envuelve un texto a un ancho visible, por palabras, con hard-break de tokens
+ *  más largos que el ancho. Devuelve al menos [""]. */
+function wrapToWidth(s: string, w: number): string[] {
+  const words = stripAnsi(s).split(/\s+/).filter((x) => x.length > 0);
+  const lines: string[] = [];
+  let cur = "";
+  for (const word of words) {
+    if (cur === "") cur = word;
+    else if (visibleWidth(cur) + 1 + visibleWidth(word) <= w) cur += ` ${word}`;
+    else {
+      lines.push(cur);
+      cur = word;
+    }
+  }
+  if (cur) lines.push(cur);
+
+  // Hard-break de líneas que siguen excediendo (un token larguísimo)
+  const out: string[] = [];
+  for (const line of lines) {
+    if (visibleWidth(line) <= w) {
+      out.push(line);
+      continue;
+    }
+    let chunk = "";
+    for (const ch of line) {
+      if (visibleWidth(chunk) + charWidth(ch.codePointAt(0) ?? 0) > w) {
+        out.push(chunk);
+        chunk = ch;
+      } else {
+        chunk += ch;
+      }
+    }
+    if (chunk) out.push(chunk);
+  }
+  return out.length > 0 ? out : [""];
+}
+
 /**
  * Traduce markdown a secuencias ANSI para renderizado en terminal.
  */
@@ -57,34 +133,70 @@ class AnsiRenderer implements MarkdownRenderer {
   }
 
   table(headers: string[], rows: string[][], alignments: ColumnAlign[]): string {
-    const widths: number[] = headers.map((_, ci) => {
-      let max = headers[ci].length;
-      for (const row of rows) {
-        const cell = row[ci] ?? "";
-        if (cell.length > max) max = cell.length;
-      }
-      return Math.max(max, 3);
+    const cols = headers.length;
+    if (cols === 0) return "";
+    const align = (i: number): ColumnAlign => alignments[i] ?? "left";
+
+    // 1. Ancho natural de cada columna (por ancho visible, emojis = 2).
+    const natural = headers.map((h, ci) => {
+      let m = visibleWidth(h);
+      for (const row of rows) m = Math.max(m, visibleWidth(row[ci] ?? ""));
+      return Math.max(m, 3);
     });
 
-    const pad = (text: string, w: number, align: ColumnAlign): string => {
-      const diff = w - text.length;
-      if (align === "right") return " ".repeat(diff) + text;
-      if (align === "center") {
-        const left = Math.floor(diff / 2);
-        return " ".repeat(left) + text + " ".repeat(diff - left);
+    // 2. Capear al ancho del terminal. Overhead de bordes: "│ " + " │" por
+    //    columna = 3 por col, + 1 del "│" final.
+    const termWidth = (stdout.columns ?? columns ?? 80) - 1;
+    const overhead = cols * 3 + 1;
+    const widths = [...natural];
+    const MIN_COL = 6;
+    let total = widths.reduce((a, b) => a + b, 0) + overhead;
+    // Encogé la columna más ancha (la de texto absorbe el recorte) hasta entrar.
+    while (total > termWidth) {
+      let idx = -1;
+      let max = MIN_COL;
+      for (let i = 0; i < cols; i++) {
+        if (widths[i] > max) {
+          max = widths[i];
+          idx = i;
+        }
       }
-      return text + " ".repeat(diff); // left
+      if (idx === -1) break; // nada más que encoger
+      widths[idx] -= 1;
+      total -= 1;
+    }
+
+    // 3. Bordes box-drawing.
+    const V = dim("│");
+    const line = (l: string, mid: string, r: string): string =>
+      dim(l + widths.map((w) => "─".repeat(w + 2)).join(mid) + r);
+    const top = line("┌", "┬", "┐");
+    const sep = line("├", "┼", "┤");
+    const bot = line("└", "┴", "┘");
+
+    // 4. Una fila lógica → varias líneas visuales (wrapping por celda).
+    const renderRow = (
+      cells: string[],
+      style: (s: string) => string = (s) => s,
+    ): string[] => {
+      const wrapped = widths.map((w, i) => wrapToWidth(cells[i] ?? "", w));
+      const height = Math.max(...wrapped.map((c) => c.length));
+      const visual: string[] = [];
+      for (let li = 0; li < height; li++) {
+        const parts = wrapped.map((cell, i) =>
+          ` ${style(padVisible(cell[li] ?? "", widths[i], align(i)))} `,
+        );
+        visual.push(V + parts.join(V) + V);
+      }
+      return visual;
     };
 
-    const sep = dim("│");
-    const makeRow = (cells: string[], boldFn: (s: string) => string = (s) => s) =>
-      sep + cells.map((c, i) => " " + boldFn(pad(c, widths[i], alignments[i] ?? "left")) + " ").join(sep) + sep;
-
-    const hdr = makeRow(headers, (s) => bold(s));
-    const divider = sep + widths.map((w) => "─".repeat(w + 2)).join(sep) + sep;
-    const body = rows.map((row) => makeRow(row));
-
-    return [hdr, dim(divider), ...body].join("\n");
+    const out: string[] = [top];
+    out.push(...renderRow(headers, (s) => bold(s)));
+    out.push(sep);
+    for (const row of rows) out.push(...renderRow(row));
+    out.push(bot);
+    return out.join("\n");
   }
 
   listItem(text: string, index: number | null, depth: number, checked?: boolean): string {
