@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { mkdirSync, rmdirSync } from "fs";
 import { outlineFile, outlineDir } from "../../tools/outline-extract.js";
 
 // ── outlineFile ───────────────────────────────────────────────────────
@@ -133,7 +134,6 @@ describe("outlineDir", () => {
   });
 
   it("debe manejar un directorio vacío sin crashear", () => {
-    const { mkdirSync, rmdirSync } = require("fs");
     const emptyDir = "./test-empty-outline-dir";
     mkdirSync(emptyDir);
     try {

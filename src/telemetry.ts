@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, statSync, rmSync } from "fs";
 import { homedir } from "os";
 import path from "path";
 
@@ -114,7 +114,7 @@ export function listProjects(): ProjectSummary[] {
   for (const slug of readdirSync(TELEMETRY_DIR)) {
     const projectDir = join(TELEMETRY_DIR, slug);
     if (!existsSync(projectDir)) continue;
-    const stat = require("fs").statSync(projectDir);
+    const stat = statSync(projectDir);
     if (!stat.isDirectory()) continue;
 
     const sessions: TelemetryRecord[] = [];
@@ -231,7 +231,6 @@ export function deleteProject(slug: string): boolean {
   const projectDir = join(TELEMETRY_DIR, slug);
   if (!existsSync(projectDir)) return false;
   try {
-    const { rmSync } = require("fs");
     rmSync(projectDir, { recursive: true, force: true });
     return true;
   } catch {
