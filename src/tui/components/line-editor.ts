@@ -223,7 +223,7 @@ class LineEditor implements InputComponent<string> {
   /** Render del mensaje enviado SIN la caja (barras), para ecoarlo en el
    * historial. Así el mensaje no se ve igual que el prompt de input de abajo. */
   renderEcho(): string {
-    // Tu turno: barra magenta + texto en bold, distinto de los tool calls
+    // Tu turno: barra azul + texto en bold, distinto de los tool calls
     // (cyan `> `). Cada línea lleva la barra para que sea un ancla scaneable
     // en el scrollback, no se mimetiza con la respuesta del agente.
     const bar = blue("▌");
