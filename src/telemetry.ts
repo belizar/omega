@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, statSync, rmSync } from "fs";
 import { homedir } from "os";
 import path from "path";
+import { execSync } from "child_process";
 
 const { join } = path;
 
@@ -57,23 +58,109 @@ function ensureDir(dir: string): void {
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 }
 
-/**
- * Infiere el "slug" de proyecto desde un CWD.
- * Busca el git root hacia arriba; si no hay, usa el basename del CWD.
- */
-export function inferProjectSlug(cwd: string): { slug: string; root: string } {
+/** Memo por cwd: inferProjectSlug se llama en cada #save; el remote se resuelve
+ *  una sola vez por directorio en vez de spawnear git por mensaje. */
+const slugCache = new Map<string, { slug: string; root: string }>();
+
+/** Sube desde `cwd` hasta el primer `.git` y devuelve ese directorio (o null). */
+function firstGitAncestor(cwd: string): string | null {
   let dir = path.resolve(cwd);
-  // Buscar git root subiendo
   while (true) {
-    const gitDir = join(dir, ".git");
-    if (existsSync(gitDir)) return { slug: path.basename(dir), root: dir };
+    if (existsSync(join(dir, ".git"))) return dir;
     const parent = path.dirname(dir);
-    if (parent === dir) break;
+    if (parent === dir) return null;
     dir = parent;
   }
-  // Fallback: usar el basename del CWD
-  const resolved = path.resolve(cwd);
-  return { slug: path.basename(resolved), root: resolved };
+}
+
+/**
+ * Infiere el "slug" de proyecto desde un CWD.
+ *
+ * Prioridad:
+ *  1. Nombre del repo remoto (`git remote origin`) — estable a través de
+ *     worktrees y del layout bare (todos los branches comparten el mismo repo).
+ *  2. Basename del primer `.git` ancestro — comportamiento viejo.
+ *  3. Basename del CWD.
+ *
+ * Memoizado por cwd (un solo `git` por directorio por proceso).
+ */
+export function inferProjectSlug(cwd: string): { slug: string; root: string } {
+  const key = path.resolve(cwd);
+  const cached = slugCache.get(key);
+  if (cached) return cached;
+
+  const root = firstGitAncestor(key) ?? key;
+  let slug: string | null = null;
+
+  // 1. Remote: user/repo → repo
+  try {
+    const remote = execSync("git remote get-url origin", {
+      cwd: key,
+      encoding: "utf-8",
+      timeout: 2000,
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    const m = remote.match(/[:/]([^/]+?)(?:\.git)?$/);
+    if (m) slug = m[1];
+  } catch {
+    // sin git o sin remote → fallback
+  }
+
+  // 2/3. Fallback: basename del git root o del cwd
+  if (!slug) slug = path.basename(root);
+
+  const result = { slug, root };
+  slugCache.set(key, result);
+  return result;
+}
+
+/**
+ * Migra registros viejos al esquema de slug actual: re-infiere el slug de cada
+ * registro por su `cwd` guardado y lo mueve al proyecto correcto (mergeando).
+ * Devuelve cuántos registros se movieron. Idempotente.
+ */
+export function migrateTelemetry(): { moved: number; from: string[] } {
+  if (!existsSync(TELEMETRY_DIR)) return { moved: 0, from: [] };
+  let moved = 0;
+  const touchedFrom = new Set<string>();
+
+  for (const oldSlug of readdirSync(TELEMETRY_DIR)) {
+    const oldDir = join(TELEMETRY_DIR, oldSlug);
+    if (!existsSync(oldDir) || !statSync(oldDir).isDirectory()) continue;
+
+    for (const file of readdirSync(oldDir)) {
+      if (!file.endsWith(".json")) continue;
+      const oldPath = join(oldDir, file);
+      let rec: TelemetryRecord;
+      try {
+        rec = JSON.parse(readFileSync(oldPath, "utf-8")) as TelemetryRecord;
+      } catch {
+        continue;
+      }
+      if (!rec.cwd) continue;
+      const { slug: newSlug } = inferProjectSlug(rec.cwd);
+      if (newSlug === oldSlug) continue; // ya está en el lugar correcto
+
+      // Mover al proyecto nuevo (record() mergea si ya existe)
+      record(rec);
+      try {
+        rmSync(oldPath);
+      } catch {
+        /* best-effort */
+      }
+      moved++;
+      touchedFrom.add(oldSlug);
+    }
+
+    // Borrar el dir viejo si quedó vacío
+    try {
+      if (readdirSync(oldDir).length === 0) rmSync(oldDir, { recursive: true, force: true });
+    } catch {
+      /* best-effort */
+    }
+  }
+
+  return { moved, from: [...touchedFrom] };
 }
 
 // ── API ──────────────────────────────────────────────────────────────────────

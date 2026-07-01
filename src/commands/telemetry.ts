@@ -1,6 +1,6 @@
 import { Command } from "./command.js";
 import { Context } from "../app-context.js";
-import { getGlobalSummary, getProject, listProjects } from "../telemetry.js";
+import { getGlobalSummary, getProject, listProjects, migrateTelemetry } from "../telemetry.js";
 
 /**
  * Muestra costos acumulados de todas las sesiones, a través de todos los proyectos.
@@ -14,6 +14,14 @@ class TelemetryCommand implements Command<void> {
   helpShort = "/telemetry [<proyecto> | all]";
 
   handler(ctx: Context, args: string[]): void {
+    // Consolidar registros viejos al esquema de slug por-repo (idempotente).
+    const migrated = migrateTelemetry();
+    if (migrated.moved > 0) {
+      ctx.screen.printAbove(
+        `↻ Telemetría migrada: ${migrated.moved} registro(s) reagrupados por repo (${migrated.from.join(", ")}).`,
+      );
+    }
+
     const sub = args[0]?.trim();
 
     if (sub === "all") {
