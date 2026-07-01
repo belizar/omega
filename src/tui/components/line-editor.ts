@@ -3,7 +3,7 @@ import { resolve, join } from "path";
 import { stdout } from "process";
 import { CursorPosition, InputComponent } from "../component.js";
 import { Key } from "../decodeKey.js";
-import { bold, dim, magenta } from "../theme.js";
+import { blue, bold, dim } from "../theme.js";
 import { readClipboardImage, saveTempImage } from "../clipboard-image.js";
 
 class LineEditor implements InputComponent<string> {
@@ -226,7 +226,7 @@ class LineEditor implements InputComponent<string> {
     // Tu turno: barra magenta + texto en bold, distinto de los tool calls
     // (cyan `> `). Cada línea lleva la barra para que sea un ancla scaneable
     // en el scrollback, no se mimetiza con la respuesta del agente.
-    const bar = magenta("▌");
+    const bar = blue("▌");
     return this.#buffer
       .split("\n")
       .map((l) => `${bar} ${bold(l)}`)
