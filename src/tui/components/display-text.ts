@@ -1,3 +1,4 @@
+import { homedir } from "os";
 import { cyan, dim, gray } from "../theme.js";
 import { MarkdownRenderer, ColumnAlign } from "../markdown/types.js";
 import { PlainRenderer } from "../markdown/plain-renderer.js";
@@ -444,7 +445,13 @@ class DisplayToolCall {
 
   call(name: string, input: unknown, _verbose: boolean): void {
     const desc = this.#describeInput(name, input);
-    this.#screen.printAbove(cyan(`> ${desc}`));
+    // Si es multilínea, cyan colorea cada línea para que no se pierda el color
+    const lines = desc.split("\n");
+    if (lines.length === 1) {
+      this.#screen.printAbove(cyan(`> ${desc}`));
+    } else {
+      this.#screen.printAbove(cyan(`> ${lines[0]}`) + "\n" + gray(lines.slice(1).join("\n")));
+    }
   }
 
   #describeInput(name: string, input: unknown): string {
@@ -463,14 +470,18 @@ class DisplayToolCall {
         return `outline ${this.#pathStr(obj)}`;
       case "bash":
         if (typeof obj.command === "string") {
-          return `bash ${this.#truncateCmd(obj.command)}`;
+          const cmd = this.#stripRedundantCd(obj.command as string);
+          if (cmd.length > 70) return `bash\n${cmd}`;
+          return `bash '${cmd}'`;
         }
         return "bash";
       case "grep":
         return `grep "${obj.pattern ?? "?"}" ${this.#pathStr(obj)}`;
       case "vision_ask":
         if (typeof obj.question === "string") {
-          return `vision_ask "${obj.question.slice(0, 60)}${obj.question.length > 60 ? "..." : ""}"`;
+          const q = obj.question as string;
+          if (q.length > 60) return `vision_ask\n${q}`;
+          return `vision_ask "${q}"`;
         }
         return "vision_ask";
       case "tool_search":
@@ -480,20 +491,58 @@ class DisplayToolCall {
         return "tool_search";
       case "ask_user":
         if (typeof obj.question === "string") {
-          return `ask_user "${obj.question.slice(0, 60)}${obj.question.length > 60 ? "..." : ""}"`;
+          const q = obj.question as string;
+          if (q.length > 60) return `ask_user\n${q}`;
+          return `ask_user "${q}"`;
         }
         return "ask_user";
       default:
-        return name;
+        // Para tools MCP y cualquier otra tool desconocida, mostrar los inputs
+        // de forma genérica: name(key1: val1, key2: val2, ...)
+        const entries = Object.entries(obj).filter(([k]) => k !== "type");
+        if (entries.length === 0) return name;
+
+        // Si hay un solo parámetro string, mostrarlo en líneas separadas para
+        // que el contenido completo sea visible (SQLs, queries largas, etc.)
+        if (entries.length === 1 && typeof entries[0][1] === "string") {
+          const [key, val] = entries[0];
+          return `${name} ${key}:\n${val}`;
+        }
+
+        const parts = entries.map(([k, v]) => {
+          const str = typeof v === "string" ? v : JSON.stringify(v);
+          const truncated = str.length > 80 ? str.slice(0, 77) + "..." : str;
+          return `${k}: ${truncated}`;
+        });
+        return `${name} ${parts.join(", ")}`;
     }
   }
 
   #pathStr(obj: Record<string, unknown>): string {
-    return typeof obj.path === "string" ? obj.path : "?";
+    return typeof obj.path === "string" ? this.#shortPath(obj.path) : "?";
   }
 
-  #truncateCmd(cmd: string): string {
-    return cmd.length > 70 ? `'${cmd.slice(0, 67)}...'` : `'${cmd}'`;
+  /** Acorta un path absoluto: relativo al cwd si está adentro, o con ~ si
+   *  está bajo el home. Fuera de ambos, se deja tal cual. */
+  #shortPath(p: string): string {
+    if (!p) return p;
+    const cwd = process.cwd();
+    if (p === cwd) return ".";
+    if (p.startsWith(`${cwd}/`)) return p.slice(cwd.length + 1);
+    const home = homedir();
+    if (p === home) return "~";
+    if (p.startsWith(`${home}/`)) return `~/${p.slice(home.length + 1)}`;
+    return p;
+  }
+
+  /** Saca el `cd <cwd> && ` redundante que el agente antepone a los bash:
+   *  ya estamos en el directorio de trabajo, no aporta verlo. */
+  #stripRedundantCd(cmd: string): string {
+    const cwd = process.cwd();
+    for (const prefix of [`cd ${cwd} && `, `cd '${cwd}' && `, `cd "${cwd}" && `]) {
+      if (cmd.startsWith(prefix)) return cmd.slice(prefix.length);
+    }
+    return cmd;
   }
 }
 
