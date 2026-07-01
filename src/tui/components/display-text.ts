@@ -1,5 +1,5 @@
 import { homedir } from "os";
-import { cyan, dim, gray } from "../theme.js";
+import { cyan, dim, gray, green, red } from "../theme.js";
 import { MarkdownRenderer, ColumnAlign } from "../markdown/types.js";
 import { PlainRenderer } from "../markdown/plain-renderer.js";
 import { Screen } from "../screen.js";
@@ -452,6 +452,66 @@ class DisplayToolCall {
     } else {
       this.#screen.printAbove(cyan(`> ${lines[0]}`) + "\n" + gray(lines.slice(1).join("\n")));
     }
+
+    // Diff compacto debajo del `> edit`: rojo lo que sale, verde lo que entra.
+    if (name === "edit" && input && typeof input === "object") {
+      const diff = this.#renderEditDiff(input as Record<string, unknown>);
+      if (diff) this.#screen.printAbove(diff);
+    }
+  }
+
+  /** Diff compacto para una tool call de edit. Muestra hasta MAX_DIFF_LINES
+   *  líneas (rojo = removido, verde = agregado), truncando el resto. null si
+   *  no hay old/new para diffear. */
+  #renderEditDiff(obj: Record<string, unknown>): string | null {
+    const MAX_DIFF_LINES = 8;
+    const MAX_COL = 100;
+
+    const chunks: Array<{ oldText?: string; newText?: string }> = [];
+    if (Array.isArray(obj.edits)) {
+      for (const e of obj.edits as Array<Record<string, unknown>>) {
+        chunks.push({
+          oldText: typeof e.oldText === "string" ? e.oldText : undefined,
+          newText: typeof e.newText === "string" ? e.newText : undefined,
+        });
+      }
+    } else if (
+      typeof obj.oldText === "string" ||
+      typeof obj.newText === "string"
+    ) {
+      chunks.push({
+        oldText: typeof obj.oldText === "string" ? obj.oldText : undefined,
+        newText: typeof obj.newText === "string" ? obj.newText : undefined,
+      });
+    }
+    if (chunks.length === 0) return null;
+
+    const splitLines = (s: string): string[] => {
+      const arr = s.split("\n");
+      while (arr.length && arr[arr.length - 1] === "") arr.pop();
+      return arr;
+    };
+    const clip = (s: string): string =>
+      s.length > MAX_COL ? `${s.slice(0, MAX_COL - 1)}…` : s;
+
+    const out: string[] = [];
+    let shown = 0;
+    let truncated = 0;
+    for (const c of chunks) {
+      const removed = c.oldText ? splitLines(c.oldText) : [];
+      const added = c.newText ? splitLines(c.newText) : [];
+      for (const l of removed) {
+        if (shown >= MAX_DIFF_LINES) truncated++;
+        else out.push(red(`  - ${clip(l)}`)), shown++;
+      }
+      for (const l of added) {
+        if (shown >= MAX_DIFF_LINES) truncated++;
+        else out.push(green(`  + ${clip(l)}`)), shown++;
+      }
+    }
+    if (out.length === 0) return null;
+    if (truncated > 0) out.push(dim(`  … (+${truncated} líneas)`));
+    return out.join("\n");
   }
 
   #describeInput(name: string, input: unknown): string {
