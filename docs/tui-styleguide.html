@@ -219,8 +219,48 @@ en vez del banner. Lo arreglo diferenciando emisor.</span></pre>
     </div>
   </div>
 
-  <!-- 6. DO / DON'T -->
-  <h2><span class="n">06</span>Anti-patrones</h2>
+  <!-- 6. TABLAS -->
+  <h2><span class="n">06</span>Tablas</h2>
+  <p class="sub">Una tabla que se rompe es peor que una tabla fea. El renderer tiene que
+     <b class="fg">calcular anchos de columna y capearlos al ancho del terminal</b>, envolver el
+     contenido largo <b class="fg">dentro</b> de su columna (nunca desbordar a la vecina), y alinear
+     bordes y regla. Los emojis ocupan 2 celdas: el cálculo de ancho tiene que contarlos.</p>
+
+  <div class="card dont">
+    <div class="head">✗ lo que pasa hoy — sin cap de ancho</div>
+<pre><span class="dim">│ # │ Hallazgo                                          │ Estado</span>
+<span class="dim">│                                     │</span>
+<span class="dim">├───┼─────────────────────────────────────────┼────────</span>
+<span class="dim">│ 1 │</span> <span class="fg">process-response.ts logueaba PII (wa_id, user_id) en logger.info</span> <span class="dim">│</span>  ✅
+<span class="fg b">**Resuelto**</span> <span class="fg">— commit 9691181a</span>
+<span class="dim">│ 2 │</span> <span class="fg">send-custom-wp-message.ts ~127 loguea el texto crudo del mensaje</span> <span class="dim">│</span> 🔴
+<span class="fg b">**Pendiente**</span></pre>
+    <div class="note">Pipes flotando, regla fragmentada, celdas desbordando la columna Estado, continuaciones cayendo en su propia línea. Ilegible.</div>
+  </div>
+
+  <div class="card do">
+    <div class="head">✓ objetivo — ancho capeado + wrapping dentro de la columna</div>
+<pre><span class="dim">┌───┬────────────────────────────────────────────┬────────┐</span>
+<span class="dim">│</span> <span class="fg b"># </span><span class="dim">│</span> <span class="fg b">Hallazgo</span>                                   <span class="dim">│</span> <span class="fg b">Estado</span> <span class="dim">│</span>
+<span class="dim">├───┼────────────────────────────────────────────┼────────┤</span>
+<span class="dim">│</span> 1 <span class="dim">│</span> <span class="fg">process-response.ts logueaba PII (wa_id,</span>   <span class="dim">│</span>   <span class="green">✅</span>   <span class="dim">│</span>
+<span class="dim">│</span>   <span class="dim">│</span> <span class="fg">user_id). Resuelto — commit 9691181a</span>       <span class="dim">│</span>        <span class="dim">│</span>
+<span class="dim">│</span> 2 <span class="dim">│</span> <span class="fg">send-custom-wp-message.ts ~127 loguea el</span>   <span class="dim">│</span>   <span class="red">🔴</span>   <span class="dim">│</span>
+<span class="dim">│</span>   <span class="dim">│</span> <span class="fg">texto crudo del mensaje (PII potencial)</span>     <span class="dim">│</span>        <span class="dim">│</span>
+<span class="dim">└───┴────────────────────────────────────────────┴────────┘</span></pre>
+    <div class="note">Columnas de ancho fijo, contenido largo envuelto dentro de la celda (continuación con columna vacía), bordes y regla alineados, estado centrado.</div>
+  </div>
+
+  <p class="rule-list" style="margin-top:14px">
+    <b>Reglas:</b> · ancho de columna = max del contenido, <b>capeado</b> al ancho del terminal
+    (la columna de texto absorbe el recorte) · celda larga <b>envuelve</b> dentro de su columna,
+    o trunca con <span class="dim">…</span> si sería muy alta · una fila puede ocupar varias líneas
+    visuales, con las otras columnas en blanco · bordes y regla siempre alineados y del ancho real ·
+    emojis = 2 celdas al medir.
+  </p>
+
+  <!-- 7. DO / DON'T -->
+  <h2><span class="n">07</span>Anti-patrones</h2>
   <p class="rule-list">
     <b>· Un color, dos significados</b> → el escaneo deja de funcionar. &nbsp;
     <b>· Forma larga por default</b> → ahoga la señal en detalle. &nbsp;

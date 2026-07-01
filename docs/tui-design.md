@@ -126,7 +126,12 @@ la pregunta "¿cuánto me está costando?", no para leer al pasar.
 - **Edits:** un `edit` no debería mostrarse sólo como "edité X". Lo valioso es el
   *diff* — qué líneas cambiaron. Es acción + contenido: la línea de acción en
   cyan, y debajo un diff compacto (verde/rojo) de lo que cambió. (Pendiente.)
-- **Tablas:** cap de ancho por celda + wrapping, nunca desbordar. (Pendiente.)
+- **Tablas:** calcular anchos de columna y capearlos al ancho del terminal (la
+  columna de texto absorbe el recorte); el contenido largo envuelve *dentro* de
+  su columna —nunca desborda a la vecina— o trunca con `…` si sería muy alta;
+  una fila puede ocupar varias líneas visuales con las otras columnas en blanco;
+  bordes y regla siempre alineados y del ancho real; los emojis cuentan como 2
+  celdas al medir. (Pendiente de implementar en `ansi-renderer.ts`.)
 - **Output de bash largo:** truncar en la forma corta con "… (N líneas más,
   verbose)"; nunca volcar 200 líneas de build al scrollback por default.
 - **Bloques de código en el markdown del agente:** monoespaciado, con un margen
