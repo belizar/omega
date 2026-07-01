@@ -1,5 +1,6 @@
 import { stdout } from "process";
 import { Context } from "../app-context.js";
+import { Message } from "../message.js";
 import { Session } from "../session.js";
 import { SelectList } from "../tui/components/select-list.js";
 import { bold, cyan, dim, green } from "../tui/theme.js";
@@ -8,6 +9,60 @@ import { ModalCommand, ModalOpen } from "./modal-command.js";
 const SESSIONS_DIR = ".omega/sessions";
 
 type SessionSummary = ReturnType<typeof Session.listSessions>[number];
+
+/** Extrae el texto conversacional de un mensaje, o null si es puro tool/imagen
+ *  (o ruido de la descripción preliminar de visión). */
+function messageText(m: Message): string | null {
+  const c = m.content;
+  if (typeof c === "string") return c.replace(/\s+/g, " ").trim() || null;
+  if (!Array.isArray(c)) return null;
+  const parts: string[] = [];
+  for (const b of c) {
+    if (typeof b === "string") {
+      parts.push(b);
+    } else if (b.type === "text") {
+      const t = b.text ?? "";
+      if (t.startsWith("[Descripción preliminar de la imagen")) continue;
+      parts.push(t);
+    }
+    // tool_use / tool_result / image → se ignoran
+  }
+  const joined = parts.join(" ").replace(/\s+/g, " ").trim();
+  return joined || null;
+}
+
+/** Trunca en límite de palabra con elipsis. */
+function truncate(s: string, maxLen: number): string {
+  if (s.length <= maxLen) return s;
+  return s.slice(0, maxLen).replace(/\s+\S*$/, "") + "…";
+}
+
+/**
+ * Recap de los últimos intercambios de una sesión: hasta `count` mensajes con
+ * texto real (salta tool calls y ruido de visión), truncados, en dim, para
+ * reorientar al humano sobre qué se estaba hablando. null si no hay nada.
+ */
+function formatRecap(messages: readonly Message[], count = 4): string | null {
+  const convo: Array<{ role: string; text: string }> = [];
+  for (let i = messages.length - 1; i >= 0 && convo.length < count; i--) {
+    const m = messages[i];
+    if (m.role !== "user" && m.role !== "assistant") continue;
+    const text = messageText(m);
+    if (!text) continue;
+    convo.unshift({ role: m.role, text: truncate(text, 160) });
+  }
+  if (convo.length === 0) return null;
+
+  const lines: string[] = [
+    dim("── Últimos mensajes ──────────────────────────────"),
+  ];
+  for (const { role, text } of convo) {
+    const marker = role === "user" ? "🧑 vos  " : "🤖 omega";
+    lines.push(dim(`${marker}  ${text}`));
+  }
+  lines.push(dim("──────────────────────────────────────────────────"));
+  return lines.join("\n");
+}
 
 /**
  * Carga una sesión por id, la setea como activa en el ctx y devuelve un
@@ -28,6 +83,10 @@ function resumeSession(ctx: Context, sessionId: string): string {
 
   const info = resumed.info();
   ctx.setSession(resumed);
+
+  // Recap: mostrar los últimos mensajes para reorientar al humano.
+  const recap = formatRecap(resumed.messages);
+  if (recap) ctx.screen.printAbove(recap);
 
   const label = info.name ? `${green(info.name)} (${info.id})` : green(info.id);
   const cost = info.totalCost < 0.01 ? "<$0.01" : `$${info.totalCost.toFixed(2)}`;
