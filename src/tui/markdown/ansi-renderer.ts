@@ -31,12 +31,14 @@ class AnsiRenderer implements MarkdownRenderer {
   }
 
   codeBlock(code: string, language?: string): string {
-    const header = language ? dim(` ${language} `) : "";
-    const lines = code.split("\n");
-    const top = dim("┌" + "─".repeat(Math.min(60, (columns ?? 80) - 2)) + header);
-    const out = lines.map((l) => dim("│ " + l)).join("\n");
-    const bottom = dim("└" + "─".repeat(Math.min(60, (columns ?? 80) - 2)));
-    return [top, out, bottom].join("\n");
+    const w = Math.min(60, (columns ?? 80) - 2);
+    const langLabel = language ? ` ${language} ` : "";
+    const top = dim("┌" + "─".repeat(w) + langLabel);
+    // Sin prefijo │ para que el código sea copiable. Se usa dim para
+    // distinguirlo visualmente de la prosa sin romper copy-paste.
+    const body = dim(code);
+    const bottom = dim("└" + "─".repeat(w));
+    return [top, body, bottom].join("\n");
   }
 
   heading(text: string, level: number): string {

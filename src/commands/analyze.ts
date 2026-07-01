@@ -19,7 +19,8 @@ interface AnalyzeData {
   messages: Message[];
   totalCost: number;
   totalTokens: { input: number; output: number };
-  stepUsage: Array<{ inputTokens: number; outputTokens: number; cachedTokens: number; cost: number }>;
+  stepUsage: Array<{ inputTokens: number; outputTokens: number; cachedTokens: number; cost: number; model?: string }>;
+  profileTimeline: Array<{ step: number; profile: string }>;
 }
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function loadSessionFile(sessionId: string): AnalyzeData | null {
@@ -36,6 +37,7 @@ function loadSessionFile(sessionId: string): AnalyzeData | null {
       totalCost: parsed.totalCost ?? 0,
       totalTokens: parsed.totalTokens ?? { input: 0, output: 0 },
       stepUsage: parsed.stepUsage ?? [],
+      profileTimeline: parsed.profileTimeline ?? [],
     };
   } catch {
     return null;
@@ -194,12 +196,29 @@ function analyze(data: AnalyzeData, compact = false): string {
     for (let i = 0; i < data.stepUsage.length; i++) {
       const s = data.stepUsage[i];
       const cacheInfo = s.cachedTokens > 0 ? ` cache:${(s.cachedTokens / 1000).toFixed(1)}K` : "";
+      const modelLabel = s.model ? ` ${dim("[" + s.model.split("/").pop()?.split("-").slice(0, 2).join("-") + "]")}` : "";
       lines.push(
-        `   ${String(i + 1).padStart(2)}. in:${(s.inputTokens / 1000).toFixed(1)}K out:${(s.outputTokens / 1000).toFixed(1)}K${cacheInfo} → ${formatCost(s.cost)}`,
+        `   ${String(i + 1).padStart(2)}. in:${(s.inputTokens / 1000).toFixed(1)}K out:${(s.outputTokens / 1000).toFixed(1)}K${cacheInfo} → ${formatCost(s.cost)}${modelLabel}`,
       );
     }
     lines.push("");
+
+    // Costo por modelo
+    const costByModel: Record<string, number> = {};
+    for (const s of data.stepUsage) {
+      const m = s.model || "?";
+      costByModel[m] = (costByModel[m] || 0) + s.cost;
+    }
+    if (Object.keys(costByModel).length > 1) {
+      lines.push("💰 Costo por modelo");
+      for (const [model, cost] of Object.entries(costByModel).sort((a, b) => b[1] - a[1])) {
+        const short = model.split("/").pop() ?? model;
+        lines.push(`   ${short.padEnd(25)} ${formatCost(cost)}`);
+      }
+      lines.push("");
+    }
   }
+
   // ── Sugerencias ──
   const suggestions = generateSuggestions(data);
   if (suggestions.length > 0) {
@@ -219,8 +238,9 @@ function analyze(data: AnalyzeData, compact = false): string {
   lines.push(`📋 ${totalTurns} turns · ${totalCalls} tools · ${formatCost(data.totalCost)} total · ~${formatCost(costPerStep)}/step`);
   return lines.join("\n");
 }
-// ── Comando ──────────────────────────────────────────────────────────────────
+
 // ── Row renderer para el picker ──────────────────────────────────────────────
+
 function renderSessionRow(
   s: SessionSummary,
   index: number,
@@ -297,6 +317,7 @@ class AnalyzeCommand implements Command<void> {
       totalCost: session.totalCost,
       totalTokens: session.totalTokens,
       stepUsage: [...session.stepUsage],
+      profileTimeline: [...session.profileTimeline],
     };
   }
 

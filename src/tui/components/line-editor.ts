@@ -181,16 +181,43 @@ class LineEditor implements InputComponent<string> {
       : this.#buffer;
   }
 
+  /** Envuelve una línea a W columnas. Si es más larga que W, la parte en
+   * múltiples chunks: el primero con el prefijo y el resto sin sangría,
+   * igual que haría el terminal con wrap automático. */
+  #wrapToWidth(text: string, W: number): string[] {
+    if (text.length <= W) return [text];
+    const chunks: string[] = [];
+    for (let i = 0; i < text.length; i += W) {
+      chunks.push(text.slice(i, i + W));
+    }
+    return chunks;
+  }
+
   render(): string {
     const W = this.#boxWidth();
-    const bar = dim("─".repeat(W));
+    const innerW = W - 2; // ancho interno (sin bordes laterales)
+    const topBar = dim(`┌${"─".repeat(innerW)}┐`);
+    const botBar = dim(`└${"─".repeat(innerW)}┘`);
     const promptLen = this.#promptStr.length;
     const indent = " ".repeat(promptLen);
 
-    const lines = this.#buffer.split("\n");
-    const content = lines.map((l, i) => (i === 0 ? this.#promptStr : indent) + l);
+    const logicalLines = this.#buffer.split("\n");
+    const physicalLines: string[] = [];
+    for (let i = 0; i < logicalLines.length; i++) {
+      const prefix = i === 0 ? this.#promptStr : indent;
+      const wrapped = this.#wrapToWidth(prefix + logicalLines[i], innerW);
+      physicalLines.push(...wrapped);
+    }
 
-    return [bar, ...content, bar].join("\n");
+    // Cada línea va rodeada por bordes verticales
+    const body = physicalLines.map(l => {
+      // el contenido visible + bordes debe sumar W
+      const visible = l.length;
+      const pad = innerW - visible;
+      return dim("│") + l + (pad > 0 ? " ".repeat(pad) : "") + dim("│");
+    });
+
+    return [topBar, ...body, botBar].join("\n");
   }
 
   /** Render del mensaje enviado SIN la caja (barras), para ecoarlo en el
@@ -204,9 +231,33 @@ class LineEditor implements InputComponent<string> {
   }
 
   getCursorPosition(): CursorPosition {
-    const line = this.#cursorLine();
-    const col = (line === 0 ? this.#promptStr.length : 2) + this.#cursorCol();
-    return { row: line + 1, col };
+    const W = this.#boxWidth();
+    const innerW = W - 2; // ancho interno (sin │ bordes)
+    const promptLen = this.#promptStr.length;
+    const indent = " ".repeat(promptLen);
+
+    const logicalLine = this.#cursorLine();
+    const logicalCol = this.#cursorCol();
+    const logicalLines = this.#buffer.split("\n");
+
+    // Contar filas físicas que ocupan las líneas lógicas anteriores
+    let physicalRow = 0;
+    for (let i = 0; i < logicalLine; i++) {
+      const prefix = i === 0 ? this.#promptStr : indent;
+      const line = prefix + logicalLines[i];
+      physicalRow += Math.max(1, Math.ceil(line.length / innerW));
+    }
+
+    // En la línea actual, calcular cuántas filas físicas ocupa el texto
+    // desde el prefijo hasta la posición del cursor
+    const prefix = logicalLine === 0 ? this.#promptStr : indent;
+    const textUpToCursor = prefix + logicalLines[logicalLine].slice(0, logicalCol);
+    const cursorTotalCol = textUpToCursor.length;
+    physicalRow += Math.floor(cursorTotalCol / innerW);
+    const col = cursorTotalCol % innerW;
+
+    // +1 por la barra superior, +1 por el borde izquierdo │
+    return { row: physicalRow + 1, col: col + 1 };
   }
 
   /** Ancho de la barra horizontal: usa el ancho completo del terminal. */

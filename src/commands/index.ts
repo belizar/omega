@@ -1,4 +1,7 @@
 import { Context } from "../app-context.js";
+import { ModelCommand } from "./model.js";
+import { ProfileCommand } from "./profile.js";
+import { SetupCommand } from "./setup.js";
 import { AnalyzeCommand } from "./analyze.js";
 import { ClearCommand } from "./clear.js";
 import { analyzeModalCommand } from "./analyze.js";
@@ -11,6 +14,9 @@ import { OverridesCommand } from "./overrides.js";
 import { RenameCommand } from "./rename.js";
 import { ResumeCommand } from "./resume.js";
 import { VerboseCommand } from "./verbose.js";
+import { StatuslineCommand } from "./statusline.js";
+import { CabinetCommand, RememberCommand } from "./cabinet.js";
+import { TelemetryCommand } from "./telemetry.js";
 import { resumeModalCommand } from "./session-resume.js";
 
 const commandsMap: Record<string, Command<unknown>> = {
@@ -18,10 +24,17 @@ const commandsMap: Record<string, Command<unknown>> = {
   "/clear": new ClearCommand(),
   "/exit": new ExitCommand(),
   "/mcp": new McpCommand(),
+  "/model": new ModelCommand(),
   "/overrides": new OverridesCommand(),
+  "/profile": new ProfileCommand(),
+  "/setup": new SetupCommand(),
   "/rename": new RenameCommand(),
   "/resume": new ResumeCommand(),
   "/verbose": new VerboseCommand(),
+  "/statusline": new StatuslineCommand(),
+  "/cabinet": new CabinetCommand(),
+  "/remember": new RememberCommand(),
+  "/telemetry": new TelemetryCommand(),
 };
 
 commandsMap["/help"] = new HelpCommand(commandsMap);

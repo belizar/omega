@@ -217,10 +217,13 @@ export function parseResponse(
 
   const usageData = data.usage as Record<string, number>;
 
-  // OpenRouter devuelve el costo real en headers; si está disponible lo usamos,
-  // si no, estimamos con nuestra tabla de precios.
+  // OpenRouter devuelve el costo real en el body (usage.cost) y también en el
+  // header x-openrouter-cost. Usamos el body como fuente primaria, el header
+  // como fallback, y la estimación local como último recurso.
   let cost: number;
-  if (openrouterCostHeader !== null) {
+  if (typeof usageData.cost === "number") {
+    cost = usageData.cost;
+  } else if (openrouterCostHeader !== null) {
     cost = parseFloat(openrouterCostHeader);
   } else {
     cost = calculateCost(model, usageData.prompt_tokens, usageData.completion_tokens);
@@ -252,29 +255,24 @@ class OpenRouterProvider extends LLMProvider {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  private async callWithRetry(
-    messages: Message[],
-    agent: AgentConfig,
-    attempt: number = 1,
+  /**
+   * Fetch con reintentos para errores transientes: red, timeout, 5xx, 429, 529.
+   * No reintenta errores fatales como 401.
+   */
+  async #fetchWithRetry(
+    body: Record<string, unknown>,
     userSignal?: AbortSignal,
-  ): Promise<LLMResponse> {
+    context: string = "API call",
+  ): Promise<{ response: Response; costHeader: string | null }> {
     const headers: Record<string, string> = {
       Authorization: `Bearer ${this.apiKey()}`,
       "Content-Type": "application/json",
     };
 
-    const body = {
-      model: agent.model,
-      messages: translateMessages(messages, agent.systemPrompt),
-      tools: translateTools(agent),
-      max_tokens: agent.maxTokens,
-    };
-
-    try {
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
-      // Si el usuario interrumpe (SIGINT), abortar el fetch
       const onAbort = () => controller.abort();
       userSignal?.addEventListener("abort", onAbort, { once: true });
 
@@ -286,53 +284,97 @@ class OpenRouterProvider extends LLMProvider {
           body: JSON.stringify(body),
           signal: controller.signal,
         });
-      } finally {
+      } catch (err: unknown) {
         clearTimeout(timeoutId);
         userSignal?.removeEventListener("abort", onAbort);
+
+        // User abort → no reintentar, propagar
+        if (err instanceof Error && err.name === "AbortError") {
+          if (userSignal?.aborted) {
+            const e = new Error("Aborted by user");
+            e.name = "AbortError";
+            throw e;
+          }
+          // Timeout interno → reintentar
+          if (attempt < MAX_RETRIES) {
+            const backoffMs = INITIAL_BACKOFF_MS * Math.pow(2, attempt - 1);
+            logger.warn(
+              `${context} timeout. Retrying in ${backoffMs}ms (attempt ${attempt}/${MAX_RETRIES})`,
+            );
+            await this.sleep(backoffMs);
+            continue;
+          }
+          throw new Error(`${context} timeout after ${TIMEOUT_MS}ms (${MAX_RETRIES} attempts)`);
+        }
+
+        // Error de red (ECONNRESET, ENOTFOUND, etc.) → reintentar
+        if (attempt < MAX_RETRIES) {
+          const backoffMs = INITIAL_BACKOFF_MS * Math.pow(2, attempt - 1);
+          const msg = err instanceof Error ? err.message : String(err);
+          logger.warn(
+            `${context} network error: ${msg}. Retrying in ${backoffMs}ms (attempt ${attempt}/${MAX_RETRIES})`,
+          );
+          await this.sleep(backoffMs);
+          continue;
+        }
+        throw err;
       }
 
+      clearTimeout(timeoutId);
+      userSignal?.removeEventListener("abort", onAbort);
+
+      // Éxito
       if (response.ok) {
-        const data = await response.json();
         const costHeader = response.headers.get("x-openrouter-cost");
-        logger.info("OpenRouter API call successful", { cost: costHeader });
-        return parseResponse(data, agent.model, costHeader);
+        return { response, costHeader };
       }
 
+      // Errores fatales → no reintentar
       if (response.status === 401) {
-        const error = "OpenRouter: Invalid API key";
-        logger.error(error);
-        throw new Error(error);
+        logger.error("OpenRouter: Invalid API key");
+        throw new Error("OpenRouter: Invalid API key");
       }
 
-      if (response.status === 429 || response.status === 529) {
+      // Rate limiting o server overload → reintentar
+      if (response.status === 429 || response.status === 529 || response.status >= 500) {
         if (attempt < MAX_RETRIES) {
           const backoffMs = INITIAL_BACKOFF_MS * Math.pow(2, attempt - 1);
           logger.warn(
-            `OpenRouter rate limited. Retrying in ${backoffMs}ms (attempt ${attempt}/${MAX_RETRIES})`,
+            `${context} ${response.status}. Retrying in ${backoffMs}ms (attempt ${attempt}/${MAX_RETRIES})`,
           );
           await this.sleep(backoffMs);
-          return this.callWithRetry(messages, agent, attempt + 1);
+          continue;
         }
       }
 
-      const errorData = await response.json();
-      logger.error(`OpenRouter API error (${response.status})`, errorData);
+      // Error no reintentable (4xx que no es 429, etc.)
+      const errorData = await response.json().catch(() => ({}));
+      logger.error(`${context} error (${response.status})`, errorData);
       throw new Error(
-        `OpenRouter API error: ${response.status} - ${JSON.stringify(errorData)}`,
+        `${context} error: ${response.status} - ${JSON.stringify(errorData)}`,
       );
-    } catch (err: unknown) {
-      if (err instanceof Error && err.name === "AbortError") {
-        // Si el userSignal está abortado, propagamos como AbortError
-        if (userSignal?.aborted) {
-          const e = new Error("Aborted by user");
-          e.name = "AbortError";
-          throw e;
-        }
-        logger.error("OpenRouter request timeout");
-        throw new Error(`Request timeout after ${TIMEOUT_MS}ms`);
-      }
-      throw err;
     }
+
+    throw new Error(`${context}: max retries (${MAX_RETRIES}) exceeded`);
+  }
+
+  private async callWithRetry(
+    messages: Message[],
+    agent: AgentConfig,
+    _attempt: number = 1,
+    userSignal?: AbortSignal,
+  ): Promise<LLMResponse> {
+    const body = {
+      model: agent.model,
+      messages: translateMessages(messages, agent.systemPrompt),
+      tools: translateTools(agent),
+      max_tokens: agent.maxTokens,
+    };
+
+    const { response, costHeader } = await this.#fetchWithRetry(body, userSignal, "OpenRouter");
+    const data = await response.json();
+    logger.info("OpenRouter API call successful", { cost: costHeader });
+    return parseResponse(data, agent.model, costHeader);
   }
 
   async call(messages: Message[], agent: AgentConfig, signal?: AbortSignal): Promise<LLMResponse> {
@@ -345,11 +387,6 @@ class OpenRouterProvider extends LLMProvider {
     agent: AgentConfig,
     signal?: AbortSignal,
   ): AsyncGenerator<StreamEvent> {
-    const headers: Record<string, string> = {
-      Authorization: `Bearer ${this.apiKey()}`,
-      "Content-Type": "application/json",
-    };
-
     const body = {
       model: agent.model,
       messages: translateMessages(messages, agent.systemPrompt),
@@ -358,13 +395,8 @@ class OpenRouterProvider extends LLMProvider {
       stream: true,
     };
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS * 2);
-
-    // El user signal puede abortar tanto el fetch como el stream.
     // Si el signal ya está abortado al entrar, lanzamos de una.
     if (signal?.aborted) {
-      clearTimeout(timeoutId);
       const e = new Error("Aborted by user");
       e.name = "AbortError";
       throw e;
@@ -375,38 +407,12 @@ class OpenRouterProvider extends LLMProvider {
     let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
     const onUserAbort = () => {
       userAborted = true;
-      controller.abort();
       reader?.cancel().catch(() => {}); // fuerza que reader.read() resuelva
     };
     signal?.addEventListener("abort", onUserAbort, { once: true });
 
-    let response: Response;
-    try {
-      response = await fetch(this.url(), {
-        method: "POST",
-        headers,
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      });
-    } catch (err: unknown) {
-      clearTimeout(timeoutId);
-      signal?.removeEventListener("abort", onUserAbort);
-      if (err instanceof Error && err.name === "AbortError") {
-        const e = new Error("Aborted by user");
-        e.name = "AbortError";
-        throw e;
-      }
-      throw err;
-    }
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      signal?.removeEventListener("abort", onUserAbort);
-      const errorData = await response.json();
-      throw new Error(
-        `OpenRouter stream error: ${response.status} - ${JSON.stringify(errorData)}`,
-      );
-    }
+    // Fetch con reintentos para errores transientes
+    const { response, costHeader } = await this.#fetchWithRetry(body, signal, "OpenRouter stream");
 
     if (!response.body) {
       signal?.removeEventListener("abort", onUserAbort);
@@ -424,6 +430,7 @@ class OpenRouterProvider extends LLMProvider {
     let inputTokens = 0;
     let outputTokens = 0;
     let cachedTokens = 0;
+    let costFromUsage: number | null = null;
 
     try {
       while (true) {
@@ -439,6 +446,10 @@ class OpenRouterProvider extends LLMProvider {
         try {
           readResult = await reader.read();
         } catch {
+          // Si el usuario no abortó, es un error de red mid-stream
+          if (!userAborted && !signal?.aborted) {
+            throw new Error("Stream interrupted by network error");
+          }
           const e = new Error("Aborted by user");
           e.name = "AbortError";
           throw e;
@@ -475,6 +486,7 @@ class OpenRouterProvider extends LLMProvider {
           if (usage) {
             inputTokens = usage.prompt_tokens ?? inputTokens;
             outputTokens = usage.completion_tokens ?? outputTokens;
+            if (typeof usage.cost === "number") costFromUsage = usage.cost;
             const details = usage["prompt_tokens_details"] as unknown as Record<string, number> | undefined;
             if (details?.cached_tokens) {
               cachedTokens = details.cached_tokens;
@@ -554,7 +566,12 @@ class OpenRouterProvider extends LLMProvider {
           ? "max_tokens"
           : "end_turn";
 
-    const cost = calculateCost(agent.model, inputTokens, outputTokens);
+    // Usar costo real de OpenRouter: body (usage.cost) > header (x-openrouter-cost) > estimación local.
+    const cost = costFromUsage !== null
+      ? costFromUsage
+      : costHeader !== null
+        ? parseFloat(costHeader)
+        : calculateCost(agent.model, inputTokens, outputTokens);
 
     yield {
       type: "done",

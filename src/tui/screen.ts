@@ -36,6 +36,7 @@ const PASTE_END = "\x1b[201~";
 class Screen {
   #live: InputComponent<unknown> | null = null;
   #status: string | null = null;
+  #statusline: string | null = null;
   #ephemeral: string | null = null;
   #reading = false;
   #resolve: ((result: unknown) => void) | null = null;
@@ -47,13 +48,15 @@ class Screen {
   #statusDirty = false; // setStatus cambió estando busy → redibujar al unlock
   #pasteBuffer: string | null = null;
   #paddingRight: number;
+  #indent: number;
 
   /** Si está seteado, Ctrl+C durante la ejecución del agente aborta esta
    * señal en lugar de matar el proceso. */
   #abortSignal: AbortController | null = null;
 
-  constructor(paddingRight: number = 0) {
+  constructor(paddingRight: number = 0, indent: number = 2) {
     this.#paddingRight = paddingRight;
+    this.#indent = indent;
     stdin.on("data", this.#onData);
   }
 
@@ -101,7 +104,14 @@ class Screen {
     this.#clearLive();
     // Considerar "vacío" después de strippear ANSI, no por text.length
     if (stripAnsi(text).trim().length > 0) {
-      const out = this.#wrapIfNeeded(text);
+      let out = this.#wrapIfNeeded(text);
+      if (this.#indent > 0) {
+        const spaces = " ".repeat(this.#indent);
+        out = out
+          .split("\n")
+          .map((l) => (l.length > 0 ? spaces + l : l))
+          .join("\n");
+      }
       stdout.write(out);
       if (!out.endsWith("\n")) stdout.write(LF);
     }
@@ -115,14 +125,15 @@ class Screen {
   printBlankLine(): void {
     this.#lock();
     this.#clearLive();
-    stdout.write(LF);
+    // Línea vacía indentada: los espacios hacen que el blank no colapse visualmente
+    stdout.write(" ".repeat(this.#indent) + LF);
     this.#renderLive();
     this.#unlock();
   }
 
   #wrapIfNeeded(text: string): string {
-    if (this.#paddingRight <= 0) return text;
-    const maxWidth = (stdout.columns ?? 80) - this.#paddingRight;
+    if (this.#paddingRight <= 0 && this.#indent <= 0) return text;
+    const maxWidth = (stdout.columns ?? 80) - this.#paddingRight - this.#indent;
     if (maxWidth < 20) return text; // no vale la pena wrappear columnas muy angostas
     return wrapText(text, maxWidth);
   }
@@ -167,6 +178,16 @@ class Screen {
     }
   }
 
+  /** Setea (o limpia con null) el statusline debajo del editor. */
+  setStatusline(text: string | null): void {
+    this.#statusline = text;
+    if (!this.#busy) {
+      this.#redraw();
+    } else {
+      this.#statusDirty = true;
+    }
+  }
+
   /** Pausa la UI y muestra un prompt inline para que el usuario responda
    * una pregunta del agente. Devuelve la respuesta. */
   async askUser(question: string): Promise<string> {
@@ -188,19 +209,23 @@ class Screen {
 
   // ── interno ───────────────────────────────────────────────────────────
 
-  /** Render combinado: efímero (si hay) + status (si hay) + editor. */
+  /** Render combinado: efímero (si hay) + status (si hay) + editor + statusline. */
   #composeRender(): { out: string; cursorRow: number; cursorCol: number } {
     const lines: string[] = [];
     const ephemeralRows = this.#ephemeral !== null ? 1 : 0;
     const statusRows = this.#status !== null ? 1 : 0;
+    // statusline solo se muestra si no hay spinner activo
+    const statuslineActive = this.#status === null && this.#statusline !== null;
+    const statuslineRows = statuslineActive ? 1 : 0;
 
     if (ephemeralRows) lines.push(this.#ephemeral as string);
     if (statusRows) lines.push(this.#status as string);
     lines.push(this.#live ? this.#live.render() : "");
+    if (statuslineActive) lines.push(this.#statusline as string);
 
     const out = lines.join("\n");
 
-    let cursorRow = out.split("\n").length - 1;
+    let cursorRow = out.split("\n").length - 1 - statuslineRows;
     let cursorCol = 0;
     if (this.#live?.getCursorPosition) {
       const cp = this.#live.getCursorPosition();
