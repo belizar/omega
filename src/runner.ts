@@ -1,6 +1,7 @@
 import { stdout } from "process";
 import { AgentConfig } from "./agent-config.js";
 import {
+  compactStaleReads,
   pruneContext,
   truncateForContext,
   truncateForDisplay,
@@ -15,6 +16,8 @@ type RunnerConstructorProps = {
   maxSteps?: number;
   maxContextTokens?: number;
   signal?: AbortSignal;
+  /** Modelo activo para este turno (se guarda en stepUsage para trazabilidad). */
+  model?: string;
   /** Si se provee, las invocaciones a la tool `ask_user` pausan el runner
    * y llaman a este callback. La respuesta se inyecta como tool_result. */
   onAskUser?: (question: string) => Promise<string>;
@@ -51,6 +54,7 @@ class Runner {
   #maxSteps: number;
   #maxContextTokens: number;
   #signal: AbortSignal | undefined;
+  #model: string;
   #interrupted: boolean;
   #onAskUser: ((question: string) => Promise<string>) | undefined;
   #metrics: {
@@ -65,7 +69,16 @@ class Runner {
     outputTokens: number;
     cachedTokens: number;
     cost: number;
+    model?: string;
   }>;
+
+  // ── Detección de loops ──
+  #consecutiveErrors = 0;
+
+  // ── Métricas anti-thrashing (consultables con /stats) ──
+  #readCounts = new Map<string, number>();
+  #editCounts = new Map<string, number>();
+  #totalToolErrors = 0;
 
   constructor({
     llmProvider,
@@ -73,6 +86,7 @@ class Runner {
     maxSteps = 15,
     maxContextTokens = 100_000,
     signal,
+    model,
     onAskUser,
   }: RunnerConstructorProps) {
     this.#llmProvider = llmProvider;
@@ -80,6 +94,7 @@ class Runner {
     this.#maxSteps = maxSteps;
     this.#maxContextTokens = maxContextTokens;
     this.#signal = signal;
+    this.#model = model ?? "";
     this.#interrupted = false;
     this.#onAskUser = onAskUser;
     this.#metrics = {
@@ -136,6 +151,37 @@ class Runner {
     };
   }
 
+  #sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /** Backoff exponencial con tope: 400ms, 800ms, 1600ms… hasta 4s. */
+  #backoffMs(attempt: number): number {
+    return Math.min(400 * 2 ** (attempt - 1), 4000);
+  }
+
+  /** True si el error es transitorio (red / gateway) y vale la pena reintentar.
+   *  NO reintenta AbortError (interrupción del usuario) ni errores de lógica. */
+  #isRetryableError(err: unknown): boolean {
+    if (err instanceof Error && err.name === "AbortError") return false;
+    const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+    return (
+      msg.includes("fetch failed") ||
+      msg.includes("econnreset") ||
+      msg.includes("socket hang up") ||
+      msg.includes("etimedout") ||
+      msg.includes("eai_again") ||
+      msg.includes("enotfound") ||
+      msg.includes("network") ||
+      msg.includes("terminated") ||
+      msg.includes("timeout") ||
+      msg.includes("502") ||
+      msg.includes("503") ||
+      msg.includes("504") ||
+      msg.includes("529")
+    );
+  }
+
   // ── fases del turno ────────────────────────────────────────────────
 
   /** Llama al LLM (stream o no-stream), emite eventos y llena `state`. */
@@ -172,6 +218,7 @@ class Runner {
             outputTokens: event.usage.output_tokens,
             cachedTokens: event.usage.cached_tokens ?? 0,
             cost: event.cost,
+            model: this.#model || undefined,
           });
         }
       }
@@ -194,6 +241,7 @@ class Runner {
         outputTokens: data.usage.output_tokens,
         cachedTokens: data.usage.cached_tokens ?? 0,
         cost: data.cost,
+        model: this.#model || undefined,
       });
 
       for (const block of data.content) {
@@ -255,6 +303,25 @@ class Runner {
         content: forModel,
         is_error: result.isError,
       });
+
+      // ── Métricas anti-thrashing ──
+      if (result.isError) {
+        this.#totalToolErrors++;
+      }
+      const input = block.input as { path?: string } | null;
+      if (input?.path) {
+        if (block.name === "read") {
+          this.#readCounts.set(
+            input.path,
+            (this.#readCounts.get(input.path) ?? 0) + 1,
+          );
+        } else if (block.name === "edit" || block.name === "write") {
+          this.#editCounts.set(
+            input.path,
+            (this.#editCounts.get(input.path) ?? 0) + 1,
+          );
+        }
+      }
     }
   }
 
@@ -324,29 +391,91 @@ class Runner {
         break;
       }
 
+      // Compactar reads viejos antes de podar: reduce tokens sin perder info
+      const compactedContext = compactStaleReads(workingContext);
       const prunedContext = pruneContext(
-        workingContext,
+        compactedContext,
         this.#maxContextTokens,
       );
 
-      const state = this.#newTurnState();
+      // ── Llamada al LLM con reintentos ────────────────────────────────
+      // Una completion vacía (sin texto ni tool calls) o un error de red
+      // transitorio NO son un "fin de turno" — antes el harness los trataba
+      // como end_turn y frenaba, obligando al usuario a tipear "?".
+      // Reintentamos sobre el MISMO contexto (cache-friendly) con backoff.
+      const MAX_LLM_RETRIES = 3;
+      let state = this.#newTurnState();
+      let llmAborted = false;
+      let attempt = 0;
 
-      try {
-        yield* this.#callLLM(prunedContext, state);
-      } catch (err: unknown) {
-        if (err instanceof Error && err.name === "AbortError") {
-          this.#interrupted = true;
-          logger.info("LLM call aborted by signal");
-          yield { type: "text", text: "⏹ Interrumpido por el usuario." };
-          const partialMessage: Message = {
-            role: "assistant",
-            content: this.#buildAssistantContent(state),
-          };
-          workingContext.push(partialMessage);
-          yield { type: "state", message: partialMessage };
-          break;
+      while (true) {
+        attempt++;
+        state = this.#newTurnState();
+
+        try {
+          yield* this.#callLLM(prunedContext, state);
+        } catch (err: unknown) {
+          if (err instanceof Error && err.name === "AbortError") {
+            llmAborted = true;
+            break;
+          }
+          if (this.#isRetryableError(err) && attempt <= MAX_LLM_RETRIES) {
+            const msg = err instanceof Error ? err.message : String(err);
+            logger.warn(
+              `LLM network error, retrying (${attempt}/${MAX_LLM_RETRIES})`,
+              { error: msg },
+            );
+            yield {
+              type: "text",
+              text: `⟳ Error de red, reintentando (${attempt}/${MAX_LLM_RETRIES})…`,
+            };
+            await this.#sleep(this.#backoffMs(attempt));
+            continue;
+          }
+          throw err;
         }
-        throw err;
+
+        // Turno degenerado: ni texto ni tool calls. Completion vacía del
+        // modelo o stream cortado sin `done`. Indistinguible de end_turn,
+        // así que lo reintentamos en vez de darlo por terminado.
+        const empty =
+          state.textParts.length === 0 && state.toolBlocks.length === 0;
+        if (empty && attempt <= MAX_LLM_RETRIES) {
+          logger.warn(`Empty completion, retrying (${attempt}/${MAX_LLM_RETRIES})`);
+          yield {
+            type: "text",
+            text: `⟳ Respuesta vacía, reintentando (${attempt}/${MAX_LLM_RETRIES})…`,
+          };
+          await this.#sleep(this.#backoffMs(attempt));
+          continue;
+        }
+        break;
+      }
+
+      if (llmAborted) {
+        this.#interrupted = true;
+        logger.info("LLM call aborted by signal");
+        yield { type: "text", text: "⏹ Interrumpido por el usuario." };
+        const partialMessage: Message = {
+          role: "assistant",
+          content: this.#buildAssistantContent(state),
+        };
+        workingContext.push(partialMessage);
+        yield { type: "state", message: partialMessage };
+        break;
+      }
+
+      // Si tras los reintentos sigue vacío, avisamos claro y cortamos —
+      // en vez del placeholder mudo que obligaba a tipear "?".
+      const stillEmpty =
+        state.textParts.length === 0 && state.toolBlocks.length === 0;
+      if (stillEmpty) {
+        logger.warn("Empty completion persisted after retries");
+        yield {
+          type: "text",
+          text: "⚠ El modelo devolvió respuestas vacías repetidas (posible corte de red o contexto muy grande). Probá de nuevo, o cambiá de modelo con /model primary <modelo>.",
+        };
+        break;
       }
 
       // Agregar mensaje assistant al contexto
@@ -367,6 +496,28 @@ class Runner {
         };
         workingContext.push(toolMessage);
         yield { type: "state", message: toolMessage };
+
+        // ── Detección de loops por errores consecutivos ──
+        const hasError = state.toolResults.some((r) => r.is_error);
+        if (hasError) {
+          this.#consecutiveErrors++;
+          if (this.#consecutiveErrors >= 3) {
+            const warning =
+              "⚠ 3 errores consecutivos en tools. ¿Podés cambiar de estrategia? " +
+              "Si no sabés cómo resolverlo, usá ask_user para pedirle ayuda al usuario.";
+            logger.warn("Consecutive tool errors", {
+              count: this.#consecutiveErrors,
+            });
+            yield { type: "text", text: warning };
+            workingContext.push({
+              role: "user",
+              content: [{ type: "text", text: warning }],
+            });
+            this.#consecutiveErrors = 0;
+          }
+        } else {
+          this.#consecutiveErrors = 0;
+        }
       }
 
       // ── Auto-continuación ────────────────────────────────────
@@ -422,9 +573,19 @@ class Runner {
   }
 
   getMetrics() {
+    // Re-lecturas: archivos leídos más de una vez
+    const rereads = [...this.#readCounts.entries()]
+      .filter(([, count]) => count > 1)
+      .map(([path, count]) => ({ path, count }));
+
     return {
       ...this.#metrics,
       durationMs: Date.now() - this.#metrics.startTime,
+      // Métricas anti-thrashing (consultables, no se muestran por defecto)
+      readsByFile: Object.fromEntries(this.#readCounts),
+      editsByFile: Object.fromEntries(this.#editCounts),
+      rereads,
+      totalToolErrors: this.#totalToolErrors,
     };
   }
 
@@ -446,6 +607,10 @@ class Runner {
       startTime: Date.now(),
     };
     this.#stepUsage = [];
+    this.#readCounts = new Map();
+    this.#editCounts = new Map();
+    this.#totalToolErrors = 0;
+    this.#consecutiveErrors = 0;
   }
 }
 
