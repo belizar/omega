@@ -327,7 +327,7 @@ const main = async () => {
           toolCallText.call(value.name, value.input, ctx.verbose);
         }
         if (value.type === "tool_result") {
-          toolResultText.result(value.output, ctx.verbose, value.rawOutput);
+          toolResultText.result(value.output, ctx.verbose, value.rawOutput, value.isError);
           spinner.start();
         }
         if (value.type === "state") {

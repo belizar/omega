@@ -34,6 +34,8 @@ type RunnerEvent =
       output: string;
       /** Output completo (sin truncar) para poder mostrar un resumen real. */
       rawOutput?: string;
+      /** La tool falló → se renderiza en rojo (señal de error, §2). */
+      isError?: boolean;
     }
   | { type: "ask_user"; question: string; toolId: string };
 
@@ -296,7 +298,7 @@ class Runner {
       const shown = truncateForDisplay(result.output);
       const forModel = truncateForContext(result.output, this.#maxContextTokens);
 
-      yield { type: "tool_result", output: shown, rawOutput: result.output };
+      yield { type: "tool_result", output: shown, rawOutput: result.output, isError: result.isError };
       state.toolResults.push({
         type: "tool_result",
         tool_use_id: block.id,

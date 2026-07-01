@@ -107,7 +107,7 @@ class AnsiRenderer implements MarkdownRenderer {
   }
 
   codeBlock(code: string, language?: string): string {
-    const w = Math.min(60, (columns ?? 80) - 2);
+    const w = Math.min(60, (stdout.columns ?? columns ?? 80) - 2);
     const langLabel = language ? ` ${language} ` : "";
     const top = dim("┌" + "─".repeat(w) + langLabel);
     // Sin prefijo │ para que el código sea copiable. Se usa dim para
@@ -118,14 +118,10 @@ class AnsiRenderer implements MarkdownRenderer {
   }
 
   heading(text: string, level: number): string {
-    switch (level) {
-      case 1:
-        return bold(cyan(text));
-      case 2:
-        return bold(cyan(text));
-      default:
-        return bold(text);
-    }
+    // Los headings son CONTENIDO (§1), no acción: foreground, nunca cyan.
+    // Se diferencian por peso, no por color. h1 lleva subrayado.
+    if (level === 1) return `\x1b[1;4m${text}\x1b[0m`; // bold + underline
+    return bold(text);
   }
 
   blockquote(text: string): string {

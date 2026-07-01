@@ -616,17 +616,19 @@ class DisplayToolResult {
     this.#screen = screen;
   }
 
-  result(output: string, verbose: boolean, rawOutput?: string): void {
+  result(output: string, verbose: boolean, rawOutput?: string, isError?: boolean): void {
     const summarySource = rawOutput ?? output;
+    // Error → rojo (§2: red = algo se rompió). No se esconde en la plomería gris.
+    const paint = isError ? red : gray;
     if (verbose) {
       if (output.length > 0) {
-        this.#screen.printAbove(gray(output));
+        this.#screen.printAbove(paint(output));
       }
       return;
     }
 
     const summary = this.#summarize(summarySource);
-    this.#screen.printAbove(gray(`  = ${summary}`));
+    this.#screen.printAbove(paint(`  = ${summary}`));
   }
 
   #summarize(output: string): string {
