@@ -19,10 +19,14 @@ export function resolveGitRoot(cwd: string): string | null {
           // Formato: "gitdir: /path/to/.git/worktrees/name"
           const match = content.match(/^gitdir:\s+(.+)$/);
           if (match) {
-            // gitdir = <repo>/.git/worktrees/<name>
-            // repo root = dirname(dirname(dirname(gitdir)))
-            const repoRoot = dirname(dirname(dirname(match[1])));
-            if (existsSync(join(repoRoot, ".git"))) return repoRoot;
+            // gitdir = <gitCommonDir>/worktrees/<name>
+            // El "git dir común" (dirname²) es el repo real: /proj/.git en un
+            // layout normal, o /mf/medra-functions.git en un layout bare +
+            // worktrees. El root del proyecto es su parent — así todos los
+            // worktrees comparten el mismo cabinet.
+            const commonDir = dirname(dirname(match[1]));
+            const repoRoot = dirname(commonDir);
+            if (existsSync(commonDir)) return repoRoot;
           }
         } catch { /* fallback: usar dir */ }
       }
