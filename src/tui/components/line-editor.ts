@@ -223,13 +223,15 @@ class LineEditor implements InputComponent<string> {
   /** Render del mensaje enviado SIN la caja (barras), para ecoarlo en el
    * historial. Así el mensaje no se ve igual que el prompt de input de abajo. */
   renderEcho(): string {
-    // Tu turno: barra azul + texto en bold, distinto de los tool calls
-    // (cyan `> `). Cada línea lleva la barra para que sea un ancla scaneable
-    // en el scrollback, no se mimetiza con la respuesta del agente.
+    // Tu turno: barra azul SOLO en la primera línea (una barra = un prompt),
+    // el resto indentado y alineado bajo el texto. Un prompt multilínea se lee
+    // como un bloque único, no como varios prompts. Texto en bold, distinto de
+    // los tool calls (cyan `> `).
     const bar = blue("▌");
+    const indent = "  "; // ancho de "▌ " para alinear las continuaciones
     return this.#buffer
       .split("\n")
-      .map((l) => `${bar} ${bold(l)}`)
+      .map((l, i) => (i === 0 ? `${bar} ` : indent) + bold(l))
       .join("\n");
   }
 
