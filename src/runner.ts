@@ -10,6 +10,11 @@ import { logger } from "./logger.js";
 import { Message, ToolMessage } from "./message.js";
 import { LLMProvider, LLMResponse } from "./providers/llm-provider.js";
 
+/** Cap absoluto de tokens que un solo tool_result puede aportar al contexto.
+ *  Suficiente para que el agente extraiga lo que necesita; los volcados crudos
+ *  gigantes (queries, dumps) se truncan head+tail y se re-consultan si hace falta. */
+const MAX_TOOL_RESULT_TOKENS = 12_000;
+
 type RunnerConstructorProps = {
   llmProvider: LLMProvider;
   agentConfig: AgentConfig;
@@ -296,7 +301,10 @@ class Runner {
 
       const result = await pending.get(block.id)!;
       const shown = truncateForDisplay(result.output);
-      const forModel = truncateForContext(result.output, this.#maxContextTokens);
+      // Cap ABSOLUTO por result (no un % del presupuesto): un volcado gigante
+      // de una query no tiene por qué ocupar 100k+ tokens y expulsar la
+      // conversación. Si el agente necesita más, re-consulta / pagina.
+      const forModel = truncateForContext(result.output, MAX_TOOL_RESULT_TOKENS, 1);
 
       yield { type: "tool_result", output: shown, rawOutput: result.output, isError: result.isError };
       state.toolResults.push({
