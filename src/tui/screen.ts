@@ -461,81 +461,77 @@ function wrapText(text: string, maxWidth: number): string {
   return result.join("\n");
 }
 
-/** Secuencia ANSI de apertura al inicio de un string, ej: "\x1b[2m". */
-const ANSI_LEADING_RE = /^\x1b\[[0-9;]*m/;
-
-function extractLeadingAnsi(s: string): string {
-  const m = s.match(ANSI_LEADING_RE);
-  return m ? m[0] : "";
-}
-
-function extractTrailingAnsi(s: string): string {
-  // El cierre de estilo que usamos siempre es \x1b[0m
-  if (s.endsWith("\x1b[0m")) return "\x1b[0m";
-  return "";
-}
-
+/**
+ * Envuelve una sola línea (sin \n) a `maxWidth` chars visibles, consciente de
+ * ANSI. Clave: re-aplica el estado de estilo ACTIVO en el punto de corte al
+ * inicio de cada continuación (no el estilo inicial de la línea). Así una línea
+ * con varios estilos —ej: barra azul + texto bold— envuelve conservando el
+ * estilo correcto en cada tramo, en vez de arrastrar el primer color.
+ */
 function wrapLine(line: string, maxWidth: number): string[] {
-  const visibleLen = stripAnsi(line).length;
-  if (visibleLen <= maxWidth) return [line];
+  if (stripAnsi(line).length <= maxWidth) return [line];
 
-  const leading = extractLeadingAnsi(line);
-  const trailing = extractTrailingAnsi(line);
+  const RESET = "\x1b[0m";
 
-  // Quitar apertura y cierre para trabajar con el texto limpio
-  let inner = line;
-  if (leading) inner = inner.slice(leading.length);
-  if (trailing) inner = inner.slice(0, inner.length - trailing.length);
-
-  const result: string[] = [];
-
-  while (inner.length > 0) {
-    if (stripAnsi(inner).length <= maxWidth) {
-      result.push(leading + inner + trailing);
-      break;
+  // Parsear en "celdas": cada char visible con el ANSI que lo precede.
+  const cells: { ansi: string; ch: string }[] = [];
+  let pending = "";
+  for (let i = 0; i < line.length; ) {
+    const m = line.slice(i).match(/^\x1b\[[0-9;]*m/);
+    if (m) {
+      pending += m[0];
+      i += m[0].length;
+      continue;
     }
-
-    // Buscar el último espacio dentro del límite visible
-    let spaceIdx = -1;
-    let visibleCount = 0;
-    for (let i = 0; i < inner.length && visibleCount < maxWidth; i++) {
-      const ansiMatch = inner.slice(i).match(ANSI_LEADING_RE);
-      if (ansiMatch) {
-        i += ansiMatch[0].length - 1;
-        continue;
-      }
-      if (inner[i] === " ") spaceIdx = i;
-      visibleCount++;
-    }
-
-    let cutIdx: number;
-    let skip: number; // cuántos chars saltar al pasar a la siguiente línea
-
-    if (spaceIdx > 0) {
-      // Cortar en el espacio: no lo incluimos en la línea, y lo saltamos
-      cutIdx = spaceIdx;
-      skip = 1; // saltar el espacio mismo
-    } else {
-      // No hay espacio: cortar justo en maxWidth caracteres visibles
-      visibleCount = 0;
-      cutIdx = 0;
-      for (let i = 0; i < inner.length && visibleCount < maxWidth; i++) {
-        const ansiMatch = inner.slice(i).match(ANSI_LEADING_RE);
-        if (ansiMatch) {
-          i += ansiMatch[0].length - 1;
-          continue;
-        }
-        visibleCount++;
-        cutIdx = i + 1;
-      }
-      skip = 0; // no saltar nada, continuación pegada
-    }
-
-    result.push(leading + inner.slice(0, cutIdx) + trailing);
-    inner = inner.slice(cutIdx + skip);
+    cells.push({ ansi: pending, ch: line[i] });
+    pending = "";
+    i++;
   }
 
-  return result.length > 0 ? result : [line];
+  // Acumula el estado SGR activo; un reset (\x1b[0m / \x1b[m) lo limpia.
+  const step = (state: string, seq: string): string => {
+    if (!seq) return state;
+    let s = state;
+    for (const mm of seq.matchAll(/\x1b\[[0-9;]*m/g)) {
+      s = mm[0] === "\x1b[0m" || mm[0] === "\x1b[m" ? "" : s + mm[0];
+    }
+    return s;
+  };
+
+  const out: string[] = [];
+  let i = 0;
+  let stateAtStart = "";
+  while (i < cells.length) {
+    // Llenar hasta maxWidth, recordando el último espacio para cortar en palabra.
+    let j = i;
+    let width = 0;
+    let lastSpace = -1;
+    while (j < cells.length && width < maxWidth) {
+      if (cells[j].ch === " ") lastSpace = j;
+      width++;
+      j++;
+    }
+    let cut = j;
+    let skipSpace = false;
+    if (j < cells.length && lastSpace > i) {
+      cut = lastSpace;
+      skipSpace = true;
+    }
+
+    let piece = stateAtStart;
+    let state = stateAtStart;
+    for (let k = i; k < cut; k++) {
+      piece += cells[k].ansi + cells[k].ch;
+      state = step(state, cells[k].ansi);
+    }
+    if (state) piece += RESET; // cerrar estilo abierto al final del tramo
+    out.push(piece);
+
+    stateAtStart = state; // la continuación arranca con el estilo activo acá
+    i = skipSpace ? cut + 1 : cut;
+  }
+
+  return out.length > 0 ? out : [line];
 }
 
 export { Screen, stripAnsi, truncateEphemeral, wrapText };
