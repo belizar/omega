@@ -142,7 +142,10 @@ class AnsiRenderer implements MarkdownRenderer {
 
     // 2. Capear al ancho del terminal. Overhead de bordes: "│ " + " │" por
     //    columna = 3 por col, + 1 del "│" final.
-    const termWidth = (stdout.columns ?? columns ?? 80) - 1;
+    //    Margen de 4: printAbove agrega indent (2) + padding y re-envuelve a
+    //    `columns - indent - padding`; si la tabla se pasa de eso, el word-wrap
+    //    parte las filas y escupe la cola afuera del borde. Dejamos aire.
+    const termWidth = (stdout.columns ?? columns ?? 80) - 4;
     const overhead = cols * 3 + 1;
     const widths = [...natural];
     const MIN_COL = 6;
