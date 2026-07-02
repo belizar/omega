@@ -52,7 +52,7 @@ const DEFAULT_CONFIG: OmegaConfig = {
       model: "anthropic/claude-haiku-4-5-20251001",
       maxTokens: 4096,
       maxSteps: 15,
-      maxContextTokens: 100_000,
+      // maxContextTokens se deriva de la ventana del modelo si no se setea.
     },
   },
 };
@@ -106,6 +106,25 @@ export function loadOmegaConfig(): OmegaConfig {
   return merged;
 }
 
+// ── Ventana de contexto por modelo ───────────────────────────────────────────
+
+/** Ventana de contexto (tokens) conocida por modelo. Fallback conservador. */
+function modelContextWindow(model: string): number {
+  const m = model.toLowerCase();
+  if (m.includes("deepseek")) return 1_000_000;
+  if (m.includes("gemini")) return 1_000_000;
+  if (m.includes("gpt-5") || m.includes("gpt-4.1")) return 400_000;
+  if (m.includes("claude") || m.includes("sonnet") || m.includes("opus") || m.includes("haiku")) return 200_000;
+  return 128_000; // desconocido: conservador
+}
+
+/** Presupuesto de contexto por defecto: 85% de la ventana del modelo, dejando
+ *  headroom para system prompt + output. pruneContext queda como válvula de
+ *  seguridad que casi nunca dispara, en vez de amputar la conversación. */
+function defaultMaxContextTokens(model: string): number {
+  return Math.floor(modelContextWindow(model) * 0.85);
+}
+
 // ── Resolver perfil ──────────────────────────────────────────────────────────
 
 /** Dado un nombre de perfil, devuelve la configuración resuelta. */
@@ -123,7 +142,7 @@ function resolveProfile(
   const model = profile.model;
   const maxTokens = profile.maxTokens ?? 4096;
   const maxSteps = profile.maxSteps ?? 15;
-  const maxContextTokens = profile.maxContextTokens ?? 100_000;
+  const maxContextTokens = profile.maxContextTokens ?? defaultMaxContextTokens(model);
 
   // Visión: hereda model del perfil si no se especifica
   const visionModel = profile.vision?.model ?? model;
