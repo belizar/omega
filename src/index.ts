@@ -154,6 +154,12 @@ function loadMcpContext(): string {
   return `\n\n## Servicios MCP disponibles\n\nTenés tools MCP configuradas para: ${names}.\nCuando el usuario mencione alguno de estos servicios, usá \`tool_search\` con el nombre del servicio para descubrir las tools disponibles y usalas directamente.`;
 }
 
+/** Deliverables para el humano: distinto de la memoria del agente (cabinet). */
+function loadDocsContext(docsDir: string | null): string {
+  if (!docsDir) return "";
+  return `\n\n## Documentos para el humano (deliverables)\n\nCuando el usuario te pida escribir un documento PARA ÉL —un plan, review, summary, informe, HTML— es un **deliverable**, algo que va a consumir él, no memoria del agente. Escribilo con \`write\` en \`${docsDir}\` (su carpeta de docs), con un nombre descriptivo.\n\nNO uses el cabinet para esto: el cabinet es la **memoria de omega, para omega** (conocimiento durable que el agente consolida para su propio contexto). Los deliverables son para que los lea el humano — otro lugar, otro propósito.`;
+}
+
 const main = async () => {
   enableRawMode();
   const config = validateEnv();
@@ -165,7 +171,7 @@ const main = async () => {
   logger.setLogFile(`.omega/logs/${session.id}.log`);
   logger.info("Omega agent starting", { session: session.id });
 
-  const fullSystemPrompt = SYSTEM_PROMPT + loadProjectContext() + loadMcpContext() + buildCabinetContext();
+  const fullSystemPrompt = SYSTEM_PROMPT + loadProjectContext() + loadMcpContext() + buildCabinetContext() + loadDocsContext(config.docsDir);
 
   // ── Hero ──────────────────────────────────────────────────────────
   const toolCount = 8; // read, write, edit, bash, grep, outline, tool_search, ask_user

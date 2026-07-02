@@ -22,6 +22,10 @@ interface OmegaConfig {
   defaultProfile: string;
   /** Perfiles nombrados. */
   profiles: Record<string, AgentProfile>;
+  /** Directorio donde omega escribe DELIVERABLES para el humano (planes,
+   *  reviews, summaries, HTMLs). Distinto de la memoria del agente (cabinet).
+   *  Ej: tu vault de Obsidian. Soporta `~`. */
+  docsDir?: string;
 }
 
 interface ResolvedConfig {
@@ -41,6 +45,8 @@ interface ResolvedConfig {
   outlineThreshold: number;
   visionModel: string | null;
   visionMaxTokens: number;
+  /** Directorio de deliverables para el humano (o null si no se configuró). */
+  docsDir: string | null;
 }
 
 // ── Defaults ─────────────────────────────────────────────────────────────────
@@ -85,6 +91,7 @@ export function loadOmegaConfig(): OmegaConfig {
   const global = loadJsonFile(globalPath);
   if (global) {
     if (typeof global.defaultProfile === "string") merged.defaultProfile = global.defaultProfile;
+    if (typeof global.docsDir === "string") merged.docsDir = global.docsDir;
     if (global.profiles && typeof global.profiles === "object") {
       for (const [name, p] of Object.entries(global.profiles as Record<string, unknown>)) {
         merged.profiles[name] = { ...merged.profiles[name], ...(p as AgentProfile) };
@@ -96,6 +103,7 @@ export function loadOmegaConfig(): OmegaConfig {
   const project = loadJsonFile(projectPath);
   if (project) {
     if (typeof project.defaultProfile === "string") merged.defaultProfile = project.defaultProfile;
+    if (typeof project.docsDir === "string") merged.docsDir = project.docsDir;
     if (project.profiles && typeof project.profiles === "object") {
       for (const [name, p] of Object.entries(project.profiles as Record<string, unknown>)) {
         merged.profiles[name] = { ...merged.profiles[name], ...(p as AgentProfile) };
@@ -123,6 +131,14 @@ function modelContextWindow(model: string): number {
  *  seguridad que casi nunca dispara, en vez de amputar la conversación. */
 function defaultMaxContextTokens(model: string): number {
   return Math.floor(modelContextWindow(model) * 0.85);
+}
+
+/** Expande un leading `~` a la home. null si no se pasó path. */
+function expandHome(p: string | undefined): string | null {
+  if (!p) return null;
+  if (p === "~") return homedir();
+  if (p.startsWith("~/")) return join(homedir(), p.slice(2));
+  return p;
 }
 
 // ── Resolver perfil ──────────────────────────────────────────────────────────
@@ -171,6 +187,7 @@ function resolveProfile(
     outlineThreshold: parseInt(process.env.OUTLINE_THRESHOLD || "200", 10),
     visionModel: effectiveVisionModel,
     visionMaxTokens,
+    docsDir: expandHome(config.docsDir),
   };
 }
 

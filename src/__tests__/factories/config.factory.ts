@@ -19,6 +19,7 @@ export class ConfigFactory {
       outlineThreshold: overrides?.outlineThreshold ?? 200,
       visionModel: overrides?.visionModel ?? null,
       visionMaxTokens: overrides?.visionMaxTokens ?? 512,
+      docsDir: overrides?.docsDir ?? null,
     };
   }
 
