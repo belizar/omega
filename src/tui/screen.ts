@@ -3,7 +3,7 @@ import { AskUserInput } from "./components/ask-user-input.js";
 import { CursorPosition, InputComponent } from "./component.js";
 import { decodeKey } from "./decodeKey.js";
 import { disableRawMode } from "./terminal.js";
-import { dim } from "./theme.js";
+import { dim, green } from "./theme.js";
 
 // ── Secuencias de escape ANSI ─────────────────────────────────────────
 
@@ -47,6 +47,10 @@ class Screen {
   #busy = false; // lock para evitar que setStatus redibuje durante printAbove
   #statusDirty = false; // setStatus cambió estando busy → redibujar al unlock
   #pasteBuffer: string | null = null;
+
+  // Type-ahead: input tipeado MIENTRAS el agente trabaja (!#reading).
+  #queue: string[] = []; // mensajes confirmados con Enter, a procesar al terminar
+  #queueLine = ""; // línea actual sin Enter todavía
   #paddingRight: number;
   #indent: number;
 
@@ -69,6 +73,63 @@ class Screen {
   /** Limpia el AbortController asociado. */
   clearAbortController(): void {
     this.#abortSignal = null;
+  }
+
+  // ── Type-ahead (encolar input mientras el agente trabaja) ───────────────
+
+  /** Acumula una tecla tipeada durante el turno. Enter confirma un mensaje. */
+  #enqueueKey(raw: string): void {
+    const key = decodeKey(raw);
+    switch (key.type) {
+      case "enter":
+        if (this.#queueLine.trim().length > 0) {
+          this.#queue.push(this.#queueLine);
+          this.#queueLine = "";
+        }
+        break;
+      case "newline": // Shift+Enter → salto de línea dentro del mensaje
+        this.#queueLine += "\n";
+        break;
+      case "backspace":
+        this.#queueLine = this.#queueLine.slice(0, -1);
+        break;
+      case "char":
+        this.#queueLine += key.value;
+        break;
+      case "paste":
+        this.#queueLine += key.text;
+        break;
+      default:
+        return; // flechas, tab, etc.: ignorar sin redibujar
+    }
+    this.#renderQueueHint();
+  }
+
+  /** Dibuja la pista de la cola en la línea efímera (arriba del spinner). */
+  #renderQueueHint(): void {
+    const parts: string[] = [];
+    if (this.#queue.length > 0) parts.push(green(`⏎ ${this.#queue.length} en cola`));
+    if (this.#queueLine.length > 0) parts.push(dim("▌ ") + this.#queueLine);
+    if (parts.length === 0) {
+      this.clearEphemeral();
+      return;
+    }
+    this.writeEphemeral(parts.join(dim(" · ")));
+  }
+
+  /** Devuelve y limpia los mensajes encolados (llamado al terminar el turno). */
+  takeQueue(): string[] {
+    const q = this.#queue;
+    this.#queue = [];
+    this.clearEphemeral();
+    return q;
+  }
+
+  /** Devuelve y limpia la línea a medio tipear sin Enter (para precargar el editor). */
+  takePendingLine(): string {
+    const line = this.#queueLine;
+    this.#queueLine = "";
+    return line;
   }
 
   /** Adquirir lock de escritura. Mientras está tomado, setStatus solo
@@ -264,11 +325,13 @@ class Screen {
     // Durante la ejecución del agente, solo dejamos pasar Ctrl+C y Esc
     // para interrupción; el resto del input se ignora.
     if (!this.#reading) {
-      // Ctrl+C: \x03. Esc: \x1b. Escape sequences (flechas, etc): \x1b[...]
-      // Solo pasamos \x03 y \x1b solo (sin argumentos extra).
+      // Agente trabajando: Ctrl+C / Esc interrumpen; el resto se ENCOLA
+      // (type-ahead) para procesarse cuando el turno termine.
       if (raw === "\x03" || raw === "\x1b") {
         this.#processKey(raw);
+        return;
       }
+      this.#enqueueKey(raw);
       return;
     }
 

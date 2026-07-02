@@ -47,6 +47,13 @@ class LineEditor implements InputComponent<string> {
     this.#pendingImages = [];
   }
 
+  /** Precarga el editor con texto (ej: una línea de type-ahead a medio tipear). */
+  setBuffer(text: string): void {
+    this.#buffer = text;
+    this.#cursor = text.length;
+    this.#done = false;
+  }
+
   // ---- helpers de línea ----
 
   /** Índice del inicio de la línea donde está el cursor */
@@ -227,9 +234,15 @@ class LineEditor implements InputComponent<string> {
     // el resto indentado y alineado bajo el texto. Un prompt multilínea se lee
     // como un bloque único, no como varios prompts. Texto en bold, distinto de
     // los tool calls (cyan `> `).
+    return this.renderEchoOf(this.#buffer);
+  }
+
+  /** Formatea un texto arbitrario como eco (barra azul + bold). Compartido por
+   *  el eco del editor y el de los mensajes encolados (type-ahead). */
+  renderEchoOf(text: string): string {
     const bar = blue("▌");
     const indent = "  "; // ancho de "▌ " para alinear las continuaciones
-    return this.#buffer
+    return text
       .split("\n")
       .map((l, i) => (i === 0 ? `${bar} ` : indent) + bold(l))
       .join("\n");

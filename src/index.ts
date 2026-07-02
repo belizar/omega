@@ -379,7 +379,50 @@ const main = async () => {
     run.resetMetrics();
   };
 
+  /** Procesa un mensaje de texto encolado (type-ahead): eco + comando/turno.
+   *  Versión text-only del flujo interactivo (los encolados no llevan imágenes). */
+  const runUserText = async (text: string): Promise<void> => {
+    screen.printAbove(`\n${lineEditor.renderEchoOf(text)}`);
+    screen.printBlankLine();
+
+    if (await dispatchCommand(text, ctx)) return;
+    if (text === "exit") {
+      logger.info("Omega agent stopped");
+      disableRawMode();
+      process.exit(0);
+    }
+
+    const resolved = await expandFileMentions(text);
+    const content: Message["content"] = [];
+    if (resolved.text) content.push({ type: "text", text: resolved.text });
+    for (const img of resolved.images) content.push(img);
+    if (content.length === 0) return;
+
+    const first = content[0];
+    if (content.length === 1 && typeof first === "object" && "type" in first && first.type === "text") {
+      ctx.session.addUserMessage((first as { type: "text"; text: string }).text);
+    } else {
+      ctx.session.addUserMessage(content);
+    }
+    await runTurn();
+  };
+
+  /** Drena la cola de type-ahead hasta vaciarla (cada msg puede encolar más). */
+  const drainQueue = async (): Promise<void> => {
+    let queued = screen.takeQueue();
+    while (queued.length > 0) {
+      for (const msg of queued) await runUserText(msg);
+      queued = screen.takeQueue();
+    }
+    // Línea a medio tipear sin Enter → precargar el editor del próximo prompt.
+    const pending = screen.takePendingLine();
+    if (pending) lineEditor.setBuffer(pending);
+  };
+
   while (true) {
+    // Type-ahead: procesar lo que encolaste mientras el agente trabajaba.
+    await drainQueue();
+
     const prompt = new Prompt({
       editor: lineEditor,
       ctx,
