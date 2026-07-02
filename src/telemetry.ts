@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, statSync, rmSync } from "fs";
 import { homedir } from "os";
 import path from "path";
-import { execSync } from "child_process";
+import { inferProjectSlug } from "./project.js";
 
 const { join } = path;
 
@@ -58,61 +58,9 @@ function ensureDir(dir: string): void {
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 }
 
-/** Memo por cwd: inferProjectSlug se llama en cada #save; el remote se resuelve
- *  una sola vez por directorio en vez de spawnear git por mensaje. */
-const slugCache = new Map<string, { slug: string; root: string }>();
-
-/** Sube desde `cwd` hasta el primer `.git` y devuelve ese directorio (o null). */
-function firstGitAncestor(cwd: string): string | null {
-  let dir = path.resolve(cwd);
-  while (true) {
-    if (existsSync(join(dir, ".git"))) return dir;
-    const parent = path.dirname(dir);
-    if (parent === dir) return null;
-    dir = parent;
-  }
-}
-
-/**
- * Infiere el "slug" de proyecto desde un CWD.
- *
- * Prioridad:
- *  1. Nombre del repo remoto (`git remote origin`) — estable a través de
- *     worktrees y del layout bare (todos los branches comparten el mismo repo).
- *  2. Basename del primer `.git` ancestro — comportamiento viejo.
- *  3. Basename del CWD.
- *
- * Memoizado por cwd (un solo `git` por directorio por proceso).
- */
-export function inferProjectSlug(cwd: string): { slug: string; root: string } {
-  const key = path.resolve(cwd);
-  const cached = slugCache.get(key);
-  if (cached) return cached;
-
-  const root = firstGitAncestor(key) ?? key;
-  let slug: string | null = null;
-
-  // 1. Remote: user/repo → repo
-  try {
-    const remote = execSync("git remote get-url origin", {
-      cwd: key,
-      encoding: "utf-8",
-      timeout: 2000,
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-    const m = remote.match(/[:/]([^/]+?)(?:\.git)?$/);
-    if (m) slug = m[1];
-  } catch {
-    // sin git o sin remote → fallback
-  }
-
-  // 2/3. Fallback: basename del git root o del cwd
-  if (!slug) slug = path.basename(root);
-
-  const result = { slug, root };
-  slugCache.set(key, result);
-  return result;
-}
+// inferProjectSlug vive en project.ts (fuente única, compartida con el cabinet).
+// Se re-exporta para no romper imports existentes (tests, etc.).
+export { inferProjectSlug };
 
 /**
  * Migra registros viejos al esquema de slug actual: re-infiere el slug de cada

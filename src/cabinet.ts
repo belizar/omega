@@ -1,44 +1,13 @@
 import { existsSync, readFileSync, mkdirSync, readdirSync, statSync, writeFileSync } from "fs";
 import { join, dirname } from "path";
 import { homedir } from "os";
+import { resolveGitRoot } from "./project.js";
 
 // ── Resolución de paths ────────────────────────────────────────────────
 
-/** Camina hacia arriba desde cwd buscando `.git` y devuelve el root real
- *  del repo. Si `.git` es un archivo (worktree), sigue el link al repo
- *  principal para que todos los worktrees compartan el mismo cabinet. */
-export function resolveGitRoot(cwd: string): string | null {
-  let dir = cwd;
-  while (true) {
-    const gitPath = join(dir, ".git");
-    if (existsSync(gitPath)) {
-      // Worktree: .git es un archivo que apunta al gitdir real
-      if (statSync(gitPath).isFile()) {
-        try {
-          const content = readFileSync(gitPath, "utf-8").trim();
-          // Formato: "gitdir: /path/to/.git/worktrees/name"
-          const match = content.match(/^gitdir:\s+(.+)$/);
-          if (match) {
-            // gitdir = <gitCommonDir>/worktrees/<name>
-            // El "git dir común" (dirname²) es el repo real: /proj/.git en un
-            // layout normal, o /mf/medra-functions.git en un layout bare +
-            // worktrees. El root del proyecto es su parent — así todos los
-            // worktrees comparten el mismo cabinet.
-            const commonDir = dirname(dirname(match[1]));
-            const repoRoot = dirname(commonDir);
-            if (existsSync(commonDir)) return repoRoot;
-          }
-        } catch { /* fallback: usar dir */ }
-      }
-      // Repo normal: .git es un directorio
-      return dir;
-    }
-    const parent = dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-  return null;
-}
+// resolveGitRoot vive en project.ts (fuente única de "qué es el proyecto",
+// compartida con la telemetría). Se re-exporta para no romper imports.
+export { resolveGitRoot };
 
 /** Devuelve el path del cabinet de proyecto, resuelto al repo real
  *  (no al worktree). null si el repo no tiene cabinet. */
