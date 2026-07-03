@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "fs";
 import { homedir } from "os";
-import { join } from "path";
+import { basename, join } from "path";
 import { stdout } from "process";
 import { execSync } from "child_process";
 import dotenv from "dotenv";
@@ -373,10 +373,17 @@ const main = async () => {
       thrashParts.push(`⚠ ${metrics.totalToolErrors} errores`);
     }
     if (metrics.rereads.length > 0) {
-      const rereadPaths = metrics.rereads
-        .map((r: { path: string }) => r.path)
+      // Resumen compacto: cantidad + top ofensores por basename (no el muro de
+      // paths absolutos). Ordenado por cuántas veces se re-leyó cada uno.
+      const sorted = [...metrics.rereads].sort(
+        (a: { count: number }, b: { count: number }) => b.count - a.count,
+      );
+      const top = sorted
+        .slice(0, 2)
+        .map((r: { path: string; count: number }) => `${basename(r.path)}×${r.count}`)
         .join(", ");
-      thrashParts.push(`⟳ re-leídos: ${rereadPaths}`);
+      const more = sorted.length > 2 ? ` +${sorted.length - 2}` : "";
+      thrashParts.push(`⟳ ${metrics.rereads.length} re-leídos: ${top}${more}`);
     }
     const thrashStr = thrashParts.length > 0 ? ` · ${thrashParts.join(" · ")}` : "";
 
