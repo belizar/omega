@@ -95,9 +95,10 @@ src/
     resume.ts               /resume <id> — reanuda una sesión guardada
   __tests__/                Tests unitarios con Vitest
 docs/
-  improvements.md           Ideas de mejoras
-  line-editor-design.md     Diseño del editor de línea
-  memory-system-design.md   Diseño del sistema de memoria/contexto
+  design/                   Design docs: cómo debería funcionar algo (specs de features)
+  adr/                      Architecture Decision Records: por qué se decidió algo
+  reference/                Docs vivos de referencia (ej: styleguide de la TUI)
+  notes/                    Notas sueltas, TODOs y registros de QA
 ```
 
 ## Tools disponibles
