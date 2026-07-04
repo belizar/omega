@@ -369,7 +369,9 @@ class Screen {
 
     if (key.type === "ctrl" && key.key === "c" || key.type === "escape") {
       // Si el agente está corriendo y hay un AbortController registrado,
-      // interrumpimos la llamada al LLM en lugar de matar el proceso.
+      // interrumpimos el turno (Ctrl+C o Esc) en lugar de matar el proceso de
+      // omega: aborta la llamada al LLM Y las tools en vuelo — bash mata su
+      // proceso hijo al recibir el signal.
       if (this.#abortSignal) {
         this.#abortSignal.abort();
         // Si estamos en ask_user (reading=true), forzamos que el componente

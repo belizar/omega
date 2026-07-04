@@ -15,7 +15,10 @@ export abstract class Tool<Tin, Tout> {
     this.#schema = schema;
   }
 
-  abstract execute(input: Tin): Promise<Tout>;
+  /** Ejecuta la tool. El `signal` opcional permite que el caller (el runner)
+   *  cancele operaciones long-running — ej: bash mata el proceso hijo al
+   *  recibir Ctrl+C. Las tools que no lo necesiten pueden ignorarlo. */
+  abstract execute(input: Tin, signal?: AbortSignal): Promise<Tout>;
 
   get name() {
     return this.#name;

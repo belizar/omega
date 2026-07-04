@@ -351,7 +351,7 @@ class Runner {
       return { output: msg, isError: true };
     }
     try {
-      return { output: (await tool.execute(input)) as string, isError: false };
+      return { output: (await tool.execute(input, this.#signal)) as string, isError: false };
     } catch (err: unknown) {
       const msg = `Error executing tool "${name}": ${err instanceof Error ? err.message : String(err)}`;
       logger.error("Tool execution threw", { tool: name, error: msg });

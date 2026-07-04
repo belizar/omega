@@ -8,13 +8,19 @@ type BashInput = {
   /** Si es true, saltea el clasificador y ejecuta el comando directamente.
    * Usar solo después de que el usuario confirmó vía ask_user. */
   force?: boolean;
+  /** Timeout de ESTE comando en SEGUNDOS. Pisá el default cuando sepas que va
+   *  a tardar (builds, tests, installs). Sin valor → default del harness. */
+  timeout?: number;
 };
 
 export type BashToolOptions = {
   classifier?: CommandClassifier;
+  /** Timeout por defecto (ms) cuando el comando no especifica `timeout`. */
+  defaultTimeoutMs?: number;
 };
 
-const TIMEOUT_MS = 60_000; // matar comandos colgados a los 60s
+const DEFAULT_TIMEOUT_MS = 120_000; // fallback si el constructor no pasa uno
+const MAX_TIMEOUT_MS = 30 * 60_000; // tope duro: 30 min, evita colgar el agente
 const MAX_BUFFER = 10 * 1024 * 1024; // 10MB de stdout/stderr
 
 // Guardarraíl determinista: patrones que nunca se ejecutan sin importar
@@ -76,6 +82,7 @@ const SAFE_PATTERNS = [
 
 export class BashTool extends Tool<BashInput, string> {
   #classifier?: CommandClassifier;
+  #defaultTimeoutMs: number;
 
   constructor(options?: BashToolOptions) {
     super({
@@ -87,6 +94,14 @@ export class BashTool extends Tool<BashInput, string> {
           command: {
             type: "string",
             description: "El comando bash a ejecutar",
+          },
+          timeout: {
+            type: "number",
+            description:
+              "Opcional. Timeout de este comando en SEGUNDOS. Subilo cuando " +
+              "sepas que va a tardar (builds, test suites, npm install): ej. 600 " +
+              "para 10 min. Sin valor usa el default del harness (120s). El " +
+              "máximo es 1800 (30 min).",
           },
           force: {
             type: "boolean",
@@ -101,9 +116,21 @@ export class BashTool extends Tool<BashInput, string> {
       },
     });
     this.#classifier = options?.classifier;
+    this.#defaultTimeoutMs = options?.defaultTimeoutMs ?? DEFAULT_TIMEOUT_MS;
   }
 
-  async execute({ command, force }: BashInput): Promise<string> {
+  async execute(
+    { command, force, timeout }: BashInput,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    // Timeout efectivo: override por llamada (segundos) → default del harness,
+    // clampeado al tope duro. Se calcula acá afuera para que el catch lo vea.
+    const requestedMs =
+      typeof timeout === "number" && timeout > 0
+        ? Math.round(timeout * 1000)
+        : this.#defaultTimeoutMs;
+    const timeoutMs = Math.min(requestedMs, MAX_TIMEOUT_MS);
+
     try {
       if (!command || typeof command !== "string") {
         logger.error("Invalid bash command input", { command });
@@ -167,31 +194,72 @@ export class BashTool extends Tool<BashInput, string> {
         this.#classifier.learnOverride(command, "safe");
       }
 
-      logger.info("Executing bash command", { command, force });
+      // Ya interrumpido antes de arrancar: no lanzamos el proceso.
+      if (signal?.aborted) {
+        return "⏹ Comando cancelado antes de ejecutar (interrumpido por el usuario).";
+      }
+
+      logger.info("Executing bash command", { command, force, timeoutMs });
+      let aborted = false;
       const result = await new Promise<string>((resolve, reject) => {
-        exec(command, {
+        let closed = false;
+        // onAbort se define después de tener `child`, pero el callback de exec
+        // lo referencia para removerse; por eso lo declaramos acá.
+        let onAbort = () => {};
+
+        const child = exec(command, {
           encoding: "buffer" as BufferEncoding,
-          timeout: TIMEOUT_MS,
+          timeout: timeoutMs,
           maxBuffer: MAX_BUFFER,
         }, (error, stdout, stderr) => {
+          closed = true;
+          signal?.removeEventListener("abort", onAbort);
+
           // juntar stdout y stderr
           const out = Buffer.isBuffer(stdout) ? stdout.toString("utf-8") : String(stdout);
           const err = Buffer.isBuffer(stderr) ? stderr.toString("utf-8") : String(stderr);
           const combined = (out + (err ? err : "")).trim();
+
+          // Interrumpido por el usuario: devolvemos lo que alcanzó a producir,
+          // sin tratarlo como error (el SIGTERM lo mandamos nosotros).
+          if (aborted) {
+            resolve(
+              "⏹ Comando interrumpido por el usuario." +
+              (combined ? `\n\nOutput parcial:\n${combined}` : ""),
+            );
+            return;
+          }
+
           if (error && !combined) {
             reject(error);
           } else {
             resolve(combined || (error?.message ?? ""));
           }
         });
+
+        // Ctrl+C del usuario → matamos el proceso hijo. SIGTERM primero, y si
+        // no muere en 2s, SIGKILL. El timer se unref-ea para no atar el loop.
+        onAbort = () => {
+          aborted = true;
+          child.kill("SIGTERM");
+          const t = setTimeout(() => {
+            if (!closed) child.kill("SIGKILL");
+          }, 2000);
+          t.unref();
+        };
+        signal?.addEventListener("abort", onAbort, { once: true });
       });
       logger.info("Command executed successfully");
       return result;
     } catch (err: unknown) {
       const error = err as { code?: string; signal?: string; stderr?: string; stdout?: string; message?: string };
       if (error.code === "ETIMEDOUT" || error.signal === "SIGTERM") {
-        const msg = `Error: command timed out after ${TIMEOUT_MS}ms`;
-        logger.warn("Bash command timed out", { command });
+        const secs = Math.round(timeoutMs / 1000);
+        const msg =
+          `Error: el comando superó el timeout de ${secs}s y fue terminado. ` +
+          `Si esperabas que tardara más, reintentá con un timeout mayor ` +
+          `(ej: timeout: ${secs * 4}).`;
+        logger.warn("Bash command timed out", { command, timeoutMs });
         return msg;
       }
       const errorMsg = error.stderr || error.stdout || error.message || String(err);

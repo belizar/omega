@@ -43,6 +43,9 @@ interface ResolvedConfig {
   classifierModel: string;
   classifierLearn: boolean;
   outlineThreshold: number;
+  /** Timeout por defecto (ms) para comandos bash. El modelo puede pisarlo por
+   *  llamada con el param `timeout` (en segundos). Env: BASH_TIMEOUT_MS. */
+  bashTimeoutMs: number;
   visionModel: string | null;
   visionMaxTokens: number;
   /** Directorio de deliverables para el humano (o null si no se configuró). */
@@ -185,6 +188,7 @@ function resolveProfile(
     classifierModel,
     classifierLearn,
     outlineThreshold: parseInt(process.env.OUTLINE_THRESHOLD || "200", 10),
+    bashTimeoutMs: parseInt(process.env.BASH_TIMEOUT_MS || "120000", 10),
     visionModel: effectiveVisionModel,
     visionMaxTokens,
     docsDir: expandHome(config.docsDir),

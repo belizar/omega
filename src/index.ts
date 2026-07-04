@@ -198,6 +198,7 @@ const main = async () => {
 
   const bashTool = new BashTool({
     classifier,
+    defaultTimeoutMs: config.bashTimeoutMs,
   });
 
   const toolRegistry = new ToolRegistry(logger);

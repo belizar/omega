@@ -68,4 +68,43 @@ describe("BashTool", () => {
     const result = await bashTool.execute({ command: "shutdown -h now" });
     expect(result).toContain("BLOQUEADO POR GUARDARRAÍL DETERMINISTA");
   });
+
+  // ── Timeout por llamada ──────────────────────────────────────────────
+  it("should time out a slow command when a short per-call timeout is given", async () => {
+    // sleep 3 con timeout: 1 → debe matarse al segundo.
+    const result = await bashTool.execute({ command: "sleep 3", timeout: 1 });
+    expect(result).toContain("timeout de 1s");
+  });
+
+  it("should respect a generous per-call timeout for a quick command", async () => {
+    const result = await bashTool.execute({ command: "echo ok", timeout: 600 });
+    expect(result).toContain("ok");
+    expect(result).not.toContain("timeout");
+  });
+
+  // ── Interrumpibilidad (Ctrl+C mata el proceso) ───────────────────────
+  it("should kill the child process when the signal aborts", async () => {
+    const controller = new AbortController();
+    const started = Date.now();
+    // Abortamos a los 100ms un sleep de 10s.
+    setTimeout(() => controller.abort(), 100);
+    const result = await bashTool.execute(
+      { command: "sleep 10" },
+      controller.signal,
+    );
+    expect(result).toContain("interrumpido por el usuario");
+    // Retornó mucho antes de los 10s → el proceso se mató de verdad.
+    expect(Date.now() - started).toBeLessThan(3000);
+  });
+
+  it("should not run a command whose signal is already aborted", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const result = await bashTool.execute(
+      { command: "echo deberia-no-correr" },
+      controller.signal,
+    );
+    expect(result).toContain("cancelado antes de ejecutar");
+    expect(result).not.toContain("deberia-no-correr");
+  });
 });
