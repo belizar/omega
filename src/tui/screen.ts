@@ -391,7 +391,10 @@ class Screen {
         disableRawMode();
         process.exit(0);
       }
-      return;
+      // Esc en el prompt (sin turno en curso): lo maneja el componente activo
+      // —ej. un select-list de /resume lo usa para cancelar—. Cae al
+      // handleKey de abajo. Si no hay componente, no pasa nada.
+      if (key.type !== "escape") return;
     }
 
     if (!this.#live) return;
