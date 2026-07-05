@@ -12,7 +12,8 @@ import { dispatchCommand, modalCommandsMap } from "./commands/index.js";
 import { validateEnv, resolveAgentModel, getProfileByName } from "./config.js";
 import { logger } from "./logger.js";
 import { OpenRouterProvider } from "./providers/openrouter-llm-provider.js";
-import { Runner, RunnerEvent } from "./runner.js";
+import { Runner } from "./runner.js";
+import { TUIFrontend } from "./frontend/tui-frontend.js";
 import { Message } from "./message.js";
 import { Session } from "./session.js";
 import { AskUserTool } from "./tools/ask-user.js";
@@ -274,6 +275,17 @@ const main = async () => {
     classifier,
   });
 
+  // Puerto de entrada (seam). Por ahora envuelve las mismas instancias de TUI;
+  // el resto de index.ts (input, lifecycle) se migra en pasos siguientes.
+  const frontend = new TUIFrontend({
+    screen,
+    spinner,
+    assistantText,
+    toolCallText,
+    toolResultText,
+    getVerbose: () => ctx.verbose,
+  });
+
   // Restaurar statusline si la sesión tiene un formato guardado
   const savedFormat = session.getMeta(STATUSLINE_KEY) as string | undefined;
   if (savedFormat) {
@@ -289,7 +301,7 @@ const main = async () => {
   const runTurn = async () => {
     const session = ctx.session;
     const abortController = new AbortController();
-    screen.setAbortController(abortController);
+    frontend.setAbortController(abortController);
 
     const run = new Runner({
       llmProvider: llmprovider,
@@ -298,12 +310,7 @@ const main = async () => {
       maxContextTokens: config.maxContextTokens,
       signal: abortController.signal,
       model: resolvePrimaryModel(),
-      onAskUser: async (question: string) => {
-        spinner.stop();
-        const answer = await screen.askUser(question);
-        spinner.start();
-        return answer;
-      },
+      onAskUser: (question: string) => frontend.askUser(question),
     });
 
     // Aplicar overrides de /model para este turno (primary + classifier).
@@ -311,48 +318,23 @@ const main = async () => {
     classifier?.setModel(resolveClassifierModel());
 
     try {
-      const iterator = run.run(session.getContext());
-      spinner.start();
-      let item = await iterator.next();
-
-      while (!item.done) {
-        const { value } = item as { value: RunnerEvent };
-
-        if (value.type === "text_stream") {
-          spinner.stop();
-          assistantText.displayStream(value.text);
+      frontend.turnStarted();
+      for await (const event of run.run(session.getContext())) {
+        if (event.type === "state") {
+          session.addMessage(event.message);
+        } else {
+          frontend.handleEvent(event);
         }
-        if (value.type === "text_stream_end") {
-          assistantText.endStream();
-        }
-        if (value.type === "text") {
-          spinner.stop();
-          assistantText.display(value.text);
-        }
-        if (value.type === "tool_use") {
-          spinner.stop();
-          toolCallText.call(value.name, value.input, ctx.verbose);
-        }
-        if (value.type === "tool_result") {
-          toolResultText.result(value.output, ctx.verbose, value.rawOutput, value.isError);
-          spinner.start();
-        }
-        if (value.type === "state") {
-          session.addMessage(value.message);
-        }
-        item = await iterator.next();
       }
-      spinner.stop();
-      screen.redrawLive();
+      frontend.turnEnded();
       session.compactWorkingContext();
     } catch (err: unknown) {
-      spinner.stop();
-      screen.redrawLive();
+      frontend.turnEnded();
       const msg = err instanceof Error ? err.message : String(err);
       logger.error("Runner error", msg);
-      screen.printAbove(dim(`Error: ${msg}`));
+      frontend.notify(`Error: ${msg}`);
     } finally {
-      screen.clearAbortController();
+      frontend.clearAbortController();
     }
 
     const metrics = run.getMetrics();
@@ -389,7 +371,7 @@ const main = async () => {
     const thrashStr = thrashParts.length > 0 ? ` · ${thrashParts.join(" · ")}` : "";
 
     const metricsLine = `~ ctx: ${session.contextTokens} tk · ${metrics.totalToolCalls} tools · in: ${metrics.totalInputTokens} · out: ${metrics.totalOutputTokens} tokens · ${durationSec}s · ${costStr} (total: ${runningStr})${thrashStr}`;
-    screen.printAbove(dim(`\n${metricsLine}`));
+    frontend.notify(`\n${metricsLine}`);
     run.resetMetrics();
   };
 
