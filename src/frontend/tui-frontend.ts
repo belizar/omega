@@ -50,8 +50,6 @@ export class TUIFrontend implements Frontend {
   #modals: typeof modalCommandsMap;
   #heroInfo: Parameters<typeof printHero>[0];
   #getVerbose: () => boolean;
-  /** Buffer interno de mensajes encolados (type-ahead) por devolver de a uno. */
-  #queued: string[] = [];
 
   constructor(deps: TUIFrontendDeps) {
     this.#screen = deps.screen;
@@ -95,19 +93,17 @@ export class TUIFrontend implements Frontend {
    */
   async nextInput(): Promise<FrontendInput> {
     // ── Type-ahead ──────────────────────────────────────────────────────────
-    // Lo encolado mientras el agente trabajaba se procesa antes de leer una
-    // línea nueva, de a uno. Un turno puede encolar más: se recogen en la
-    // próxima llamada (cuando el buffer interno se vacía).
-    if (this.#queued.length === 0) {
-      this.#queued = this.#screen.takeQueue();
-    }
-    if (this.#queued.length > 0) {
-      const text = this.#queued.shift()!;
-      // Eco del mensaje encolado (no vive en el buffer del editor).
-      this.#screen.printAbove(`\n${this.#lineEditor.renderEchoOf(text)}`);
+    // TODO lo que se encoló durante el turno se procesa JUNTO, en un solo turno:
+    // mensajes tipeados mientras esperabas la misma respuesta son un grupo, así
+    // el modelo los ve relacionados (no uno por turno, desconectados). La API no
+    // admite dos `user` seguidos, así que "juntos" = concatenados en un mensaje.
+    const queued = this.#screen.takeQueue();
+    if (queued.length > 0) {
+      const batched = queued.join("\n");
+      this.#screen.printAbove(`\n${this.#lineEditor.renderEchoOf(batched)}`);
       this.#screen.printBlankLine();
       // Los encolados son solo texto (no hay imágenes pegadas con Ctrl+V).
-      return this.#resolveInput(text, []);
+      return this.#resolveInput(batched, []);
     }
 
     // Línea a medio tipear sin Enter → precargar el editor del próximo prompt.

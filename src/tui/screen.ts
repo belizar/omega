@@ -99,29 +99,35 @@ class Screen {
       case "paste":
         this.#queueLine += key.text;
         break;
+      case "up":
+        // Rollback (convención Slack/Discord: ↑ recupera tu último mensaje).
+        // Solo con el editor vacío: trae el último encolado para editarlo o
+        // descartarlo. Con texto en curso o sin cola, se ignora.
+        if (this.#queueLine.length === 0 && this.#queue.length > 0) {
+          this.#queueLine = this.#queue.pop()!;
+          break;
+        }
+        return;
       default:
-        return; // flechas, tab, etc.: ignorar sin redibujar
+        return; // otras flechas, tab, etc.: ignorar sin redibujar
     }
-    this.#renderQueueHint();
-  }
-
-  /** Dibuja la pista de la cola en la línea efímera (arriba del spinner). */
-  #renderQueueHint(): void {
-    const parts: string[] = [];
-    if (this.#queue.length > 0) parts.push(green(`⏎ ${this.#queue.length} en cola`));
-    if (this.#queueLine.length > 0) parts.push(dim("▌ ") + this.#queueLine);
-    if (parts.length === 0) {
-      this.clearEphemeral();
-      return;
-    }
-    this.writeEphemeral(parts.join(dim(" · ")));
+    // La línea en curso se sincroniza al editor real, así se dibuja dentro de su
+    // caja y con su cursor. Los mensajes ya confirmados (#queue) se listan
+    // arriba del editor en #composeRender.
+    this.#lock();
+    this.#live?.setBuffer?.(this.#queueLine);
+    this.#redraw();
+    this.#unlock();
   }
 
   /** Devuelve y limpia los mensajes encolados (llamado al terminar el turno). */
   takeQueue(): string[] {
     const q = this.#queue;
     this.#queue = [];
-    this.clearEphemeral();
+    // Redibujar para quitar la lista de encolados de la región viva.
+    this.#lock();
+    this.#redraw();
+    this.#unlock();
     return q;
   }
 
@@ -275,12 +281,22 @@ class Screen {
     const lines: string[] = [];
     const ephemeralRows = this.#ephemeral !== null ? 1 : 0;
     const statusRows = this.#status !== null ? 1 : 0;
+    // Mensajes de type-ahead ya confirmados (Enter): se listan ARRIBA del editor.
+    // La línea en curso NO va acá — vive dentro del editor real (vía setBuffer).
+    const queuedLines = this.#queue.map((m) => green("⏎ ") + m);
     // statusline solo se muestra si no hay spinner activo
     const statuslineActive = this.#status === null && this.#statusline !== null;
     const statuslineRows = statuslineActive ? 1 : 0;
 
+    // Renglón en blanco que separa el stream del agente (arriba) de tus
+    // mensajes encolados, para que no se lean pegados.
+    const separatorRows =
+      queuedLines.length > 0 && (ephemeralRows || statusRows) ? 1 : 0;
+
     if (ephemeralRows) lines.push(this.#ephemeral as string);
     if (statusRows) lines.push(this.#status as string);
+    if (separatorRows) lines.push("");
+    for (const q of queuedLines) lines.push(q);
     lines.push(this.#live ? this.#live.render() : "");
     if (statuslineActive) lines.push(this.#statusline as string);
 
@@ -290,7 +306,8 @@ class Screen {
     let cursorCol = 0;
     if (this.#live?.getCursorPosition) {
       const cp = this.#live.getCursorPosition();
-      cursorRow = cp.row + ephemeralRows + statusRows;
+      cursorRow =
+        cp.row + ephemeralRows + statusRows + separatorRows + queuedLines.length;
       cursorCol = cp.col;
     }
     return { out, cursorRow, cursorCol };

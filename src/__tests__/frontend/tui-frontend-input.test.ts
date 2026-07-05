@@ -56,15 +56,17 @@ describe("TUIFrontend.nextInput — type-ahead + interactivo", () => {
     expect(screen.readLine).not.toHaveBeenCalled();
   });
 
-  it("drena la cola de a uno antes de leer del editor", async () => {
+  it("batchea todos los encolados en un solo mensaje (concatenados)", async () => {
     const { front, screen } = makeFront({
       screen: {
         takeQueue: vi.fn().mockReturnValueOnce(["a", "b"]).mockReturnValue([]),
       },
     });
-    expect(await front.nextInput()).toMatchObject({ kind: "message", text: "a" });
-    expect(await front.nextInput()).toMatchObject({ kind: "message", text: "b" });
-    expect(screen.readLine).not.toHaveBeenCalled(); // todavía queda cola interna
+    expect(await front.nextInput()).toMatchObject({
+      kind: "message",
+      text: "a\nb",
+    });
+    expect(screen.readLine).not.toHaveBeenCalled(); // se procesó el batch, no leyó línea
   });
 
   it("con cola vacía, lee del editor y devuelve el mensaje", async () => {

@@ -11,6 +11,9 @@ interface InputComponent<T> {
   isDone(): boolean;
   getResult(): T;
   getCursorPosition?(): CursorPosition;
+  /** Precarga el editor con texto (ej: la línea de type-ahead en curso, que el
+   * Screen sincroniza para que se dibuje dentro del editor real). */
+  setBuffer?(text: string): void;
   /** Contenido pendiente para mostrar ARRIBA del editor (scrollback).
    * El Screen lo drena después de handleKey y lo rutea por printAbove. */
   takeOutput?(): string | null;

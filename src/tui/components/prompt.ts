@@ -259,6 +259,10 @@ class Prompt implements InputComponent<PromptResult> {
     return editor;
   }
 
+  setBuffer(text: string): void {
+    this.#editor.setBuffer(text);
+  }
+
   getCursorPosition(): CursorPosition {
     if (this.#mode === "picking" && this.#picker) {
       const editorLines = this.#editor.render().split("\n").length;
