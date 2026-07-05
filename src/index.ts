@@ -39,7 +39,6 @@ import {
 } from "./tui/components/display-text.js";
 import { AnsiRenderer } from "./tui/markdown/ansi-renderer.js";
 import { LineEditor } from "./tui/components/line-editor.js";
-import { Prompt } from "./tui/components/prompt.js";
 import { Spinner } from "./tui/components/spinner.js";
 import { Screen } from "./tui/screen.js";
 import { disableRawMode, enableRawMode } from "./tui/terminal.js";
@@ -275,17 +274,6 @@ const main = async () => {
     classifier,
   });
 
-  // Puerto de entrada (seam). Por ahora envuelve las mismas instancias de TUI;
-  // el resto de index.ts (input, lifecycle) se migra en pasos siguientes.
-  const frontend = new TUIFrontend({
-    screen,
-    spinner,
-    assistantText,
-    toolCallText,
-    toolResultText,
-    getVerbose: () => ctx.verbose,
-  });
-
   // Restaurar statusline si la sesión tiene un formato guardado
   const savedFormat = session.getMeta(STATUSLINE_KEY) as string | undefined;
   if (savedFormat) {
@@ -294,6 +282,20 @@ const main = async () => {
   }
 
   const lineEditor = new LineEditor();
+
+  // Puerto de entrada (seam). Envuelve las instancias de TUI; el core (loop)
+  // habla con esta interfaz, no con screen/spinner/lineEditor directamente.
+  const frontend = new TUIFrontend({
+    screen,
+    spinner,
+    assistantText,
+    toolCallText,
+    toolResultText,
+    lineEditor,
+    ctx,
+    modals: modalCommandsMap,
+    getVerbose: () => ctx.verbose,
+  });
 
   /** Ejecuta un turno del runner: el user message ya está en la sesión.
    *  Lee ctx.session (no la variable capturada del arranque) para que
@@ -419,46 +421,9 @@ const main = async () => {
     // Type-ahead: procesar lo que encolaste mientras el agente trabajaba.
     await drainQueue();
 
-    const prompt = new Prompt({
-      editor: lineEditor,
-      ctx,
-      modals: modalCommandsMap,
-    });
-    const result = await screen.readLine(prompt);
+    const inp = await frontend.nextInput();
 
-    // Historial: lo tipeado (incluye comandos).
-    const typed = lineEditor.getResult();
-    if (typed.trim() !== "") {
-      lineEditor.addToHistory(typed);
-    }
-
-    // Un comando modal (ej: /resume) ya hizo su efecto dentro del Prompt.
-    // No ecoamos "> /resume"; solo mostramos la confirmación (si hay) y
-    // limpiamos el editor. printAbove("") limpia la lista sin imprimir nada.
-    if (result.kind === "modal") {
-      lineEditor.reset();
-      screen.printAbove(result.message ?? "");
-      if (ctx.session.pendingRunner) {
-        ctx.session.consumePendingRunner();
-        await runTurn();
-      }
-      continue;
-    }
-
-    const input = result.text;
-
-    // Eco del input: usamos printAbove para que se inserte en el scrollback
-    // sin pisar la región viva (el Screen limpia y redibuja automáticamente).
-    const echo = lineEditor.renderEcho();
-    lineEditor.reset();
-    screen.printAbove(`\n${echo}`);
-    screen.printBlankLine(); // espacio real entre tu prompt y la respuesta (printAbove("") es no-op)
-
-    if (await dispatchCommand(input, ctx)) {
-      continue;
-    }
-
-    if (input === "exit") {
+    if (inp.kind === "exit") {
       logger.info("Omega agent stopped");
       // El listener de stdin del Screen mantiene vivo el event loop, así que
       // un break dejaría el proceso colgado. Salimos explícito; el handler de
@@ -467,9 +432,19 @@ const main = async () => {
       process.exit(0);
     }
 
+    // Comando slash o modal ya resuelto por el frontend. Si un modal dejó un
+    // runner pendiente (ej: /resume), lo corremos; si no, seguimos al prompt.
+    if (inp.kind === "none") {
+      if (ctx.session.pendingRunner) {
+        ctx.session.consumePendingRunner();
+        await runTurn();
+      }
+      continue;
+    }
+
     const session = ctx.session;
 
-    const resolvedInput = await expandFileMentions(input);
+    const resolvedInput = await expandFileMentions(inp.text);
     const userContent: Message["content"] = [];
     if (resolvedInput.text) {
       userContent.push({ type: "text", text: resolvedInput.text });
@@ -479,7 +454,7 @@ const main = async () => {
     }
 
     // Imágenes pegadas con Ctrl+V (no procesadas por expandFileMentions)
-    const pendingImages = lineEditor.consumePendingImages();
+    const pendingImages = inp.pastedImages;
     for (const img of pendingImages) {
       userContent.push({
         type: "image",

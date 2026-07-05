@@ -1,5 +1,21 @@
 import { RunnerEvent } from "../runner.js";
 
+/** Imagen pegada por el usuario (Ctrl+V), aún sin procesar por visión. */
+export interface PastedImage {
+  ext: string;
+  data: Buffer;
+}
+
+/** Resultado de pedir el próximo input al usuario. */
+export type FrontendInput =
+  /** El usuario mandó un mensaje para el agente. */
+  | { kind: "message"; text: string; pastedImages: PastedImage[] }
+  /** El usuario pidió salir. */
+  | { kind: "exit" }
+  /** El input ya se resolvió internamente (comando slash o modal); el loop
+   *  sigue de largo (chequeando si quedó un runner pendiente). */
+  | { kind: "none" };
+
 /**
  * Puerto de ENTRADA (driving) de la arquitectura hexagonal.
  *
@@ -11,6 +27,10 @@ import { RunnerEvent } from "../runner.js";
  * `docs/design/frontend-architecture-design.md`.
  */
 export interface Frontend {
+  /** Pide el próximo input al usuario (en la TUI: el prompt + editor de línea).
+   *  Resuelve comandos slash / modales internamente y devuelve qué hacer. */
+  nextInput(): Promise<FrontendInput>;
+
   /** Arranca un turno del agente (en la TUI: prende el spinner). */
   turnStarted(): void;
 

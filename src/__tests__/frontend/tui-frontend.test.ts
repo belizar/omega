@@ -15,6 +15,9 @@ function makeDeps(verbose = false) {
     assistantText: assistantText as any,
     toolCallText: toolCallText as any,
     toolResultText: toolResultText as any,
+    lineEditor: {} as any,
+    ctx: {} as any,
+    modals: {} as any,
     getVerbose: () => verbose,
   });
   return { front, screen, spinner, assistantText, toolCallText, toolResultText };
@@ -103,6 +106,9 @@ describe("TUIFrontend (seam)", () => {
       assistantText: { display: vi.fn(), displayStream: vi.fn(), endStream: vi.fn() } as any,
       toolCallText,
       toolResultText: { result: vi.fn() } as any,
+      lineEditor: {} as any,
+      ctx: {} as any,
+      modals: {} as any,
       getVerbose: () => verbose,
     });
     front.handleEvent({ type: "tool_use", name: "read", input: {} });

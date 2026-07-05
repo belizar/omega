@@ -1,13 +1,17 @@
+import { Context } from "../app-context.js";
+import { dispatchCommand, modalCommandsMap } from "../commands/index.js";
 import { RunnerEvent } from "../runner.js";
 import {
   DisplayAssistantText,
   DisplayToolCall,
   DisplayToolResult,
 } from "../tui/components/display-text.js";
+import { LineEditor } from "../tui/components/line-editor.js";
+import { Prompt } from "../tui/components/prompt.js";
 import { Spinner } from "../tui/components/spinner.js";
 import { Screen } from "../tui/screen.js";
 import { dim } from "../tui/theme.js";
-import { Frontend } from "./frontend.js";
+import { Frontend, FrontendInput } from "./frontend.js";
 
 interface TUIFrontendDeps {
   screen: Screen;
@@ -15,6 +19,9 @@ interface TUIFrontendDeps {
   assistantText: DisplayAssistantText;
   toolCallText: DisplayToolCall;
   toolResultText: DisplayToolResult;
+  lineEditor: LineEditor;
+  ctx: Context;
+  modals: typeof modalCommandsMap;
   /** Lee el flag verbose actual (vive en el Context, cambia con /verbose). */
   getVerbose: () => boolean;
 }
@@ -33,6 +40,9 @@ export class TUIFrontend implements Frontend {
   #assistantText: DisplayAssistantText;
   #toolCallText: DisplayToolCall;
   #toolResultText: DisplayToolResult;
+  #lineEditor: LineEditor;
+  #ctx: Context;
+  #modals: typeof modalCommandsMap;
   #getVerbose: () => boolean;
 
   constructor(deps: TUIFrontendDeps) {
@@ -41,7 +51,62 @@ export class TUIFrontend implements Frontend {
     this.#assistantText = deps.assistantText;
     this.#toolCallText = deps.toolCallText;
     this.#toolResultText = deps.toolResultText;
+    this.#lineEditor = deps.lineEditor;
+    this.#ctx = deps.ctx;
+    this.#modals = deps.modals;
     this.#getVerbose = deps.getVerbose;
+  }
+
+  /**
+   * Lee el próximo input del usuario. Resuelve comandos slash y comandos modales
+   * (ej. /resume) internamente, y devuelve al loop:
+   *  - `message` si el usuario mandó texto para el agente (+ imágenes pegadas),
+   *  - `exit` si pidió salir,
+   *  - `none` si ya se resolvió (comando/modal) y el loop debe seguir.
+   *
+   * Mueve acá lo que antes vivía suelto en el while(true) de index.ts: Prompt,
+   * readLine, historial, eco, dispatchCommand. La expansión de @ y la visión NO
+   * viven acá: son preparación del turno y las hace el loop.
+   */
+  async nextInput(): Promise<FrontendInput> {
+    const prompt = new Prompt({
+      editor: this.#lineEditor,
+      ctx: this.#ctx,
+      modals: this.#modals,
+    });
+    const result = await this.#screen.readLine(prompt);
+
+    // Historial: lo tipeado (incluye comandos).
+    const typed = this.#lineEditor.getResult();
+    if (typed.trim() !== "") {
+      this.#lineEditor.addToHistory(typed);
+    }
+
+    // Comando modal (ej: /resume) ya hizo su efecto dentro del Prompt. No se
+    // ecoa "> /resume"; solo mostramos la confirmación y limpiamos el editor.
+    if (result.kind === "modal") {
+      this.#lineEditor.reset();
+      this.#screen.printAbove(result.message ?? "");
+      return { kind: "none" };
+    }
+
+    const input = result.text;
+
+    // Eco del input en el scrollback (sin pisar la región viva).
+    const echo = this.#lineEditor.renderEcho();
+    this.#lineEditor.reset();
+    this.#screen.printAbove(`\n${echo}`);
+    this.#screen.printBlankLine();
+
+    if (await dispatchCommand(input, this.#ctx)) {
+      return { kind: "none" };
+    }
+    if (input === "exit") {
+      return { kind: "exit" };
+    }
+
+    const pastedImages = this.#lineEditor.consumePendingImages();
+    return { kind: "message", text: input, pastedImages };
   }
 
   turnStarted(): void {
