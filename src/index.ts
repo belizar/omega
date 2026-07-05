@@ -8,11 +8,12 @@ import { AgentConfig } from "./agent-config.js";
 import { Context } from "./app-context.js";
 import { CommandClassifier } from "./classifier/classifier.js";
 import { OverrideManager } from "./classifier/overrides.js";
-import { dispatchCommand, modalCommandsMap } from "./commands/index.js";
+import { modalCommandsMap } from "./commands/index.js";
 import { validateEnv, resolveAgentModel, getProfileByName } from "./config.js";
 import { logger } from "./logger.js";
 import { OpenRouterProvider } from "./providers/openrouter-llm-provider.js";
-import { Runner, RunnerEvent } from "./runner.js";
+import { Runner } from "./runner.js";
+import { TUIFrontend } from "./frontend/tui-frontend.js";
 import { Message } from "./message.js";
 import { Session } from "./session.js";
 import { AskUserTool } from "./tools/ask-user.js";
@@ -38,15 +39,12 @@ import {
 } from "./tui/components/display-text.js";
 import { AnsiRenderer } from "./tui/markdown/ansi-renderer.js";
 import { LineEditor } from "./tui/components/line-editor.js";
-import { Prompt } from "./tui/components/prompt.js";
 import { Spinner } from "./tui/components/spinner.js";
 import { Screen } from "./tui/screen.js";
-import { disableRawMode, enableRawMode } from "./tui/terminal.js";
-import { dim, bold, yellow } from "./tui/theme.js";
-import { resolveStatusline, STATUSLINE_KEY } from "./commands/statusline.js";
+import { disableRawMode } from "./tui/terminal.js";
 import { buildCabinetContext } from "./cabinet.js";
 import { expandFileMentions } from "./tui/file-mentions.js";
-import { collectHeroInfo, printHero } from "./tui/hero.js";
+import { collectHeroInfo } from "./tui/hero.js";
 
 // Carga la .env del cwd (overrides por proyecto) y, como fallback, la global
 // ~/.omega/.env. dotenv NO pisa vars ya seteadas, así que el cwd gana y la
@@ -161,7 +159,6 @@ function loadDocsContext(docsDir: string | null): string {
 }
 
 const main = async () => {
-  enableRawMode();
   const config = validateEnv();
   const session = new Session({
     dir: ".omega/sessions",
@@ -173,14 +170,14 @@ const main = async () => {
 
   const fullSystemPrompt = SYSTEM_PROMPT + loadProjectContext() + loadMcpContext() + buildCabinetContext() + loadDocsContext(config.docsDir);
 
-  // ── Hero ──────────────────────────────────────────────────────────
+  // ── Hero (se imprime en frontend.start()) ─────────────────────────
   const toolCount = 8; // read, write, edit, bash, grep, outline, tool_search, ask_user
-  printHero(collectHeroInfo({
+  const heroInfo = collectHeroInfo({
     profile: session.profile,
     model: config.model,
     visionModel: config.visionModel,
     toolCount,
-  }));
+  });
 
   // ── Clasificador de comandos ──────────────────────────────────────
   let classifier: CommandClassifier | undefined;
@@ -274,14 +271,22 @@ const main = async () => {
     classifier,
   });
 
-  // Restaurar statusline si la sesión tiene un formato guardado
-  const savedFormat = session.getMeta(STATUSLINE_KEY) as string | undefined;
-  if (savedFormat) {
-    const resolved = resolveStatusline(savedFormat, ctx);
-    screen.setStatusline(dim(resolved));
-  }
-
   const lineEditor = new LineEditor();
+
+  // Puerto de entrada (seam). Envuelve las instancias de TUI; el core (loop)
+  // habla con esta interfaz, no con screen/spinner/lineEditor directamente.
+  const frontend = new TUIFrontend({
+    screen,
+    spinner,
+    assistantText,
+    toolCallText,
+    toolResultText,
+    lineEditor,
+    ctx,
+    modals: modalCommandsMap,
+    heroInfo,
+    getVerbose: () => ctx.verbose,
+  });
 
   /** Ejecuta un turno del runner: el user message ya está en la sesión.
    *  Lee ctx.session (no la variable capturada del arranque) para que
@@ -289,7 +294,7 @@ const main = async () => {
   const runTurn = async () => {
     const session = ctx.session;
     const abortController = new AbortController();
-    screen.setAbortController(abortController);
+    frontend.setAbortController(abortController);
 
     const run = new Runner({
       llmProvider: llmprovider,
@@ -298,12 +303,7 @@ const main = async () => {
       maxContextTokens: config.maxContextTokens,
       signal: abortController.signal,
       model: resolvePrimaryModel(),
-      onAskUser: async (question: string) => {
-        spinner.stop();
-        const answer = await screen.askUser(question);
-        spinner.start();
-        return answer;
-      },
+      onAskUser: (question: string) => frontend.askUser(question),
     });
 
     // Aplicar overrides de /model para este turno (primary + classifier).
@@ -311,48 +311,23 @@ const main = async () => {
     classifier?.setModel(resolveClassifierModel());
 
     try {
-      const iterator = run.run(session.getContext());
-      spinner.start();
-      let item = await iterator.next();
-
-      while (!item.done) {
-        const { value } = item as { value: RunnerEvent };
-
-        if (value.type === "text_stream") {
-          spinner.stop();
-          assistantText.displayStream(value.text);
+      frontend.turnStarted();
+      for await (const event of run.run(session.getContext())) {
+        if (event.type === "state") {
+          session.addMessage(event.message);
+        } else {
+          frontend.handleEvent(event);
         }
-        if (value.type === "text_stream_end") {
-          assistantText.endStream();
-        }
-        if (value.type === "text") {
-          spinner.stop();
-          assistantText.display(value.text);
-        }
-        if (value.type === "tool_use") {
-          spinner.stop();
-          toolCallText.call(value.name, value.input, ctx.verbose);
-        }
-        if (value.type === "tool_result") {
-          toolResultText.result(value.output, ctx.verbose, value.rawOutput, value.isError);
-          spinner.start();
-        }
-        if (value.type === "state") {
-          session.addMessage(value.message);
-        }
-        item = await iterator.next();
       }
-      spinner.stop();
-      screen.redrawLive();
+      frontend.turnEnded();
       session.compactWorkingContext();
     } catch (err: unknown) {
-      spinner.stop();
-      screen.redrawLive();
+      frontend.turnEnded();
       const msg = err instanceof Error ? err.message : String(err);
       logger.error("Runner error", msg);
-      screen.printAbove(dim(`Error: ${msg}`));
+      frontend.notify(`Error: ${msg}`);
     } finally {
-      screen.clearAbortController();
+      frontend.clearAbortController();
     }
 
     const metrics = run.getMetrics();
@@ -389,73 +364,29 @@ const main = async () => {
     const thrashStr = thrashParts.length > 0 ? ` · ${thrashParts.join(" · ")}` : "";
 
     const metricsLine = `~ ctx: ${session.contextTokens} tk · ${metrics.totalToolCalls} tools · in: ${metrics.totalInputTokens} · out: ${metrics.totalOutputTokens} tokens · ${durationSec}s · ${costStr} (total: ${runningStr})${thrashStr}`;
-    screen.printAbove(dim(`\n${metricsLine}`));
+    frontend.notify(`\n${metricsLine}`);
     run.resetMetrics();
   };
 
-  /** Procesa un mensaje de texto encolado (type-ahead): eco + comando/turno.
-   *  Versión text-only del flujo interactivo (los encolados no llevan imágenes). */
-  const runUserText = async (text: string): Promise<void> => {
-    screen.printAbove(`\n${lineEditor.renderEchoOf(text)}`);
-    screen.printBlankLine();
+  frontend.start();
 
-    if (await dispatchCommand(text, ctx)) return;
-    if (text === "exit") {
+  while (true) {
+    // El type-ahead (mensajes encolados mientras el agente trabajaba) lo drena
+    // el propio frontend dentro de nextInput().
+    const inp = await frontend.nextInput();
+
+    if (inp.kind === "exit") {
       logger.info("Omega agent stopped");
-      disableRawMode();
+      // El listener de stdin del Screen mantiene vivo el event loop, así que
+      // un break dejaría el proceso colgado. Salimos explícito; el handler de
+      // process.on("exit") restaura la raw mode.
+      frontend.stop();
       process.exit(0);
     }
 
-    const resolved = await expandFileMentions(text);
-    const content: Message["content"] = [];
-    if (resolved.text) content.push({ type: "text", text: resolved.text });
-    for (const img of resolved.images) content.push(img);
-    if (content.length === 0) return;
-
-    const first = content[0];
-    if (content.length === 1 && typeof first === "object" && "type" in first && first.type === "text") {
-      ctx.session.addUserMessage((first as { type: "text"; text: string }).text);
-    } else {
-      ctx.session.addUserMessage(content);
-    }
-    await runTurn();
-  };
-
-  /** Drena la cola de type-ahead hasta vaciarla (cada msg puede encolar más). */
-  const drainQueue = async (): Promise<void> => {
-    let queued = screen.takeQueue();
-    while (queued.length > 0) {
-      for (const msg of queued) await runUserText(msg);
-      queued = screen.takeQueue();
-    }
-    // Línea a medio tipear sin Enter → precargar el editor del próximo prompt.
-    const pending = screen.takePendingLine();
-    if (pending) lineEditor.setBuffer(pending);
-  };
-
-  while (true) {
-    // Type-ahead: procesar lo que encolaste mientras el agente trabajaba.
-    await drainQueue();
-
-    const prompt = new Prompt({
-      editor: lineEditor,
-      ctx,
-      modals: modalCommandsMap,
-    });
-    const result = await screen.readLine(prompt);
-
-    // Historial: lo tipeado (incluye comandos).
-    const typed = lineEditor.getResult();
-    if (typed.trim() !== "") {
-      lineEditor.addToHistory(typed);
-    }
-
-    // Un comando modal (ej: /resume) ya hizo su efecto dentro del Prompt.
-    // No ecoamos "> /resume"; solo mostramos la confirmación (si hay) y
-    // limpiamos el editor. printAbove("") limpia la lista sin imprimir nada.
-    if (result.kind === "modal") {
-      lineEditor.reset();
-      screen.printAbove(result.message ?? "");
+    // Comando slash o modal ya resuelto por el frontend. Si un modal dejó un
+    // runner pendiente (ej: /resume), lo corremos; si no, seguimos al prompt.
+    if (inp.kind === "none") {
       if (ctx.session.pendingRunner) {
         ctx.session.consumePendingRunner();
         await runTurn();
@@ -463,31 +394,9 @@ const main = async () => {
       continue;
     }
 
-    const input = result.text;
-
-    // Eco del input: usamos printAbove para que se inserte en el scrollback
-    // sin pisar la región viva (el Screen limpia y redibuja automáticamente).
-    const echo = lineEditor.renderEcho();
-    lineEditor.reset();
-    screen.printAbove(`\n${echo}`);
-    screen.printBlankLine(); // espacio real entre tu prompt y la respuesta (printAbove("") es no-op)
-
-    if (await dispatchCommand(input, ctx)) {
-      continue;
-    }
-
-    if (input === "exit") {
-      logger.info("Omega agent stopped");
-      // El listener de stdin del Screen mantiene vivo el event loop, así que
-      // un break dejaría el proceso colgado. Salimos explícito; el handler de
-      // process.on("exit") restaura la raw mode.
-      disableRawMode();
-      process.exit(0);
-    }
-
     const session = ctx.session;
 
-    const resolvedInput = await expandFileMentions(input);
+    const resolvedInput = await expandFileMentions(inp.text);
     const userContent: Message["content"] = [];
     if (resolvedInput.text) {
       userContent.push({ type: "text", text: resolvedInput.text });
@@ -497,7 +406,7 @@ const main = async () => {
     }
 
     // Imágenes pegadas con Ctrl+V (no procesadas por expandFileMentions)
-    const pendingImages = lineEditor.consumePendingImages();
+    const pendingImages = inp.pastedImages;
     for (const img of pendingImages) {
       userContent.push({
         type: "image",
@@ -512,6 +421,9 @@ const main = async () => {
         },
       });
     }
+
+    // Nada que mandar (ej. un encolado que expandió a vacío): saltamos el turno.
+    if (userContent.length === 0) continue;
 
     // ── Preprocesador de visión ──────────────────────────────────────────────
     const hasImages = userContent.some(
