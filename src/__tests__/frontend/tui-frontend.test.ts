@@ -18,6 +18,7 @@ function makeDeps(verbose = false) {
     lineEditor: {} as any,
     ctx: {} as any,
     modals: {} as any,
+    heroInfo: {} as any,
     getVerbose: () => verbose,
   });
   return { front, screen, spinner, assistantText, toolCallText, toolResultText };
@@ -109,6 +110,7 @@ describe("TUIFrontend (seam)", () => {
       lineEditor: {} as any,
       ctx: {} as any,
       modals: {} as any,
+      heroInfo: {} as any,
       getVerbose: () => verbose,
     });
     front.handleEvent({ type: "tool_use", name: "read", input: {} });

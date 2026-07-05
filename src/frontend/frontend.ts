@@ -27,6 +27,12 @@ export type FrontendInput =
  * `docs/design/frontend-architecture-design.md`.
  */
 export interface Frontend {
+  /** Inicializa el frontend (en la TUI: raw mode, hero, statusline). */
+  start(): void;
+
+  /** Cierra el frontend y libera recursos (en la TUI: restaura la terminal). */
+  stop(): void;
+
   /** Pide el próximo input al usuario (en la TUI: el prompt + editor de línea).
    *  Resuelve comandos slash / modales internamente y devuelve qué hacer. */
   nextInput(): Promise<FrontendInput>;

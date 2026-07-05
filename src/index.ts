@@ -41,12 +41,10 @@ import { AnsiRenderer } from "./tui/markdown/ansi-renderer.js";
 import { LineEditor } from "./tui/components/line-editor.js";
 import { Spinner } from "./tui/components/spinner.js";
 import { Screen } from "./tui/screen.js";
-import { disableRawMode, enableRawMode } from "./tui/terminal.js";
-import { dim, bold, yellow } from "./tui/theme.js";
-import { resolveStatusline, STATUSLINE_KEY } from "./commands/statusline.js";
+import { disableRawMode } from "./tui/terminal.js";
 import { buildCabinetContext } from "./cabinet.js";
 import { expandFileMentions } from "./tui/file-mentions.js";
-import { collectHeroInfo, printHero } from "./tui/hero.js";
+import { collectHeroInfo } from "./tui/hero.js";
 
 // Carga la .env del cwd (overrides por proyecto) y, como fallback, la global
 // ~/.omega/.env. dotenv NO pisa vars ya seteadas, así que el cwd gana y la
@@ -161,7 +159,6 @@ function loadDocsContext(docsDir: string | null): string {
 }
 
 const main = async () => {
-  enableRawMode();
   const config = validateEnv();
   const session = new Session({
     dir: ".omega/sessions",
@@ -173,14 +170,14 @@ const main = async () => {
 
   const fullSystemPrompt = SYSTEM_PROMPT + loadProjectContext() + loadMcpContext() + buildCabinetContext() + loadDocsContext(config.docsDir);
 
-  // ── Hero ──────────────────────────────────────────────────────────
+  // ── Hero (se imprime en frontend.start()) ─────────────────────────
   const toolCount = 8; // read, write, edit, bash, grep, outline, tool_search, ask_user
-  printHero(collectHeroInfo({
+  const heroInfo = collectHeroInfo({
     profile: session.profile,
     model: config.model,
     visionModel: config.visionModel,
     toolCount,
-  }));
+  });
 
   // ── Clasificador de comandos ──────────────────────────────────────
   let classifier: CommandClassifier | undefined;
@@ -274,13 +271,6 @@ const main = async () => {
     classifier,
   });
 
-  // Restaurar statusline si la sesión tiene un formato guardado
-  const savedFormat = session.getMeta(STATUSLINE_KEY) as string | undefined;
-  if (savedFormat) {
-    const resolved = resolveStatusline(savedFormat, ctx);
-    screen.setStatusline(dim(resolved));
-  }
-
   const lineEditor = new LineEditor();
 
   // Puerto de entrada (seam). Envuelve las instancias de TUI; el core (loop)
@@ -294,6 +284,7 @@ const main = async () => {
     lineEditor,
     ctx,
     modals: modalCommandsMap,
+    heroInfo,
     getVerbose: () => ctx.verbose,
   });
 
@@ -386,7 +377,7 @@ const main = async () => {
     if (await dispatchCommand(text, ctx)) return;
     if (text === "exit") {
       logger.info("Omega agent stopped");
-      disableRawMode();
+      frontend.stop();
       process.exit(0);
     }
 
@@ -417,6 +408,8 @@ const main = async () => {
     if (pending) lineEditor.setBuffer(pending);
   };
 
+  frontend.start();
+
   while (true) {
     // Type-ahead: procesar lo que encolaste mientras el agente trabajaba.
     await drainQueue();
@@ -428,7 +421,7 @@ const main = async () => {
       // El listener de stdin del Screen mantiene vivo el event loop, así que
       // un break dejaría el proceso colgado. Salimos explícito; el handler de
       // process.on("exit") restaura la raw mode.
-      disableRawMode();
+      frontend.stop();
       process.exit(0);
     }
 

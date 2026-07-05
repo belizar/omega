@@ -1,6 +1,9 @@
 import { Context } from "../app-context.js";
 import { dispatchCommand, modalCommandsMap } from "../commands/index.js";
+import { STATUSLINE_KEY, resolveStatusline } from "../commands/statusline.js";
 import { RunnerEvent } from "../runner.js";
+import { printHero } from "../tui/hero.js";
+import { disableRawMode, enableRawMode } from "../tui/terminal.js";
 import {
   DisplayAssistantText,
   DisplayToolCall,
@@ -22,6 +25,8 @@ interface TUIFrontendDeps {
   lineEditor: LineEditor;
   ctx: Context;
   modals: typeof modalCommandsMap;
+  /** Datos ya recolectados para el banner de arranque. */
+  heroInfo: Parameters<typeof printHero>[0];
   /** Lee el flag verbose actual (vive en el Context, cambia con /verbose). */
   getVerbose: () => boolean;
 }
@@ -43,6 +48,7 @@ export class TUIFrontend implements Frontend {
   #lineEditor: LineEditor;
   #ctx: Context;
   #modals: typeof modalCommandsMap;
+  #heroInfo: Parameters<typeof printHero>[0];
   #getVerbose: () => boolean;
 
   constructor(deps: TUIFrontendDeps) {
@@ -54,7 +60,24 @@ export class TUIFrontend implements Frontend {
     this.#lineEditor = deps.lineEditor;
     this.#ctx = deps.ctx;
     this.#modals = deps.modals;
+    this.#heroInfo = deps.heroInfo;
     this.#getVerbose = deps.getVerbose;
+  }
+
+  start(): void {
+    enableRawMode();
+    printHero(this.#heroInfo);
+    // Restaurar statusline si la sesión tiene un formato guardado.
+    const savedFormat = this.#ctx.session.getMeta(STATUSLINE_KEY) as
+      | string
+      | undefined;
+    if (savedFormat) {
+      this.#screen.setStatusline(dim(resolveStatusline(savedFormat, this.#ctx)));
+    }
+  }
+
+  stop(): void {
+    disableRawMode();
   }
 
   /**
