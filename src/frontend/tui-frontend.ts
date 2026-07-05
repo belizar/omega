@@ -14,7 +14,7 @@ import { Prompt } from "../tui/components/prompt.js";
 import { Spinner } from "../tui/components/spinner.js";
 import { Screen } from "../tui/screen.js";
 import { dim } from "../tui/theme.js";
-import { Frontend, FrontendInput } from "./frontend.js";
+import { Frontend, FrontendInput, PastedImage } from "./frontend.js";
 
 interface TUIFrontendDeps {
   screen: Screen;
@@ -50,6 +50,8 @@ export class TUIFrontend implements Frontend {
   #modals: typeof modalCommandsMap;
   #heroInfo: Parameters<typeof printHero>[0];
   #getVerbose: () => boolean;
+  /** Buffer interno de mensajes encolados (type-ahead) por devolver de a uno. */
+  #queued: string[] = [];
 
   constructor(deps: TUIFrontendDeps) {
     this.#screen = deps.screen;
@@ -92,6 +94,27 @@ export class TUIFrontend implements Frontend {
    * viven acá: son preparación del turno y las hace el loop.
    */
   async nextInput(): Promise<FrontendInput> {
+    // ── Type-ahead ──────────────────────────────────────────────────────────
+    // Lo encolado mientras el agente trabajaba se procesa antes de leer una
+    // línea nueva, de a uno. Un turno puede encolar más: se recogen en la
+    // próxima llamada (cuando el buffer interno se vacía).
+    if (this.#queued.length === 0) {
+      this.#queued = this.#screen.takeQueue();
+    }
+    if (this.#queued.length > 0) {
+      const text = this.#queued.shift()!;
+      // Eco del mensaje encolado (no vive en el buffer del editor).
+      this.#screen.printAbove(`\n${this.#lineEditor.renderEchoOf(text)}`);
+      this.#screen.printBlankLine();
+      // Los encolados son solo texto (no hay imágenes pegadas con Ctrl+V).
+      return this.#resolveInput(text, []);
+    }
+
+    // Línea a medio tipear sin Enter → precargar el editor del próximo prompt.
+    const pending = this.#screen.takePendingLine();
+    if (pending) this.#lineEditor.setBuffer(pending);
+
+    // ── Lectura interactiva ─────────────────────────────────────────────────
     const prompt = new Prompt({
       editor: this.#lineEditor,
       ctx: this.#ctx,
@@ -121,14 +144,23 @@ export class TUIFrontend implements Frontend {
     this.#screen.printAbove(`\n${echo}`);
     this.#screen.printBlankLine();
 
+    const pastedImages = this.#lineEditor.consumePendingImages();
+    return this.#resolveInput(input, pastedImages);
+  }
+
+  /** Resuelve texto de input a un FrontendInput: comando slash → `none`,
+   *  `exit`, o `message` para el agente. Compartido entre el path encolado y
+   *  el interactivo. */
+  async #resolveInput(
+    input: string,
+    pastedImages: PastedImage[],
+  ): Promise<FrontendInput> {
     if (await dispatchCommand(input, this.#ctx)) {
       return { kind: "none" };
     }
     if (input === "exit") {
       return { kind: "exit" };
     }
-
-    const pastedImages = this.#lineEditor.consumePendingImages();
     return { kind: "message", text: input, pastedImages };
   }
 
