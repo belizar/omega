@@ -1,7 +1,6 @@
 import { existsSync, readFileSync } from "fs";
 import { homedir } from "os";
-import { basename, join } from "path";
-import { stdout } from "process";
+import { join } from "path";
 import { execSync } from "child_process";
 import dotenv from "dotenv";
 import { AgentConfig } from "./agent-config.js";
@@ -9,11 +8,14 @@ import { Context } from "./app-context.js";
 import { CommandClassifier } from "./classifier/classifier.js";
 import { OverrideManager } from "./classifier/overrides.js";
 import { modalCommandsMap } from "./commands/index.js";
-import { validateEnv, resolveAgentModel, getProfileByName } from "./config.js";
+import { validateEnv, resolveAgentModel, getProfileByName, ResolvedConfig } from "./config.js";
 import { logger } from "./logger.js";
 import { OpenRouterProvider } from "./providers/openrouter-llm-provider.js";
 import { Runner } from "./runner.js";
 import { TUIFrontend } from "./frontend/tui-frontend.js";
+import { HeadlessFrontend } from "./frontend/headless-frontend.js";
+import { Frontend } from "./frontend/frontend.js";
+import { parseCliArgs, CliArgs } from "./cli-args.js";
 import { Message } from "./message.js";
 import { Session } from "./session.js";
 import { AskUserTool } from "./tools/ask-user.js";
@@ -49,8 +51,11 @@ import { collectHeroInfo } from "./tui/hero.js";
 // Carga la .env del cwd (overrides por proyecto) y, como fallback, la global
 // ~/.omega/.env. dotenv NO pisa vars ya seteadas, así que el cwd gana y la
 // global completa el resto (tu API key) → `omega` anda desde cualquier carpeta.
-dotenv.config();
-dotenv.config({ path: join(homedir(), ".omega", ".env") });
+// quiet: true → dotenv no imprime sus tips a stdout. Crítico para headless:
+// stdout es el stream NDJSON del protocolo, no un log (cualquier línea extra
+// rompe al consumidor que hace JSON.parse por línea).
+dotenv.config({ quiet: true });
+dotenv.config({ path: join(homedir(), ".omega", ".env"), quiet: true });
 
 const SYSTEM_PROMPT = `Sos omega, un asistente de coding que trabaja en el proyecto del usuario.
 Tenés tools para leer, escribir, editar y ejecutar comandos.
@@ -158,7 +163,170 @@ function loadDocsContext(docsDir: string | null): string {
   return `\n\n## Documentos para el humano (deliverables)\n\nCuando el usuario te pida escribir un documento PARA ÉL —un plan, review, summary, informe, HTML— es un **deliverable**, algo que va a consumir él, no memoria del agente. Escribilo con \`write\` en \`${docsDir}\` (su carpeta de docs), con un nombre descriptivo.\n\nNO uses el cabinet para esto: el cabinet es la **memoria de omega, para omega** (conocimiento durable que el agente consolida para su propio contexto). Los deliverables son para que los lea el humano — otro lugar, otro propósito.`;
 }
 
+/**
+ * Fabrica el ejecutor de un turno, parametrizado por el frontend. Es el núcleo
+ * del seam: la MISMA lógica de turno maneja la TUI y el headless — sólo cambia
+ * el `Frontend` que recibe los eventos. Antes vivía como closure dentro de la
+ * rama TUI de main(); extraerlo lo vuelve reutilizable sin duplicarlo.
+ */
+function createTurnRunner(deps: {
+  ctx: Context;
+  frontend: Frontend;
+  llmProvider: OpenRouterProvider;
+  agentConfig: AgentConfig;
+  classifier?: CommandClassifier;
+  config: ResolvedConfig;
+}): () => Promise<void> {
+  const { ctx, frontend, llmProvider, agentConfig, classifier, config } = deps;
+
+  const resolvePrimaryModel = (): string =>
+    resolveAgentModel(
+      "primary",
+      getProfileByName(ctx.session.profile)!,
+      ctx.session.modelOverrides as Record<string, string>,
+    );
+  const resolveClassifierModel = (): string =>
+    ctx.session.modelOverrides.classifier ?? config.classifierModel;
+
+  return async function runTurn(): Promise<void> {
+    const session = ctx.session;
+    const abortController = new AbortController();
+    frontend.setAbortController(abortController);
+
+    const run = new Runner({
+      llmProvider,
+      agentConfig,
+      maxSteps: config.maxSteps,
+      maxContextTokens: config.maxContextTokens,
+      signal: abortController.signal,
+      model: resolvePrimaryModel(),
+      onAskUser: (question: string) => frontend.askUser(question),
+    });
+
+    // Aplicar overrides de /model para este turno (primary + classifier).
+    agentConfig.setModel(resolvePrimaryModel());
+    classifier?.setModel(resolveClassifierModel());
+
+    try {
+      frontend.turnStarted();
+      for await (const event of run.run(session.getContext())) {
+        if (event.type === "state") {
+          session.addMessage(event.message);
+        } else {
+          frontend.handleEvent(event);
+        }
+      }
+      frontend.turnEnded();
+      session.compactWorkingContext();
+    } catch (err: unknown) {
+      frontend.turnEnded();
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error("Runner error", msg);
+      frontend.notify(`Error: ${msg}`);
+    } finally {
+      frontend.clearAbortController();
+    }
+
+    const metrics = run.getMetrics();
+    session.addUsage(
+      metrics.totalInputTokens,
+      metrics.totalOutputTokens,
+      metrics.totalCost,
+    );
+    session.addStepUsage(run.getStepUsage().slice());
+
+    // El core arma las métricas en crudo; cada frontend decide cómo mostrarlas
+    // (la TUI dibuja la línea `~ ctx:`; el headless las emite estructuradas).
+    frontend.reportMetrics({
+      contextTokens: session.contextTokens,
+      toolCalls: metrics.totalToolCalls,
+      inputTokens: metrics.totalInputTokens,
+      outputTokens: metrics.totalOutputTokens,
+      turnCost: metrics.totalCost,
+      totalCost: session.totalCost,
+      durationMs: metrics.durationMs,
+      toolErrors: metrics.totalToolErrors,
+      rereads: metrics.rereads,
+    });
+    run.resetMetrics();
+  };
+}
+
+/** Lee todo stdin hasta EOF (para `-p -` o `-p` sin valor). */
+async function readStdin(): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
+  return Buffer.concat(chunks).toString("utf-8");
+}
+
+/**
+ * Modo headless one-shot: corre UN prompt hasta terminar y sale. No toca la
+ * terminal — construye un frontend que emite a stdout (la cabeza que le ponemos
+ * al mismo cuerpo). El exit code refleja si el turno terminó ok.
+ */
+async function runHeadlessMode(deps: {
+  config: ResolvedConfig;
+  session: Session;
+  agentConfig: AgentConfig;
+  toolRegistry: ToolRegistry;
+  classifier?: CommandClassifier;
+  llmProvider: OpenRouterProvider;
+  cli: CliArgs;
+}): Promise<void> {
+  const { config, session, agentConfig, toolRegistry, classifier, llmProvider, cli } = deps;
+
+  const prompt = cli.prompt ?? (await readStdin());
+  if (!prompt.trim()) {
+    process.stderr.write('omega: prompt vacío (usá -p "…" o pasalo por stdin)\n');
+    process.exit(2);
+  }
+
+  // Screen inerte: satisface la dependencia del Context sin enganchar la
+  // terminal (no llamamos screen.start()). El headless nunca renderiza por acá.
+  // TODO: idealmente Context depende de un ScreenPort, no del Screen concreto.
+  const screen = new Screen(config.screenPadding);
+  const ctx = new Context({ session, agentConfig, screen, toolRegistry, classifier });
+
+  const frontend = new HeadlessFrontend({
+    prompt,
+    format: cli.format,
+    model: config.model,
+    sessionId: session.id,
+    out: (s) => process.stdout.write(s),
+    err: (s) => process.stderr.write(s),
+  });
+
+  const runTurn = createTurnRunner({
+    ctx,
+    frontend,
+    llmProvider,
+    agentConfig,
+    classifier,
+    config,
+  });
+
+  frontend.start();
+
+  // Ctrl+C aborta el turno en curso (corta la llamada al LLM y deja emitir el
+  // `result`) en vez de matar el proceso en seco. Un solo listener, en el driver.
+  process.on("SIGINT", () => {
+    if (!frontend.interrupt()) process.exit(130); // sin turno activo → salir
+  });
+
+  // @-mentions se expanden (útil para tareas que referencian archivos); las
+  // imágenes de visión no se soportan en headless v1.
+  const resolved = await expandFileMentions(prompt);
+  session.addUserMessage(resolved.text || prompt);
+
+  await runTurn();
+
+  frontend.stop();
+  toolRegistry.disconnectAll();
+  process.exit(frontend.hadError ? 1 : 0);
+}
+
 const main = async () => {
+  const cli = parseCliArgs(process.argv.slice(2));
   const config = validateEnv();
   const session = new Session({
     dir: ".omega/sessions",
@@ -241,19 +409,26 @@ const main = async () => {
 
   const llmprovider = new OpenRouterProvider(config.openrouterApiKey);
 
-  // Resuelve el modelo efectivo por turno considerando overrides de /model.
-  // Se leen desde ctx.session (no una captura) para que /resume tome efecto.
-  const resolvePrimaryModel = (): string =>
-    resolveAgentModel(
-      "primary",
-      getProfileByName(ctx.session.profile)!,
-      ctx.session.modelOverrides as Record<string, string>,
-    );
-  // Classifier y vision NO usan resolveAgentModel: su fallback no es el modelo
-  // primario (texto) sino su default resuelto (haiku / null). El override de
-  // sesión los pisa; sin override, quedan con el default del perfil.
-  const resolveClassifierModel = (): string =>
-    ctx.session.modelOverrides.classifier ?? config.classifierModel;
+  // ── Bifurcación de frontend (seam) ────────────────────────────────
+  // Headless one-shot: otra "cabeza" para el mismo cuerpo. Sale sin construir
+  // nada de TUI. Todo lo de arriba (config, sesión, tools, provider) es core
+  // compartido; recién acá se decide quién maneja al agente.
+  if (cli.headless) {
+    await runHeadlessMode({
+      config,
+      session,
+      agentConfig: haikuAgent,
+      toolRegistry,
+      classifier,
+      llmProvider: llmprovider,
+      cli,
+    });
+    return;
+  }
+
+  // Vision resuelve su modelo efectivo por turno (override de /model ?? perfil).
+  // Lo usa el loop TUI en la preparación del turno (primary/classifier los
+  // resuelve el propio createTurnRunner).
   const resolveVisionModel = (): string | null =>
     ctx.session.modelOverrides.vision ?? config.visionModel;
 
@@ -288,85 +463,17 @@ const main = async () => {
     getVerbose: () => ctx.verbose,
   });
 
-  /** Ejecuta un turno del runner: el user message ya está en la sesión.
-   *  Lee ctx.session (no la variable capturada del arranque) para que
-   *  /resume, que reemplaza la sesión activa vía ctx.setSession, tome efecto. */
-  const runTurn = async () => {
-    const session = ctx.session;
-    const abortController = new AbortController();
-    frontend.setAbortController(abortController);
-
-    const run = new Runner({
-      llmProvider: llmprovider,
-      agentConfig: haikuAgent,
-      maxSteps: config.maxSteps,
-      maxContextTokens: config.maxContextTokens,
-      signal: abortController.signal,
-      model: resolvePrimaryModel(),
-      onAskUser: (question: string) => frontend.askUser(question),
-    });
-
-    // Aplicar overrides de /model para este turno (primary + classifier).
-    haikuAgent.setModel(resolvePrimaryModel());
-    classifier?.setModel(resolveClassifierModel());
-
-    try {
-      frontend.turnStarted();
-      for await (const event of run.run(session.getContext())) {
-        if (event.type === "state") {
-          session.addMessage(event.message);
-        } else {
-          frontend.handleEvent(event);
-        }
-      }
-      frontend.turnEnded();
-      session.compactWorkingContext();
-    } catch (err: unknown) {
-      frontend.turnEnded();
-      const msg = err instanceof Error ? err.message : String(err);
-      logger.error("Runner error", msg);
-      frontend.notify(`Error: ${msg}`);
-    } finally {
-      frontend.clearAbortController();
-    }
-
-    const metrics = run.getMetrics();
-    session.addUsage(
-      metrics.totalInputTokens,
-      metrics.totalOutputTokens,
-      metrics.totalCost,
-    );
-    session.addStepUsage(run.getStepUsage().slice());
-    const durationSec = (metrics.durationMs / 1000).toFixed(1);
-    const costStr =
-      metrics.totalCost < 0.01 ? "<$0.01" : `${metrics.totalCost.toFixed(2)}`;
-    const runningStr =
-      session.totalCost < 0.01 ? "<$0.01" : `${session.totalCost.toFixed(2)}`;
-
-    // Indicadores de thrashing (solo visibles cuando hay algo que reportar)
-    const thrashParts: string[] = [];
-    if (metrics.totalToolErrors > 0) {
-      thrashParts.push(`⚠ ${metrics.totalToolErrors} errores`);
-    }
-    if (metrics.rereads.length > 0) {
-      // Resumen compacto: cantidad + top ofensores por basename (no el muro de
-      // paths absolutos). Ordenado por cuántas veces se re-leyó cada uno.
-      const sorted = [...metrics.rereads].sort(
-        (a: { count: number }, b: { count: number }) => b.count - a.count,
-      );
-      const top = sorted
-        .slice(0, 2)
-        .map((r: { path: string; count: number }) => `${basename(r.path)}×${r.count}`)
-        .join(", ");
-      const more = sorted.length > 2 ? ` +${sorted.length - 2}` : "";
-      thrashParts.push(`⟳ ${metrics.rereads.length} re-leídos: ${top}${more}`);
-    }
-    const thrashStr = thrashParts.length > 0 ? ` · ${thrashParts.join(" · ")}` : "";
-
-    const metricsLine = `~ ctx: ${session.contextTokens} tk · ${metrics.totalToolCalls} tools · in: ${metrics.totalInputTokens} · out: ${metrics.totalOutputTokens} tokens · ${durationSec}s · ${costStr} (total: ${runningStr})${thrashStr}`;
-    frontend.notify(`\n${metricsLine}`);
-    run.resetMetrics();
-  };
+  // Ejecutor de turno (seam): la misma lógica que usa el headless, con la
+  // TUIFrontend como consumidor de eventos. Lee ctx.session en cada turno (no
+  // una captura) para que /resume tome efecto.
+  const runTurn = createTurnRunner({
+    ctx,
+    frontend,
+    llmProvider: llmprovider,
+    agentConfig: haikuAgent,
+    classifier,
+    config,
+  });
 
   frontend.start();
 

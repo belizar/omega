@@ -14,7 +14,8 @@ import { Prompt } from "../tui/components/prompt.js";
 import { Spinner } from "../tui/components/spinner.js";
 import { Screen } from "../tui/screen.js";
 import { dim } from "../tui/theme.js";
-import { Frontend, FrontendInput, PastedImage } from "./frontend.js";
+import { basename } from "path";
+import { Frontend, FrontendInput, PastedImage, TurnMetrics } from "./frontend.js";
 
 interface TUIFrontendDeps {
   screen: Screen;
@@ -66,6 +67,7 @@ export class TUIFrontend implements Frontend {
 
   start(): void {
     enableRawMode();
+    this.#screen.start(); // engancha el listener de stdin (antes vivía en el ctor)
     printHero(this.#heroInfo);
     // Restaurar statusline si la sesión tiene un formato guardado.
     const savedFormat = this.#ctx.session.getMeta(STATUSLINE_KEY) as
@@ -208,6 +210,34 @@ export class TUIFrontend implements Frontend {
 
   notify(text: string): void {
     this.#screen.printAbove(dim(text));
+  }
+
+  reportMetrics(m: TurnMetrics): void {
+    const durationSec = (m.durationMs / 1000).toFixed(1);
+    const costStr = m.turnCost < 0.01 ? "<$0.01" : `${m.turnCost.toFixed(2)}`;
+    const runningStr = m.totalCost < 0.01 ? "<$0.01" : `${m.totalCost.toFixed(2)}`;
+
+    // Indicadores de thrashing (solo visibles cuando hay algo que reportar).
+    const thrashParts: string[] = [];
+    if (m.toolErrors > 0) {
+      thrashParts.push(`⚠ ${m.toolErrors} errores`);
+    }
+    if (m.rereads.length > 0) {
+      // Resumen compacto: cantidad + top ofensores por basename (no el muro de
+      // paths absolutos). Ordenado por cuántas veces se re-leyó cada uno.
+      const sorted = [...m.rereads].sort((a, b) => b.count - a.count);
+      const top = sorted
+        .slice(0, 2)
+        .map((r) => `${basename(r.path)}×${r.count}`)
+        .join(", ");
+      const more = sorted.length > 2 ? ` +${sorted.length - 2}` : "";
+      thrashParts.push(`⟳ ${m.rereads.length} re-leídos: ${top}${more}`);
+    }
+    const thrashStr =
+      thrashParts.length > 0 ? ` · ${thrashParts.join(" · ")}` : "";
+
+    const line = `~ ctx: ${m.contextTokens} tk · ${m.toolCalls} tools · in: ${m.inputTokens} · out: ${m.outputTokens} tokens · ${durationSec}s · ${costStr} (total: ${runningStr})${thrashStr}`;
+    this.notify(`\n${line}`);
   }
 
   setAbortController(controller: AbortController): void {
