@@ -20,6 +20,8 @@ function makeFront(format: "json" | "text" = "json", prompt = "hacé algo") {
 }
 
 const METRICS: TurnMetrics = {
+  model: "test/model-x",
+  steps: 4,
   contextTokens: 100,
   toolCalls: 2,
   inputTokens: 500,

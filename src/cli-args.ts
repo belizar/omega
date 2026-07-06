@@ -7,6 +7,9 @@ export interface CliArgs {
   prompt: string | null;
   /** Formato de salida headless. Default: json (el consumidor primario es máquina). */
   format: HeadlessFormat;
+  /** Override del modelo primario para esta corrida (`--model`). Null = usar el
+   *  del perfil/config. Clave para interviews: variar el candidate por corrida. */
+  model: string | null;
 }
 
 /**
@@ -23,6 +26,7 @@ export function parseCliArgs(argv: string[]): CliArgs {
   let headless = false;
   let prompt: string | null = null;
   let format: HeadlessFormat = "json";
+  let model: string | null = null;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -43,8 +47,14 @@ export function parseCliArgs(argv: string[]): CliArgs {
         format = next;
         i++;
       }
+    } else if (arg === "--model") {
+      const next = argv[i + 1];
+      if (next !== undefined && !next.startsWith("-")) {
+        model = next;
+        i++;
+      }
     }
   }
 
-  return { headless, prompt, format };
+  return { headless, prompt, format, model };
 }

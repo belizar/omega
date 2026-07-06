@@ -181,8 +181,10 @@ export class HeadlessFrontend implements Frontend {
       this.#emit({
         type: "result",
         ok: !this.#hadError,
+        model: m.model,
         text: this.#assistantBlocks.join("\n\n"),
         metrics: {
+          steps: m.steps,
           contextTokens: m.contextTokens,
           inputTokens: m.inputTokens,
           outputTokens: m.outputTokens,
@@ -197,7 +199,7 @@ export class HeadlessFrontend implements Frontend {
     } else {
       const cost = m.turnCost < 0.01 ? "<$0.01" : `$${m.turnCost.toFixed(2)}`;
       this.#err(
-        `~ ${m.inputTokens} in · ${m.outputTokens} out · ${m.toolCalls} tools · ${(m.durationMs / 1000).toFixed(1)}s · ${cost}\n`,
+        `~ ${m.inputTokens} in · ${m.outputTokens} out · ${m.steps} steps · ${m.toolCalls} tools · ${(m.durationMs / 1000).toFixed(1)}s · ${cost}\n`,
       );
     }
   }

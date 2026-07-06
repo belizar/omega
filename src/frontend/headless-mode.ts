@@ -37,6 +37,14 @@ export class HeadlessMode implements FrontendMode {
       process.exit(2);
     }
 
+    // Override de modelo por corrida (`--model`). Clave para interviews: variar
+    // el candidate. Se aplica como override de sesión (mismo camino que /model),
+    // así lo toma TurnRunner al resolver el modelo primario del turno.
+    if (this.#cli.model) {
+      session.setModelOverride("primary", this.#cli.model);
+    }
+    const effectiveModel = this.#cli.model ?? config.model;
+
     // Screen inerte: satisface la dependencia del Context sin enganchar la
     // terminal (no llamamos screen.start()). El headless nunca renderiza por acá.
     // TODO: idealmente Context depende de un ScreenPort, no del Screen concreto.
@@ -46,7 +54,7 @@ export class HeadlessMode implements FrontendMode {
     const frontend = new HeadlessFrontend({
       prompt,
       format: this.#cli.format,
-      model: config.model,
+      model: effectiveModel,
       sessionId: session.id,
       out: (s) => process.stdout.write(s),
       err: (s) => process.stderr.write(s),

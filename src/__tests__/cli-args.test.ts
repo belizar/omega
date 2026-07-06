@@ -7,6 +7,7 @@ describe("parseCliArgs", () => {
       headless: false,
       prompt: null,
       format: "json",
+      model: null,
     });
   });
 
@@ -15,7 +16,18 @@ describe("parseCliArgs", () => {
       headless: true,
       prompt: "arreglá el test",
       format: "json",
+      model: null,
     });
+  });
+
+  it("--model setea el override de modelo", () => {
+    expect(parseCliArgs(["-p", "x", "--model", "anthropic/claude-opus-4-8"]).model).toBe(
+      "anthropic/claude-opus-4-8",
+    );
+  });
+
+  it("--model sin valor no rompe (queda null)", () => {
+    expect(parseCliArgs(["-p", "x", "--model"]).model).toBeNull();
   });
 
   it("--print es alias de -p", () => {
