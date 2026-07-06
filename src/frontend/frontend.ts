@@ -6,6 +6,24 @@ export interface PastedImage {
   data: Buffer;
 }
 
+/**
+ * Métricas de un turno, en números crudos (sin formatear). El core las arma; cada
+ * frontend decide cómo presentarlas: la TUI dibuja la línea `~ ctx: …`, el headless
+ * las emite estructuradas en el evento `result`. Que main() no formatee es parte
+ * del seam: presentación es responsabilidad del frontend, no del loop.
+ */
+export interface TurnMetrics {
+  contextTokens: number;
+  toolCalls: number;
+  inputTokens: number;
+  outputTokens: number;
+  turnCost: number;
+  totalCost: number;
+  durationMs: number;
+  toolErrors: number;
+  rereads: { path: string; count: number }[];
+}
+
 /** Resultado de pedir el próximo input al usuario. */
 export type FrontendInput =
   /** El usuario mandó un mensaje para el agente. */
@@ -53,8 +71,12 @@ export interface Frontend {
   /** Pregunta al usuario y espera su respuesta. Generaliza el viejo `onAskUser`. */
   askUser(question: string): Promise<string>;
 
-  /** Mensaje del sistema fuera de un turno (errores, línea de métricas). */
+  /** Mensaje del sistema fuera de un turno (errores u otros avisos). */
   notify(text: string): void;
+
+  /** Reporta las métricas de un turno ya terminado. La TUI las dibuja como la
+   *  línea `~ ctx: …`; el headless las emite estructuradas. */
+  reportMetrics(metrics: TurnMetrics): void;
 
   /**
    * Registra el AbortController del turno en curso para que el frontend pueda

@@ -58,9 +58,20 @@ class Screen {
    * señal en lugar de matar el proceso. */
   #abortSignal: AbortController | null = null;
 
+  #started = false;
+
   constructor(paddingRight: number = 0, indent: number = 2) {
     this.#paddingRight = paddingRight;
     this.#indent = indent;
+  }
+
+  /** Engancha el listener de stdin. Separado del constructor a propósito: crear
+   * un Screen no debe secuestrar el teclado ni mantener vivo el event loop —
+   * eso permite construir un Screen inerte para satisfacer dependencias (ej. el
+   * Context en modo headless) sin activarlo. La TUI lo llama en su start(). */
+  start(): void {
+    if (this.#started) return;
+    this.#started = true;
     stdin.on("data", this.#onData);
   }
 
