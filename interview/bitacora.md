@@ -69,10 +69,22 @@ el resultado de una corrida, es *qué aprendimos y qué decidimos*. Append-only.
   confiar en un A/B. **Causa raíz del ruido:** omega no setea `temperature` → usa
   el default alto (~1.0) → máxima varianza. Palanca #1: bajar la temperatura.
 
-### EXP-6 · Temperatura (en curso)
-- **Hipótesis:** bajar la temperatura de omega reduce el ruido Y mejora la
-  confiabilidad (un coding agent a temp ~1 es menos determinista). Efecto
-  potencialmente grande → detectable incluso a k=5.
-- **Setup:** flash, k=5, 4 questions. `antes` = temp default; `temp0` = temp 0.
-- **Resultado:** _(pendiente)_
-- **Conclusión:** _(pendiente)_
+### EXP-6 · Temperatura (temp 0)
+- **Hipótesis (mía):** temp 0 reduce la varianza corrida-a-corrida (era mi
+  "palanca #1"). Efecto grande → detectable a k=5.
+- **Setup:** flash, k=5, 4 questions, `--temp 0`. Comparado vs `antes` y contra el
+  piso de ruido del A/A (EXP-5).
+- **Resultado:** temp0 = 20/20 pass, 0 timeouts. Pero las medianas se movieron
+  DENTRO del ruido del A/A (▲1/▼1, igual que antes vs antes2), y **la dispersión
+  NO se apretó**: feat-mode temp0 [6,8,9,9,12] vs baseline [2,8,8,9,9]; nav temp0
+  [6,6,6,8,8] vs [6,6,6,9,9]. Comparables. Los "0 timeouts" no se distinguen del
+  A/A (antes2 también tuvo 0).
+- **Conclusión: MI HIPÓTESIS ERA FALSA.** Temp 0 no domó la varianza. Razón (el
+  aprendizaje real): en evals **agénticos** la varianza no viene del sampling de
+  tokens sino del **branching de la trayectoria multi-paso** — diferencias
+  minúsculas temprano compuestan sobre 6-17 pasos en caminos muy distintos, y
+  temp 0 (que además en MoE no es determinista) no lo evita. La intuición
+  "poné temp 0" funciona para completions de un tiro, NO para agentes.
+  → El `--temp` queda como feature opcional (útil), pero NO se cambia el default.
+  El camino real a un instrumento confiable es **más k** (aceptar el costo) y/o
+  **cambios de efecto grande**, no bajar la temperatura.
