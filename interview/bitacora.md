@@ -88,3 +88,26 @@ el resultado de una corrida, es *qué aprendimos y qué decidimos*. Append-only.
   → El `--temp` queda como feature opcional (útil), pero NO se cambia el default.
   El camino real a un instrumento confiable es **más k** (aceptar el costo) y/o
   **cambios de efecto grande**, no bajar la temperatura.
+
+### EXP-7 · k=30 en feat-mode → INVÁLIDO (bug de aislación)
+- **Hipótesis:** k=30 aprieta la estimación (√6 ≈ 2.4×) → más medible.
+- **Setup:** flash, k=30, feat-mode.
+- **Resultado:** patrón sospechoso (round 1-2: 13/18 pasos, uno falló; round 3-30:
+  4-6 pasos parejo). Investigación: el **source del worktree de feat-mode fue
+  modificado** (le agregaron `mode`). Firma de contaminación: las copias
+  temporales tardías arrancaron pre-resueltas.
+- **Causa:** una corrida limpia NO leakea (usa paths relativos → temp). Pero el
+  **bash del agente puede escapar del temp**: un flash que thrashea puede correr
+  un `find` amplio, ubicar el source real y editarlo. Raro, gatillado por
+  thrashing. El clasificador no bloquea `find`/`edit` a un path cualquiera.
+- **Conclusión: EXP-7 descartado.** **Fix:** las corridas copian desde un
+  **snapshot pristino inmutable** (no del source vivo) → los datos quedan
+  blindados aunque el source se corrompa. + chequeo de integridad que avisa el
+  leak. **Fix real pendiente:** correr el agente en **contenedor** (aislamiento
+  del filesystem) — confirma la decisión abierta del design doc. Solo feat-mode
+  se contaminó; el dato de feat-mode en EXP-1..6 queda como sospechoso.
+
+### EXP-8 · k=30 en feat-mode, con aislación blindada (re-run)
+- **Setup:** flash, k=30, feat-mode, snapshot pristino.
+- **Resultado:** _(pendiente)_
+- **Conclusión:** _(pendiente)_
