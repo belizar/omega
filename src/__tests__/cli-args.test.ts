@@ -8,6 +8,7 @@ describe("parseCliArgs", () => {
       prompt: null,
       format: "json",
       model: null,
+      temp: null,
     });
   });
 
@@ -17,7 +18,14 @@ describe("parseCliArgs", () => {
       prompt: "arreglá el test",
       format: "json",
       model: null,
+      temp: null,
     });
+  });
+
+  it("--temp parsea un número (incluido 0)", () => {
+    expect(parseCliArgs(["-p", "x", "--temp", "0"]).temp).toBe(0);
+    expect(parseCliArgs(["-p", "x", "--temp", "0.7"]).temp).toBe(0.7);
+    expect(parseCliArgs(["-p", "x"]).temp).toBeNull();
   });
 
   it("--model setea el override de modelo", () => {

@@ -10,6 +10,9 @@ export interface CliArgs {
   /** Override del modelo primario para esta corrida (`--model`). Null = usar el
    *  del perfil/config. Clave para interviews: variar el candidate por corrida. */
   model: string | null;
+  /** Temperatura de sampling (`--temp`). Null = no se manda (default del
+   *  proveedor). Bajarla reduce la varianza corrida-a-corrida en interviews. */
+  temp: number | null;
 }
 
 /**
@@ -27,6 +30,7 @@ export function parseCliArgs(argv: string[]): CliArgs {
   let prompt: string | null = null;
   let format: HeadlessFormat = "json";
   let model: string | null = null;
+  let temp: number | null = null;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -53,8 +57,15 @@ export function parseCliArgs(argv: string[]): CliArgs {
         model = next;
         i++;
       }
+    } else if (arg === "--temp") {
+      const next = argv[i + 1];
+      const n = Number(next);
+      if (next !== undefined && !Number.isNaN(n)) {
+        temp = n;
+        i++;
+      }
     }
   }
 
-  return { headless, prompt, format, model };
+  return { headless, prompt, format, model, temp };
 }

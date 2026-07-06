@@ -45,6 +45,11 @@ export class HeadlessMode implements FrontendMode {
     }
     const effectiveModel = this.#cli.model ?? config.model;
 
+    // Temperatura por corrida (`--temp`): bajarla reduce la varianza en interviews.
+    if (this.#cli.temp != null) {
+      agentConfig.setTemperature(this.#cli.temp);
+    }
+
     // Screen inerte: satisface la dependencia del Context sin enganchar la
     // terminal (no llamamos screen.start()). El headless nunca renderiza por acá.
     // TODO: idealmente Context depende de un ScreenPort, no del Screen concreto.

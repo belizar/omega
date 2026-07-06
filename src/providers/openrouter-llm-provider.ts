@@ -369,6 +369,7 @@ class OpenRouterProvider extends LLMProvider {
       messages: translateMessages(messages, agent.systemPrompt),
       tools: translateTools(agent),
       max_tokens: agent.maxTokens,
+      ...(agent.temperature != null ? { temperature: agent.temperature } : {}),
     };
 
     const { response, costHeader } = await this.#fetchWithRetry(body, userSignal, "OpenRouter");
@@ -392,6 +393,7 @@ class OpenRouterProvider extends LLMProvider {
       messages: translateMessages(messages, agent.systemPrompt),
       tools: translateTools(agent),
       max_tokens: agent.maxTokens,
+      ...(agent.temperature != null ? { temperature: agent.temperature } : {}),
       stream: true,
     };
 
