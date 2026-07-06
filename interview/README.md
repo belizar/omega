@@ -44,6 +44,38 @@ node interview/run.mjs \
 Salida: una fila por corrida (transcript), la agregación por `(question,
 candidate)` en éxito + medianas, y un CSV en `interview/results/`.
 
+## El objetivo: mejorar el harness (no elegir un modelo)
+
+La JD de omega es **mejorar el propio harness**. Eso cambia el eval:
+
+- **La variable es omega, no el modelo.** Congelás un modelo barato (el mismo para
+  todo) y movés el *diseño de omega*. Si movés el modelo, medís el modelo, no tu
+  cambio.
+- **Es un A/B de regresión:** corrés, tocás algo de omega, re-corrés, comparás.
+  `--omega <path>` apunta a builds distintos; `--label` etiqueta cada corrida.
+- **Las questions tienen que ser sensibles al harness:** navegación multi-archivo,
+  multi-paso con recuperación. Un fix trivial no mueve la aguja.
+- **La señal vive en la trayectoria.** Con el modelo congelado la correctitud
+  satura; un mejor harness llega a lo mismo con **menos re-lecturas, menos
+  tool-errors, menos pasos**. Por eso esas columnas están en la tabla.
+
+```bash
+# A/B: misma question, mismo candidate, dos versiones de omega
+node interview/run.mjs --models deepseek/deepseek-v4-pro --k 3 --label antes \
+  --omega /ruta/a/omega-viejo/dist/index.js
+# … cambiás algo de omega, npm run build …
+node interview/run.mjs --models deepseek/deepseek-v4-pro --k 3 --label despues
+# comparás los dos CSV en interview/results/
+```
+
+## Questions actuales
+
+| question | tipo | qué estresa |
+|---|---|---|
+| `demo-bugfix` | trivial | smoke — prueba la máquina, no discrimina |
+| `nav-negatives` | bug de navegación | síntoma en `index.mjs`, causa en `tokenize.mjs` (2 hops) → search/read/context |
+| `feat-mode` | feature multi-archivo | agregar un stat siguiendo el patrón → navegación + comprensión |
+
 ## Agregar una question
 
 ```
