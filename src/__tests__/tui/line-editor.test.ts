@@ -388,4 +388,40 @@ describe("LineEditor", () => {
     editor.handleKey(up);
     expect(editor.render()).toBe(barContent("linea1\nlinea2"));
   });
+
+  // ---- getSlashCommand (menú de comandos) ----
+
+  describe("getSlashCommand", () => {
+    it("detecta el prefijo tras la barra", () => {
+      typeChars(editor, "/");
+      expect(editor.getSlashCommand()).toEqual({ text: "" });
+    });
+
+    it("captura el nombre parcial", () => {
+      typeChars(editor, "/mod");
+      expect(editor.getSlashCommand()).toEqual({ text: "mod" });
+    });
+
+    it("acepta guiones (comandos custom tipo /ddd-review)", () => {
+      typeChars(editor, "/ddd-review");
+      expect(editor.getSlashCommand()).toEqual({ text: "ddd-review" });
+    });
+
+    it("es null cuando hay un espacio (ya empezaron los args)", () => {
+      typeChars(editor, "/model gpt");
+      expect(editor.getSlashCommand()).toBeNull();
+    });
+
+    it("es null si no arranca con barra", () => {
+      typeChars(editor, "hola");
+      expect(editor.getSlashCommand()).toBeNull();
+    });
+
+    it("es null en buffer multilínea", () => {
+      typeChars(editor, "/help");
+      editor.handleKey(newline);
+      typeChars(editor, "x");
+      expect(editor.getSlashCommand()).toBeNull();
+    });
+  });
 });

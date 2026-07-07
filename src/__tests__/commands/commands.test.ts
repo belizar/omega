@@ -3,7 +3,7 @@ import { ClearCommand } from "../../commands/clear.js";
 import { RenameCommand } from "../../commands/rename.js";
 import { ResumeCommand } from "../../commands/resume.js";
 import { HelpCommand } from "../../commands/help.js";
-import { dispatchCommand } from "../../commands/index.js";
+import { dispatchCommand, listCommands } from "../../commands/index.js";
 import { Command } from "../../commands/command.js";
 import { Context } from "../../app-context.js";
 import { Session } from "../../session.js";
@@ -247,5 +247,30 @@ describe("dispatchCommand", () => {
 
     const result = await dispatchCommand("/clear", ctx);
     expect(result.kind).toBe("handled");
+  });
+});
+
+// ── listCommands ─────────────────────────────────────────────────────────────
+
+describe("listCommands", () => {
+  it("merges built-in and custom commands, sorted by name", () => {
+    const custom = {
+      "/deploy": {
+        name: "/deploy",
+        description: "deploya",
+        body: "b",
+        source: "project" as const,
+      },
+    };
+    const ctx = createMockContext(custom);
+    const list = listCommands(ctx);
+
+    const names = list.map((c) => c.name);
+    expect(names).toContain("/help");
+    expect(names).toContain("/deploy");
+    // Ordenado alfabéticamente.
+    expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)));
+    // Trae la descripción del custom.
+    expect(list.find((c) => c.name === "/deploy")?.description).toBe("deploya");
   });
 });

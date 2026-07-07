@@ -59,6 +59,27 @@ type DispatchOutcome =
   | { kind: "handled" }
   | { kind: "expand"; text: string };
 
+/** Un comando para mostrar en el menú de `/` (built-in o custom). */
+interface CommandListItem {
+  name: string;
+  description: string;
+}
+
+/**
+ * Lista unificada de todos los comandos disponibles (built-in + custom del
+ * usuario), ordenada, para el picker que aparece al tipear `/`. Vive acá —no en
+ * la UI— para que el conocimiento de comandos no se filtre al componente de TUI.
+ */
+const listCommands = (ctx: Context): CommandListItem[] => {
+  const items: CommandListItem[] = Object.entries(commandsMap).map(
+    ([name, cmd]) => ({ name, description: cmd.description }),
+  );
+  for (const c of Object.values(ctx.customCommands)) {
+    items.push({ name: c.name, description: c.description });
+  }
+  return items.sort((a, b) => a.name.localeCompare(b.name));
+};
+
 const dispatchCommand = async (
   cmd: string,
   ctx: Context,
@@ -86,4 +107,4 @@ const dispatchCommand = async (
   return { kind: "handled" };
 };
 
-export { commandsMap, modalCommandsMap, dispatchCommand, DispatchOutcome };
+export { commandsMap, modalCommandsMap, dispatchCommand, listCommands, DispatchOutcome, CommandListItem };

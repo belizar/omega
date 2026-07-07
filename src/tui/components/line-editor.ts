@@ -449,6 +449,15 @@ class LineEditor implements InputComponent<string> {
     this.#cursor = from + text.length;
   }
 
+  /** Si el buffer entero es un slash-command a medio tipear (`/`, `/mod`,
+   * `/ddd-review`) sin argumentos todavía, devuelve el prefijo tras la barra.
+   * Null cuando hay un espacio (ya arrancaron los args) o no es un comando →
+   * el menú de comandos se cierra solo al empezar a pasar argumentos. */
+  getSlashCommand(): { text: string } | null {
+    const m = this.#buffer.match(/^\/([\w-]*)$/);
+    return m ? { text: m[1] } : null;
+  }
+
   /** Información de la mención @ activa (la que está justo antes del cursor).
    * Devuelve null si el cursor no está sobre una mención. */
   getAtMention(): { start: number; text: string } | null {

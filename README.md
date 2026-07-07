@@ -32,6 +32,11 @@ Escribí tus tareas en lenguaje natural. Omega va a explorar el proyecto, editar
 
 ### Comandos slash
 
+Al tipear `/` aparece un menú en vivo con todos los comandos disponibles
+(built-in + custom), filtrado a medida que escribís. ↑/↓ (o Ctrl+P/N) para
+navegar, **Enter** corre el resaltado, **Tab** lo completa en el editor para
+pasarle argumentos, **Esc** cierra el menú.
+
 | Comando | Acción |
 |---------|--------|
 | `/help` | Lista los comandos disponibles |

@@ -1,4 +1,5 @@
 import { Context } from "../../app-context.js";
+import { CommandListItem } from "../../commands/index.js";
 import { ModalCommand, ModalPicker } from "../../commands/modal-command.js";
 import { CursorPosition, InputComponent } from "../component.js";
 import { Key } from "../decodeKey.js";
@@ -14,6 +15,7 @@ type PromptProps = {
   editor: LineEditor;
   ctx: Context;
   modals: Record<string, ModalCommand>;
+  commands: CommandListItem[];
 };
 
 /**
@@ -21,31 +23,36 @@ type PromptProps = {
  * (ej: /resume) y el file picker (@), un SelectList — todo en UNA región viva.
  *
  * Modos:
- *   editing      → solo el LineEditor.
- *   picking      → LineEditor + picker de comando modal debajo.
- *   file-picking → LineEditor + picker de archivos debajo, se actualiza en vivo.
+ *   editing         → solo el LineEditor.
+ *   picking         → LineEditor + picker de comando modal debajo.
+ *   file-picking    → LineEditor + picker de archivos debajo, en vivo.
+ *   command-picking → LineEditor + menú de slash-commands debajo, en vivo.
  */
 class Prompt implements InputComponent<PromptResult> {
   #editor: LineEditor;
   #ctx: Context;
   #modals: Record<string, ModalCommand>;
-  #mode: "editing" | "picking" | "file-picking";
+  #commands: CommandListItem[];
+  #mode: "editing" | "picking" | "file-picking" | "command-picking";
   #picker: ModalPicker | null;
   #activeModal: ModalCommand | null;
   #filePicker: SelectList<string> | null;
   #fileMentionStart: number;
+  #commandPicker: SelectList<CommandListItem> | null;
   #result: PromptResult | null;
   #done: boolean;
 
-  constructor({ editor, ctx, modals }: PromptProps) {
+  constructor({ editor, ctx, modals, commands }: PromptProps) {
     this.#editor = editor;
     this.#ctx = ctx;
     this.#modals = modals;
+    this.#commands = commands;
     this.#mode = "editing";
     this.#picker = null;
     this.#activeModal = null;
     this.#filePicker = null;
     this.#fileMentionStart = -1;
+    this.#commandPicker = null;
     this.#result = null;
     this.#done = false;
   }
@@ -53,6 +60,8 @@ class Prompt implements InputComponent<PromptResult> {
   handleKey(key: Key): void {
     if (this.#mode === "file-picking") {
       this.#handleFilePicking(key);
+    } else if (this.#mode === "command-picking") {
+      this.#handleCommandPicking(key);
     } else if (this.#mode === "picking") {
       this.#handlePicking(key);
     } else {
@@ -69,32 +78,126 @@ class Prompt implements InputComponent<PromptResult> {
 
     // Si el editor comiteó (Enter), procesar comando modal o submit
     if (this.#editor.isDone()) {
-      const text = this.#editor.getResult();
-      const tokens = text.trim().split(/\s+/);
-      const modal = tokens.length === 1 ? this.#modals[tokens[0]] : undefined;
-
-      if (!modal) {
-        this.#result = { kind: "submit", text };
-        this.#done = true;
-        return;
-      }
-
-      const opened = modal.open(this.#ctx);
-      if ("message" in opened) {
-        this.#result = { kind: "modal", message: opened.message };
-        this.#done = true;
-        return;
-      }
-
-      this.#picker = opened.picker;
-      this.#activeModal = modal;
-      this.#mode = "picking";
+      this.#commit();
       return;
     }
 
-    // Después de cada keystroke, chequear si hay una mención @ activa
-    // para abrir/actualizar el file picker.
+    // Después de cada keystroke, chequear pickers en vivo: primero el menú de
+    // slash-commands (buffer entero = /comando), si no, la mención @ de archivos.
+    this.#syncCommandPicker();
+    if (this.#mode === "command-picking") return;
     this.#syncFilePicker();
+  }
+
+  /** Resuelve el buffer comiteado: modal (abre picker), o submit. Compartido
+   * entre el Enter del editor y el Enter del menú de comandos. */
+  #commit(): void {
+    const text = this.#editor.getResult();
+    const tokens = text.trim().split(/\s+/);
+    const modal = tokens.length === 1 ? this.#modals[tokens[0]] : undefined;
+
+    if (!modal) {
+      this.#result = { kind: "submit", text };
+      this.#done = true;
+      return;
+    }
+
+    const opened = modal.open(this.#ctx);
+    if ("message" in opened) {
+      this.#result = { kind: "modal", message: opened.message };
+      this.#done = true;
+      return;
+    }
+
+    this.#picker = opened.picker;
+    this.#activeModal = modal;
+    this.#mode = "picking";
+  }
+
+  // ── command-picking (menú de slash-commands) ─────────────────────
+
+  /** Abre/actualiza/cierra el menú de comandos según el prefijo `/` tipeado. */
+  #syncCommandPicker(): void {
+    const slash = this.#editor.getSlashCommand();
+    if (!slash) {
+      this.#commandPicker = null;
+      if (this.#mode === "command-picking") this.#mode = "editing";
+      return;
+    }
+
+    const matches = this.#commands.filter((c) =>
+      c.name.slice(1).startsWith(slash.text),
+    );
+    if (matches.length === 0) {
+      this.#commandPicker = null;
+      if (this.#mode === "command-picking") this.#mode = "editing";
+      return;
+    }
+
+    this.#commandPicker = new SelectList(
+      matches,
+      (c, _i, sel) =>
+        sel
+          ? bold(cyan("  " + c.name)) + dim("  " + c.description)
+          : dim("  " + c.name + "  " + c.description),
+      10,
+    );
+    this.#mode = "command-picking";
+  }
+
+  #handleCommandPicking(key: Key): void {
+    const picker = this.#commandPicker;
+    if (!picker) { this.#mode = "editing"; return; }
+
+    switch (key.type) {
+      // Navegación del menú.
+      case "up":
+      case "down":
+        picker.handleKey(key);
+        return;
+
+      case "ctrl":
+        // Ctrl+N/P navegan; cualquier otro Ctrl va al editor.
+        if (key.key === "n" || key.key === "p") { picker.handleKey(key); return; }
+        this.#editor.handleKey(key);
+        this.#syncCommandPicker();
+        return;
+
+      // Tab: completar el comando resaltado en el buffer y seguir editando
+      // (para tipear argumentos). No submitea.
+      case "tab": {
+        const sel = picker.getResult();
+        if (sel) this.#editor.setBuffer(sel.name + " ");
+        this.#commandPicker = null;
+        this.#mode = "editing";
+        return;
+      }
+
+      // Enter: elegir el comando resaltado y correrlo (o abrir su modal).
+      case "enter": {
+        const sel = picker.getResult();
+        this.#commandPicker = null;
+        this.#mode = "editing";
+        if (sel) {
+          this.#editor.setBuffer(sel.name);
+          this.#editor.handleKey({ type: "enter" } as Key);
+          if (this.#editor.isDone()) this.#commit();
+        }
+        return;
+      }
+
+      case "escape":
+        this.#commandPicker = null;
+        this.#mode = "editing";
+        return;
+
+      // El resto (char, backspace, movimiento…) edita el buffer y re-sincroniza:
+      // filtra la lista, o la cierra si dejó de ser un `/comando`.
+      default:
+        this.#editor.handleKey(key);
+        this.#syncCommandPicker();
+        return;
+    }
   }
 
   /** Abre, actualiza o cierra el file picker según el estado de la mención @. */
@@ -256,6 +359,9 @@ class Prompt implements InputComponent<PromptResult> {
     if (this.#mode === "file-picking" && this.#filePicker) {
       return editor + "\n" + this.#filePicker.render();
     }
+    if (this.#mode === "command-picking" && this.#commandPicker) {
+      return editor + "\n" + this.#commandPicker.render();
+    }
     return editor;
   }
 
@@ -271,6 +377,10 @@ class Prompt implements InputComponent<PromptResult> {
     if (this.#mode === "file-picking" && this.#filePicker) {
       const editorLines = this.#editor.render().split("\n").length;
       return { row: editorLines + this.#filePicker.selectedRow(), col: 0 };
+    }
+    if (this.#mode === "command-picking" && this.#commandPicker) {
+      const editorLines = this.#editor.render().split("\n").length;
+      return { row: editorLines + this.#commandPicker.selectedRow(), col: 0 };
     }
     return this.#editor.getCursorPosition();
   }
