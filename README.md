@@ -39,6 +39,30 @@ Escribí tus tareas en lenguaje natural. Omega va a explorar el proyecto, editar
 | `/rename <nombre>` | Le da un nombre a la sesión actual |
 | `/resume <id>` | Reanuda una sesión anterior |
 
+### Comandos slash custom
+
+Además de los built-in, podés definir tus propios comandos con archivos `.md`. El
+nombre del archivo es el comando (`resumen.md` → `/resumen`) y el body es un
+template de prompt que se manda al modelo como si lo hubieras tipeado.
+
+- `.omega/commands/*.md` — del proyecto (versionable, compartido con el equipo).
+- `~/.omega/commands/*.md` — globales (tuyos, en cualquier repo). El de proyecto
+  gana si hay choque de nombre.
+
+Frontmatter opcional (`description`, `argument-hint`) y sustitución de
+argumentos: `$ARGUMENTS` (todos) y `$1`..`$9` (posicionales).
+
+```md
+---
+description: Resume el git diff actual en bullets
+argument-hint: [rama-base]
+---
+Mirá el diff contra $1 (o master si está vacío) y resumí los cambios en bullets
+concisos, agrupados por archivo. No propongas cambios, solo describí.
+```
+
+Después: `/resumen develop`. Aparecen en `/help`.
+
 ### Atajos del editor
 
 | Atajo | Acción |
