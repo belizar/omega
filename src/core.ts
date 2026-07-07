@@ -7,6 +7,7 @@ import { OverrideManager } from "./classifier/overrides.js";
 import { validateEnv, ResolvedConfig } from "./config.js";
 import { logger } from "./logger.js";
 import { OpenRouterProvider } from "./providers/openrouter-llm-provider.js";
+import { Sandbox } from "./sandbox.js";
 import { Session } from "./session.js";
 import { buildSystemPrompt } from "./system-prompt.js";
 import { AskUserTool } from "./tools/ask-user.js";
@@ -76,9 +77,21 @@ export async function buildCore(): Promise<CoreServices> {
     );
   }
 
+  // Sandbox opcional: el workspace persistente (contenedor) donde corre el bash
+  // del agente. Solo se crea si está habilitado; si no, el bash corre en el host.
+  const sandbox = config.sandbox.enabled
+    ? new Sandbox({ image: config.sandbox.image, sessionId: session.id })
+    : undefined;
+  if (sandbox) {
+    // Matar el contenedor al salir. (SIGKILL no corre esto → el keep-alive `sleep`
+    // con tope y el --rm hacen que un huérfano se autodestruya.)
+    process.on("exit", () => sandbox.stop());
+  }
+
   const bashTool = new BashTool({
     classifier,
     defaultTimeoutMs: config.bashTimeoutMs,
+    sandbox,
   });
 
   const toolRegistry = new ToolRegistry(logger);

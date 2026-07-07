@@ -30,7 +30,7 @@ const QUESTIONS_DIR = join(HERE, "questions");
 
 // ── args ──────────────────────────────────────────────────────────────────
 function parseArgs(argv) {
-  const a = { models: [], k: 1, budget: 1.0, question: null, omega: OMEGA, label: null, timeout: 300, temp: null };
+  const a = { models: [], k: 1, budget: 1.0, question: null, omega: OMEGA, label: null, timeout: 300, temp: null, sandbox: false };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--models") a.models = (argv[++i] ?? "").split(",").map((s) => s.trim()).filter(Boolean);
@@ -45,6 +45,8 @@ function parseArgs(argv) {
     // Temperatura de sampling que se le pasa a omega (ej. --temp 0). Baja la
     // varianza corrida-a-corrida. Sin flag → omega usa el default del proveedor.
     else if (arg === "--temp") a.temp = argv[++i];
+    // Sandbox: corre el bash del agente en un contenedor Docker (workdir montado).
+    else if (arg === "--sandbox") a.sandbox = true;
   }
   return a;
 }
@@ -76,7 +78,7 @@ function loadQuestions(only) {
 }
 
 // ── una entrevista (question × candidate × round) → fila ────────────────────
-function interview(question, candidate, round, omegaEntry, timeoutSec, temp) {
+function interview(question, candidate, round, omegaEntry, timeoutSec, temp, sandbox) {
   // 1. reset: workdir fresco con una copia del snapshot PRISTINO (no del source
   // vivo — así una corrida previa que corrompió el source no contamina ésta).
   const workdir = mkdtempSync(join(tmpdir(), `interview-${question.name}-`));
@@ -86,6 +88,8 @@ function interview(question, candidate, round, omegaEntry, timeoutSec, temp) {
   // timeout: un candidate que se cuelga o thrashea sin fin no puede colgar todo
   // el harness — lo matamos y la corrida cuenta como fallo (del harness, no del
   // candidate: no llegó a un veredicto).
+  // sandbox: OMEGA_SANDBOX=1 → el bash del agente corre en un contenedor con el
+  // workdir montado (no puede escapar al filesystem del host).
   const args = [omegaEntry, "-p", question.brief, "--model", candidate, "--format", "json"];
   if (temp != null) args.push("--temp", String(temp));
   const proc = spawnSync("node", args, {
@@ -93,6 +97,7 @@ function interview(question, candidate, round, omegaEntry, timeoutSec, temp) {
     encoding: "utf-8",
     maxBuffer: 64 * 1024 * 1024,
     timeout: timeoutSec * 1000,
+    env: sandbox ? { ...process.env, OMEGA_SANDBOX: "1" } : process.env,
   });
 
   const timedOut = proc.error?.code === "ETIMEDOUT";
@@ -293,6 +298,7 @@ function main() {
   console.log(`  budget cap: $${args.budget.toFixed(2)} (para antes de pasarse)`);
   console.log(`  timeout:    ${args.timeout}s por corrida`);
   console.log(`  temp:       ${args.temp ?? "(default del proveedor)"}`);
+  console.log(`  sandbox:    ${args.sandbox ? "ON (bash del agente en contenedor)" : "off"}`);
 
   const rows = [];
   let spent = 0;
@@ -307,7 +313,7 @@ function main() {
           break outer;
         }
         process.stdout.write(`  · ${question.name} / ${candidate} / round ${round} … `);
-        const row = interview(question, candidate, round, args.omega, args.timeout, args.temp);
+        const row = interview(question, candidate, round, args.omega, args.timeout, args.temp, args.sandbox);
         rows.push(row);
         spent += row.cost;
         const mark = row.verdict === "pass" ? "✓" : row.verdict === "timeout" ? "⏱" : "✗";

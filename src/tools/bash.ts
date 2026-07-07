@@ -2,6 +2,7 @@ import { exec } from "child_process";
 import { Tool } from "./tool.js";
 import { logger } from "../logger.js";
 import { CommandClassifier } from "../classifier/classifier.js";
+import { Sandbox } from "../sandbox.js";
 
 type BashInput = {
   command: string;
@@ -17,6 +18,9 @@ export type BashToolOptions = {
   classifier?: CommandClassifier;
   /** Timeout por defecto (ms) cuando el comando no especifica `timeout`. */
   defaultTimeoutMs?: number;
+  /** Sandbox opcional: el "workspace" persistente donde corre el bash del agente
+   *  (contenedor Docker). undefined = corre en el host (flujo local). */
+  sandbox?: Sandbox;
 };
 
 const DEFAULT_TIMEOUT_MS = 120_000; // fallback si el constructor no pasa uno
@@ -83,6 +87,7 @@ const SAFE_PATTERNS = [
 export class BashTool extends Tool<BashInput, string> {
   #classifier?: CommandClassifier;
   #defaultTimeoutMs: number;
+  #sandbox?: Sandbox;
 
   constructor(options?: BashToolOptions) {
     super({
@@ -117,6 +122,17 @@ export class BashTool extends Tool<BashInput, string> {
     });
     this.#classifier = options?.classifier;
     this.#defaultTimeoutMs = options?.defaultTimeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.#sandbox = options?.sandbox;
+  }
+
+  /**
+   * El comando a correr en el host-shell. Sin sandbox, es el comando tal cual (en
+   * el host). Con sandbox, es un `docker exec` al contenedor persistente del
+   * agente (el workspace) → confinado a /workspace, con estado que persiste entre
+   * comandos. El contenedor tiene que estar arrancado antes (ver ensureSandbox).
+   */
+  #wrapCommand(command: string): string {
+    return this.#sandbox ? this.#sandbox.wrap(command) : command;
   }
 
   async execute(
@@ -199,6 +215,17 @@ export class BashTool extends Tool<BashInput, string> {
         return "⏹ Comando cancelado antes de ejecutar (interrumpido por el usuario).";
       }
 
+      // Sandbox: arrancar el contenedor (lazy, la primera vez) antes de ejecutar.
+      if (this.#sandbox) {
+        try {
+          await this.#sandbox.ensureStarted();
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          logger.error("No se pudo arrancar el sandbox", msg);
+          return `Error: no se pudo arrancar el sandbox (¿Docker corriendo?): ${msg}`;
+        }
+      }
+
       logger.info("Executing bash command", { command, force, timeoutMs });
       let aborted = false;
       const result = await new Promise<string>((resolve, reject) => {
@@ -207,7 +234,7 @@ export class BashTool extends Tool<BashInput, string> {
         // lo referencia para removerse; por eso lo declaramos acá.
         let onAbort = () => {};
 
-        const child = exec(command, {
+        const child = exec(this.#wrapCommand(command), {
           encoding: "buffer" as BufferEncoding,
           timeout: timeoutMs,
           maxBuffer: MAX_BUFFER,

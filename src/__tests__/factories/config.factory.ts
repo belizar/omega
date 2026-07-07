@@ -21,6 +21,7 @@ export class ConfigFactory {
       visionModel: overrides?.visionModel ?? null,
       visionMaxTokens: overrides?.visionMaxTokens ?? 512,
       docsDir: overrides?.docsDir ?? null,
+      sandbox: overrides?.sandbox ?? { enabled: false, image: "node:22-slim" },
     };
   }
 
