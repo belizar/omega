@@ -1,5 +1,5 @@
 import { Context } from "../app-context.js";
-import { dispatchCommand, modalCommandsMap } from "../commands/index.js";
+import { dispatchCommand, listCommands, modalCommandsMap } from "../commands/index.js";
 import { STATUSLINE_KEY, resolveStatusline } from "../commands/statusline.js";
 import { RunnerEvent } from "../runner.js";
 import { printHero } from "../tui/hero.js";
@@ -117,6 +117,7 @@ export class TUIFrontend implements Frontend {
       editor: this.#lineEditor,
       ctx: this.#ctx,
       modals: this.#modals,
+      commands: listCommands(this.#ctx),
     });
     const result = await this.#screen.readLine(prompt);
 
