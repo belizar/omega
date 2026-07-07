@@ -68,6 +68,36 @@ concisos, agrupados por archivo. No propongas cambios, solo describí.
 
 Después: `/resumen develop`. Aparecen en `/help`.
 
+### Skills
+
+Una **skill** es una guía con instrucciones detalladas para una tarea o
+capacidad específica que **el modelo carga solo cuando le hace falta** (a
+diferencia de un slash command, que lo disparás vos). Es *progressive
+disclosure*: al system prompt solo entra el `name` + la `description` de cada
+skill; el contenido completo se carga on-demand cuando el agente decide usarla.
+
+- `.omega/skills/<name>/SKILL.md` — del proyecto (versionable).
+- `~/.omega/skills/<name>/SKILL.md` — globales. El de proyecto gana si hay choque.
+
+El frontmatter lleva `name` (opcional, default = nombre del dir) y `description`
+(clave: es lo que el modelo usa para decidir si la skill aplica). El directorio
+puede traer archivos extra (scripts, plantillas) que las instrucciones
+referencian — el agente los lee con `read`.
+
+```md
+---
+name: release-notes
+description: Cómo armar las release notes del proyecto siguiendo su formato
+---
+1. Mirá los commits desde el último tag con `git log`.
+2. Agrupá por tipo (feat/fix/chore) y escribí una línea por cambio relevante.
+3. Seguí la plantilla en `template.md` de esta misma carpeta.
+```
+
+Cuando una tarea matchee la descripción, el agente carga la skill (vía una tool
+`skill` interna) y sigue sus instrucciones. Si no hay skills instaladas, nada de
+esto aparece.
+
 ### Atajos del editor
 
 | Atajo | Acción |

@@ -9,7 +9,9 @@ import { logger } from "./logger.js";
 import { OpenRouterProvider } from "./providers/openrouter-llm-provider.js";
 import { Sandbox } from "./sandbox.js";
 import { Session } from "./session.js";
+import { loadSkills } from "./skills.js";
 import { buildSystemPrompt } from "./system-prompt.js";
+import { SkillTool } from "./tools/skill.js";
 import { AskUserTool } from "./tools/ask-user.js";
 import { BashTool } from "./tools/bash.js";
 import { EditTool } from "./tools/edit.js";
@@ -61,7 +63,11 @@ export async function buildCore(): Promise<CoreServices> {
   logger.setLogFile(`.omega/logs/${session.id}.log`);
   logger.info("Omega agent starting", { session: session.id });
 
-  const fullSystemPrompt = buildSystemPrompt(config);
+  // Skills del usuario (.omega/skills/<name>/SKILL.md, proyecto + global). Solo
+  // name+description entran al system prompt; el body se carga con la tool `skill`.
+  const skills = loadSkills();
+
+  const fullSystemPrompt = buildSystemPrompt(config, skills);
 
   // ── Clasificador de comandos ──────────────────────────────────────
   let classifier: CommandClassifier | undefined;
@@ -134,6 +140,12 @@ export async function buildCore(): Promise<CoreServices> {
 
   // tool_search va al AgentConfig (como tool local) para que el agente la use
   agentConfig.addTool(new ToolSearchTool(toolRegistry));
+
+  // La tool `skill` solo se registra si hay skills instaladas: sin skills no
+  // tiene sentido ofrecerla (y el system prompt tampoco lista la sección).
+  if (skills.length > 0) {
+    agentConfig.addTool(new SkillTool(skills));
+  }
 
   const llmProvider = new OpenRouterProvider(config.openrouterApiKey);
 

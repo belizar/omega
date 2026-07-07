@@ -3,6 +3,7 @@ import { execSync } from "child_process";
 import { ResolvedConfig } from "./config.js";
 import { loadMcpConfig } from "./mcp/client.js";
 import { buildCabinetContext } from "./cabinet.js";
+import { Skill } from "./skills.js";
 
 const SYSTEM_PROMPT = `Sos omega, un asistente de coding que trabaja en el proyecto del usuario.
 Tenés tools para leer, escribir, editar y ejecutar comandos.
@@ -113,15 +114,33 @@ function loadDocsContext(docsDir: string | null): string {
 }
 
 /**
- * Ensambla el system prompt completo: el base + los contextos dinámicos
- * (proyecto, MCP, cabinet, docs). Se arma una vez al construir el core.
+ * Skills disponibles: se listan name + description (progressive disclosure). El
+ * body pesado NO va acá — el agente lo carga on-demand con la tool `skill`.
  */
-export function buildSystemPrompt(config: ResolvedConfig): string {
+export function loadSkillsContext(skills: Skill[]): string {
+  if (skills.length === 0) return "";
+  const lines = skills.map((s) => `- **${s.name}**: ${s.description}`).join("\n");
+  return (
+    `\n\n## Skills disponibles\n\n` +
+    `Tenés skills instaladas: guías con instrucciones detalladas para tareas o ` +
+    `capacidades específicas. Abajo está solo el name y para qué sirve cada una. ` +
+    `Cuando una tarea matchee la descripción de una skill, cargá sus instrucciones ` +
+    `completas llamando a la tool \`skill\` con su name **antes de empezar** — no ` +
+    `adivines cómo se hace, el detalle está en la skill.\n\n${lines}`
+  );
+}
+
+/**
+ * Ensambla el system prompt completo: el base + los contextos dinámicos
+ * (proyecto, MCP, cabinet, docs, skills). Se arma una vez al construir el core.
+ */
+export function buildSystemPrompt(config: ResolvedConfig, skills: Skill[] = []): string {
   return (
     SYSTEM_PROMPT +
     loadProjectContext() +
     loadMcpContext() +
     buildCabinetContext() +
-    loadDocsContext(config.docsDir)
+    loadDocsContext(config.docsDir) +
+    loadSkillsContext(skills)
   );
 }
