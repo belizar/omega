@@ -1,4 +1,5 @@
 import { Context } from "../app-context.js";
+import { expandCommand } from "./custom.js";
 import { ModelCommand } from "./model.js";
 import { ProfileCommand } from "./profile.js";
 import { SetupCommand } from "./setup.js";
@@ -46,24 +47,43 @@ const modalCommandsMap: Record<string, ModalCommand> = {
   "/analyze": analyzeModalCommand,
 };
 
+/**
+ * Resultado de intentar despachar un input como comando:
+ *   - `not-command`: no era un `/comando`; el loop lo trata como mensaje normal.
+ *   - `handled`: un built-in ya corrió su efecto (o fue desconocido); no hay turno.
+ *   - `expand`: un comando custom se expandió a `text` → el loop corre un turno
+ *     con ese texto como mensaje del usuario.
+ */
+type DispatchOutcome =
+  | { kind: "not-command" }
+  | { kind: "handled" }
+  | { kind: "expand"; text: string };
+
 const dispatchCommand = async (
   cmd: string,
   ctx: Context,
-): Promise<boolean> => {
-  if (cmd.startsWith("/")) {
-    const [commandName, ...args] = cmd.trim().split(/\s+/);
-    const command = commandsMap[commandName];
-    if (!command) {
-      ctx.screen.printAbove(
-        `Comando no reconocido: ${commandName}. Usá /help para ver los disponibles.`,
-      );
-      return true;
-    }
+): Promise<DispatchOutcome> => {
+  if (!cmd.startsWith("/")) return { kind: "not-command" };
+
+  const [commandName, ...args] = cmd.trim().split(/\s+/);
+
+  // Built-in: tiene precedencia (no se puede pisar /help con un .md).
+  const command = commandsMap[commandName];
+  if (command) {
     await command.handler(ctx, args);
-    return true;
+    return { kind: "handled" };
   }
 
-  return false;
+  // Custom (.omega/commands/*.md): se expande a un prompt y corre como turno.
+  const custom = ctx.customCommands[commandName];
+  if (custom) {
+    return { kind: "expand", text: expandCommand(custom, args) };
+  }
+
+  ctx.screen.printAbove(
+    `Comando no reconocido: ${commandName}. Usá /help para ver los disponibles.`,
+  );
+  return { kind: "handled" };
 };
 
-export { commandsMap, modalCommandsMap, dispatchCommand };
+export { commandsMap, modalCommandsMap, dispatchCommand, DispatchOutcome };

@@ -36,7 +36,9 @@ class MockScreen {
   }
 }
 
-function createMockContext(): Context {
+function createMockContext(
+  customCommands?: Context["customCommands"],
+): Context {
   const session = new Session();
   const registry = new ToolRegistry();
   registry.registerLocal(new BashTool());
@@ -47,7 +49,7 @@ function createMockContext(): Context {
     toolRegistry: registry,
   });
   const screen = new MockScreen() as unknown as Context["screen"];
-  return new Context({ session, agentConfig, screen, toolRegistry: registry });
+  return new Context({ session, agentConfig, screen, toolRegistry: registry, customCommands });
 }
 
 // ── ClearCommand ─────────────────────────────────────────────────────────────
@@ -172,28 +174,27 @@ describe("HelpCommand", () => {
 // ── dispatchCommand ──────────────────────────────────────────────────────────
 
 describe("dispatchCommand", () => {
-  it("should return false for non-command text", async () => {
+  it("should return not-command for non-command text", async () => {
     const ctx = createMockContext();
     const result = await dispatchCommand("hola mundo", ctx);
-    expect(result).toBe(false);
+    expect(result.kind).toBe("not-command");
   });
 
-  it("should return true and dispatch /clear", async () => {
+  it("should handle and dispatch /clear", async () => {
     const ctx = createMockContext();
-    const screen = ctx.screen as unknown as MockScreen;
     ctx.session.addUserMessage("hello");
 
     const result = await dispatchCommand("/clear", ctx);
-    expect(result).toBe(true);
+    expect(result.kind).toBe("handled");
     expect(ctx.session.messages).toHaveLength(0);
   });
 
-  it("should return true and show error for unknown command", async () => {
+  it("should handle and show error for unknown command", async () => {
     const ctx = createMockContext();
     const screen = ctx.screen as unknown as MockScreen;
 
     const result = await dispatchCommand("/nonexistent", ctx);
-    expect(result).toBe(true);
+    expect(result.kind).toBe("handled");
     expect(screen.getLastLine()).toContain("no reconocido");
   });
 
@@ -201,7 +202,7 @@ describe("dispatchCommand", () => {
     const ctx = createMockContext();
 
     const result = await dispatchCommand("/rename test-session", ctx);
-    expect(result).toBe(true);
+    expect(result.kind).toBe("handled");
     expect(ctx.session.name).toBe("test-session");
   });
 
@@ -210,8 +211,41 @@ describe("dispatchCommand", () => {
     const screen = ctx.screen as unknown as MockScreen;
 
     const result = await dispatchCommand("/help", ctx);
-    expect(result).toBe(true);
+    expect(result.kind).toBe("handled");
     const output = screen.getAllLines().join("\n");
     expect(output).toContain("Comandos disponibles");
+  });
+
+  it("should expand a custom command to a prompt", async () => {
+    const custom = {
+      "/greet": {
+        name: "/greet",
+        description: "saluda",
+        body: "Saludá a $1 en $ARGUMENTS",
+        source: "project" as const,
+      },
+    };
+    const ctx = createMockContext(custom);
+
+    const result = await dispatchCommand("/greet Ana en español", ctx);
+    expect(result.kind).toBe("expand");
+    if (result.kind === "expand") {
+      expect(result.text).toBe("Saludá a Ana en Ana en español");
+    }
+  });
+
+  it("should prefer a built-in over a custom command of the same name", async () => {
+    const custom = {
+      "/clear": {
+        name: "/clear",
+        description: "custom clear",
+        body: "no debería correr",
+        source: "project" as const,
+      },
+    };
+    const ctx = createMockContext(custom);
+
+    const result = await dispatchCommand("/clear", ctx);
+    expect(result.kind).toBe("handled");
   });
 });

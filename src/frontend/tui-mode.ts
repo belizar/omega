@@ -1,4 +1,5 @@
 import { Context } from "../app-context.js";
+import { loadCustomCommands } from "../commands/custom.js";
 import { modalCommandsMap } from "../commands/index.js";
 import { CoreServices } from "../core.js";
 import { logger } from "../logger.js";
@@ -47,7 +48,10 @@ export class TuiMode implements FrontendMode {
     const toolCallText = new DisplayToolCall(screen);
     const toolResultText = new DisplayToolResult(screen);
 
-    const ctx = new Context({ session, agentConfig, screen, toolRegistry, classifier });
+    // Slash commands custom del usuario (.omega/commands/*.md, proyecto + global).
+    const customCommands = loadCustomCommands();
+
+    const ctx = new Context({ session, agentConfig, screen, toolRegistry, classifier, customCommands });
     const lineEditor = new LineEditor();
 
     // Puerto de entrada (seam). Envuelve las instancias de TUI; el core (loop)

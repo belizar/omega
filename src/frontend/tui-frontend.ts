@@ -153,7 +153,13 @@ export class TUIFrontend implements Frontend {
     input: string,
     pastedImages: PastedImage[],
   ): Promise<FrontendInput> {
-    if (await dispatchCommand(input, this.#ctx)) {
+    const outcome = await dispatchCommand(input, this.#ctx);
+    // Un comando custom expande a un prompt → se corre como un mensaje normal
+    // (pasa por todo el pipeline de turno: file-mentions, visión, historial).
+    if (outcome.kind === "expand") {
+      return { kind: "message", text: outcome.text, pastedImages: [] };
+    }
+    if (outcome.kind === "handled") {
       return { kind: "none" };
     }
     if (input === "exit") {
