@@ -9,3 +9,4 @@ trace/
 
 # settings locales de Claude Code
 .claude/settings.local.json
+interview/results/

@@ -13,6 +13,10 @@ export interface PastedImage {
  * del seam: presentación es responsabilidad del frontend, no del loop.
  */
 export interface TurnMetrics {
+  /** Modelo primario efectivo del turno (relevante para benchmarking). */
+  model: string;
+  /** Pasos del loop (turnos del runner) hasta terminar. Proxy de eficiencia. */
+  steps: number;
   contextTokens: number;
   toolCalls: number;
   inputTokens: number;

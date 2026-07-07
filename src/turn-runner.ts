@@ -91,6 +91,8 @@ export class TurnRunner {
     // El core arma las métricas en crudo; cada frontend decide cómo mostrarlas
     // (la TUI dibuja la línea `~ ctx:`; el headless las emite estructuradas).
     frontend.reportMetrics({
+      model: this.#resolvePrimaryModel(),
+      steps: run.getStepUsage().length,
       contextTokens: session.contextTokens,
       toolCalls: metrics.totalToolCalls,
       inputTokens: metrics.totalInputTokens,

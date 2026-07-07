@@ -6,6 +6,8 @@ type AgentConfigConstructorProps = {
   model: string;
   maxTokens: number;
   toolRegistry: ToolRegistry;
+  /** Temperatura de sampling. undefined = no se manda (default del proveedor). */
+  temperature?: number;
 };
 
 class AgentConfig {
@@ -13,12 +15,14 @@ class AgentConfig {
   #model: string;
   #max_tokens: number;
   #registry: ToolRegistry;
+  #temperature?: number;
 
-  constructor({ model, maxTokens, systemPrompt, toolRegistry }: AgentConfigConstructorProps) {
+  constructor({ model, maxTokens, systemPrompt, toolRegistry, temperature }: AgentConfigConstructorProps) {
     this.#systemPrompt = systemPrompt;
     this.#model = model;
     this.#max_tokens = maxTokens;
     this.#registry = toolRegistry;
+    this.#temperature = temperature;
   }
 
   /** Agrega una tool local (siempre visible para el LLM). */
@@ -45,6 +49,14 @@ class AgentConfig {
 
   get maxTokens() {
     return this.#max_tokens;
+  }
+
+  get temperature() {
+    return this.#temperature;
+  }
+
+  setTemperature(temperature: number): void {
+    this.#temperature = temperature;
   }
 
   /** Tools activas para mandar al LLM en cada request. */
