@@ -1,11 +1,16 @@
-# Diseño: la shelf — capabilities decoupleadas del agente
+# Diseño: la shelf + el belt — capabilities decoupleadas del agente
 
 > **Estado: ON HOLD.** Proyecto grande, va en otro branch. Este doc captura el
-> modelo para retomarlo.
+> modelo para retomarlo. **Actualizado 2026-07-07:** se agrega la capa **belt
+> (loadout)** — el nivel de consumo que faltaba, y la razón por la que la shelf
+> escala. Ver "El belt (loadout): la capa de consumo".
 
-> Desacoplar al agente de las tools y de *dónde viven*. El agente consulta una
-> **shelf** (estantería) de capabilities —local o remota— y agarra lo que
-> necesita on-demand, en vez de tener las tools copiadas al lado.
+> Dos capas complementarias:
+> - **Shelf** = *dónde viven* las capabilities. El agente consulta una estantería
+>   —local o remota— y agarra lo que necesita on-demand, en vez de tenerlas
+>   copiadas al lado.
+> - **Belt** = *cuáles están equipadas ahora*. De todo el inventario, el subconjunto
+>   acotado que entra en contexto esta sesión (límite = presupuesto de contexto).
 
 ## Problema
 
@@ -109,7 +114,10 @@ global para que valga en todos los worktrees:
 
 - **Catálogo (derivado, no escrito):** el registry recorre cada source por su
   discovery nativo y produce la lista plana de `{ name, description, invoker,
-  source }`. Es lo que se carga eager (barato) para el progressive disclosure.
+  source }`. Es lo que se cargaría para el progressive disclosure.
+  ⚠️ **Matiz de escala:** "cargar el catálogo entero, eager" es barato con 10
+  capabilities, NO con cientos. La respuesta es el **belt** (sección siguiente):
+  el contexto no lleva el catálogo, lleva lo equipado.
 - **Resolución perezosa + caché:** el cuerpo de cada capability se trae la primera
   vez que se usa y se cachea en `~/.omega/cache/`. Si el source remoto se cae,
   usás el caché. "Remoto" no cuesta latencia por turno ni te deja sin tools.
@@ -124,6 +132,81 @@ omega shelf list                                    # mirá los lomos
 
 Guardar el **invoker** por capability es clave: el agente **no** se auto-dispara
 los `invoker: human` (tus commands), y vos podés disparar recetas.
+
+## El belt (loadout): la capa de consumo
+
+> La shelf responde *dónde viven* las capabilities. El belt responde *cuáles
+> están equipadas ahora*. Sin esta capa, la shelf no escala: meter el catálogo
+> entero en contexto se vuelve caro y ruidoso apenas hay muchas capabilities.
+
+**La metáfora (de Benja):** un harness es como la armadura/skin de un personaje.
+No llevás *todo* tu inventario encima — tenés **slots limitados** y elegís qué
+poderes equipar para la misión. Después swappeás.
+
+- **Shelf** = la **armería**. Todo lo que poseés. Ilimitada. En disco/nube.
+- **Belt / loadout** = lo **equipado** en esta sesión. Acotado. El límite real no
+  es capricho: es el **presupuesto de contexto** (cada capability equipada paga
+  tokens en cada turno).
+
+Son **dos niveles de progressive disclosure**, no uno:
+
+1. **Shelf → Belt (equipar):** de todo el inventario, qué queda *disponible* esta
+   sesión. Acotado. Es la capa nueva.
+2. **Belt → uso (desenfundar):** dentro del belt, el cuerpo de la capability se
+   resuelve on-demand al invocarla (lo que ya hace `resolve()` / la tool `skill`).
+
+**Insight clave:** el belt NO es un sistema nuevo. Es ponerle **presupuesto +
+expulsión** al disclosure que ya existe (`tool_search` + `skill`). Hoy esas tools
+descubren y cargan; les falta un límite de slots y *desequipar* lo que no se usa.
+
+### Ejes de diseño (trade-offs)
+
+**Quién equipa** (el invoker del *equip*, distinto del invoker de la capability):
+
+| Modo | A favor | En contra |
+|---|---|---|
+| **Humano cura** (build de RPG) | Control total, costo predecible, ideal para evals | Rígido: si no equipaste lo necesario, el agente se traba |
+| **Humano + agente pide swap** | Balance control/flexibilidad | Requiere protocolo "me falta X" (más piezas) |
+| **Agente auto-swap** | Máxima autonomía | Costo por turno impredecible; riesgo de *thrashing* |
+
+**Modelo de slots:**
+
+| Modo | A favor | En contra |
+|---|---|---|
+| **Lista curada** (límite = budget de tokens) | Flexible, sin número mágico | El límite es invisible hasta reventar el contexto |
+| **Slots duros (N)** | Forcing-function: hace el costo tangible | Arbitrario; molesto si N queda corto |
+| **Híbrido** (budget + aviso) | Límite real y visible pero blando | Más para construir (estimar costo, avisar) |
+
+### Relación con profiles (no es concepto nuevo suelto)
+
+Omega ya tiene `AgentProfile` (hoy ≈ modelo + settings, con `/profile`). El belt
+es el candidato natural a vivir *dentro* de un profile extendido:
+
+> **profile = build = modelo + belt + settings.**
+
+Se reusa `/profile list|<nombre>` y el merge global/proyecto que ya existe. Un
+`activateProfile` equipa el belt de ese build.
+
+### Conexión con las evals (Omega Interviews)
+
+Un belt **es** una configuración de harness → un **candidato**. Distintos belts
+son distintos builds que se pueden A/B testear con el harness de entrevistas. Para
+Medra: roles distintos → belts curados y aprobados (governance vía el proxy de
+registry). El "harness como armadura", literal y medible.
+
+### Cuándo construirlo (honestidad YAGNI)
+
+El valor del belt es **proporcional a `inventario × cambios de contexto`**. Hoy
+Omega tiene ~8 tools esenciales + un puñado de skills que ya cargan barato → **no
+hay nada que curar todavía**. Construir la armería antes de tener armas es
+prematuro (por eso toda esta shelf está on-hold).
+
+- **Trigger para construirlo:** escala Medra — decenas de skills/MCPs y varios
+  roles, donde "todo siempre on" se vuelve caro *y* distrae al agente.
+- **Beneficio que sí aplica hoy:** equipar no es solo tokens, también es **foco**.
+  "Para esta tarea, solo estas 2 skills activas" mantiene al agente enfocado a
+  cualquier escala. Esa es la **semilla barata**: un belt mínimo por profile
+  (lista de skills/tools activas), forward-compatible con la shelf completa.
 
 ## Nube / governance: el proxy de registry
 
@@ -140,9 +223,26 @@ nombre de UX.
 
 ## Roadmap
 
+**Ya shipeado (fuera de la shelf, leyendo `.omega/` directo):** slash commands
+custom (#86), menú `/` de descubrimiento (#87), skills model-invoked (#88). Son
+las *recetas* del modelo — la shelf después las va a normalizar al `Capability`
+interno vía adapters, sin reescribir su UX.
+
+**Shelf (sourcing / storage):**
+
 1. Modelo interno `Capability` + `McpAdapter` (mover el MCP actual acá) +
    `shelf.json` global mergeado con proyecto → **mata el dolor del worktree.**
-2. `SkillAdapter` (`SKILL.md` + `x-omega-*`) — adopta el formato portable.
+2. `SkillAdapter` (`SKILL.md` + `x-omega-*`) — envolver las skills de #88 en el
+   modelo `Capability` (adoptar el formato portable formalmente).
 3. `MarketplaceAdapter` (`marketplace.json`, repo git remoto) + `omega shelf add`.
 4. Catálogo derivado + resolución perezosa con caché.
 5. `OmegaNativeAdapter` (escape hatch) + proxy de registry (nube).
+
+**Belt (consumo / equip) — se apoya en la shelf pero puede empezar antes:**
+
+6. **Semilla:** belt mínimo por profile — lista de skills/tools activas
+   (equip/unequip). Útil hoy por foco; no necesita la shelf completa.
+7. **Belt completo:** presupuesto de slots + expulsión sobre el disclosure
+   (`tool_search`/`skill`). Elegir ejes (quién equipa, modelo de slots) recién
+   acá, con el problema real enfrente.
+8. Belt como candidato en Omega Interviews: A/B de builds.
