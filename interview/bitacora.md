@@ -128,5 +128,21 @@ el resultado de una corrida, es *qué aprendimos y qué decidimos*. Append-only.
   inicial → el agente no gasta pasos leyéndolos para orientarse → mediana baja.
 - **Setup:** flash, k=30, feat-mode. Baseline = `k30-clean` (mediana 9).
   Variante = build con `loadWorkdirFiles()` (capeado: top-level, <2KB, ≤8 files).
+- **Resultado:** baseline pass 28/30, medSteps=9, medTokIn=43.486. Primed pass
+  **30/30**, medSteps=**7**, medTokIn=**33.184**. Δ pasos −2, Δ tokens-in **−24%**,
+  fails 2→0. Distribución de pasos claramente corrida hacia abajo.
+- **Conclusión: CONTROL POSITIVO ✓ — el instrumento detecta efectos reales.** Lo
+  que ni el nudge ni temp lograron. Confirma que la herramienta sirve. **Lección
+  de método:** tokens-in es mejor métrica que la mediana de pasos (continua vs
+  discreta; el Δ de tokens es inequívoco, el de pasos roza el ruido). **PERO** el
+  cambio NO es shippeable (crítica de Benja: inyectar archivos no escala a un
+  monorepo). Sirvió solo de control positivo. La versión escalable de "orientar
+  al agente" es AGENT.md → EXP-10. loadWorkdirFiles se revierte.
+
+### EXP-10 · AGENT.md vs sin AGENT.md (la versión escalable, en curso)
+- **Hipótesis:** un AGENT.md curado (qué es el repo, estructura, cómo agregar un
+  stat) orienta al agente igual que el priming, pero **escala** (tamaño fijo,
+  sirve en un monorepo). Pregunta real para Medra: ¿cuánto rinde un buen AGENT.md?
+- **Setup:** flash, k=30, feat-mode. Build SIN loadWorkdirFiles (revertido).
+  Baseline = `k30-clean` (sin AGENT.md). Variante = repo + AGENT.md.
 - **Resultado:** _(pendiente)_
-- **Conclusión:** _(pendiente)_

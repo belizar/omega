@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync, statSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { execSync } from "child_process";
 import { ResolvedConfig } from "./config.js";
 import { loadMcpConfig } from "./mcp/client.js";
@@ -113,47 +113,6 @@ function loadDocsContext(docsDir: string | null): string {
 }
 
 /**
- * [EXPERIMENTAL — EXP-9] Prima el contexto con el contenido de los archivos de
- * código chicos del cwd, para que el agente no gaste pasos leyéndolos para
- * orientarse. Capeado fuerte: solo top-level, extensiones de código, archivos
- * < 2KB, hasta 8 archivos / 12KB total (en un repo grande no dumpea nada).
- */
-function loadWorkdirFiles(): string {
-  const CODE = /\.(mjs|js|ts|jsx|tsx|py|go|rs|java|rb|json)$/;
-  const MAX_FILE = 2048;
-  const MAX_TOTAL = 12288;
-  const MAX_N = 8;
-  let entries: string[];
-  try {
-    entries = readdirSync(".");
-  } catch {
-    return "";
-  }
-  const files: { name: string; content: string }[] = [];
-  let total = 0;
-  for (const name of entries.sort()) {
-    if (!CODE.test(name)) continue;
-    let st;
-    try {
-      st = statSync(name);
-    } catch {
-      continue;
-    }
-    if (!st.isFile() || st.size > MAX_FILE) continue;
-    const content = readFileSync(name, "utf-8");
-    if (total + content.length > MAX_TOTAL) break;
-    files.push({ name, content });
-    total += content.length;
-    if (files.length >= MAX_N) break;
-  }
-  if (files.length === 0) return "";
-  const blocks = files
-    .map((f) => `### ${f.name}\n\`\`\`\n${f.content}\n\`\`\``)
-    .join("\n\n");
-  return `\n\n## Archivos del proyecto (ya cargados — no hace falta que los leas)\n\n${blocks}`;
-}
-
-/**
  * Ensambla el system prompt completo: el base + los contextos dinámicos
  * (proyecto, MCP, cabinet, docs). Se arma una vez al construir el core.
  */
@@ -161,7 +120,6 @@ export function buildSystemPrompt(config: ResolvedConfig): string {
   return (
     SYSTEM_PROMPT +
     loadProjectContext() +
-    loadWorkdirFiles() +
     loadMcpContext() +
     buildCabinetContext() +
     loadDocsContext(config.docsDir)
