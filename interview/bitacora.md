@@ -108,6 +108,16 @@ el resultado de una corrida, es *qué aprendimos y qué decidimos*. Append-only.
   se contaminó; el dato de feat-mode en EXP-1..6 queda como sospechoso.
 
 ### EXP-8 · k=30 en feat-mode, con aislación blindada (re-run)
-- **Setup:** flash, k=30, feat-mode, snapshot pristino.
-- **Resultado:** _(pendiente)_
-- **Conclusión:** _(pendiente)_
+- **Setup:** flash, k=30, feat-mode, snapshot pristino. Chequeo de integridad: OK
+  (source intacto → fix confirmado).
+- **Resultado:** 30 corridas: 28 pass, 2 fail, 0 timeout. Pasos (pass) mediana=9,
+  spread mayormente 8-13. Subgrupos de 5 → medianas 10/9/9/10/11 (rango 9-11).
+- **Conclusión (dos):**
+  1. **k=30 SÍ es más medible.** A k=5 la mediana bailaba 9-11 (±1-2); a k=30 es
+     un 9 estable. Un cambio de harness necesita mover la mediana >~2 pasos para
+     verse a k=5; a k=30 se detectan shifts más chicos. (Instinto de Benja: ✓.)
+  2. **La varianza "enorme" de antes estaba INFLADA por la contaminación.** feat-mode
+     limpio es ~9 pasos, tight (8-13), 0 timeouts — NO el 6/17/timeout ni el 4-6
+     del run sucio. El instrumento es más usable de lo que parecía; el piso de
+     ruido real es más chico. La aislación no solo limpió el dato: reveló que el
+     ruido que nos asustó era en parte un artefacto del leak.
