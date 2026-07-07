@@ -121,3 +121,12 @@ el resultado de una corrida, es *qué aprendimos y qué decidimos*. Append-only.
      del run sucio. El instrumento es más usable de lo que parecía; el piso de
      ruido real es más chico. La aislación no solo limpió el dato: reveló que el
      ruido que nos asustó era en parte un artefacto del leak.
+
+### EXP-9 · Cambio de EFECTO GRANDE — primar el contexto con los archivos (control positivo)
+- **Hipótesis:** un cambio grande SÍ se detecta (control positivo del instrumento).
+  Inyectar el contenido de los archivos de código chicos del cwd en el contexto
+  inicial → el agente no gasta pasos leyéndolos para orientarse → mediana baja.
+- **Setup:** flash, k=30, feat-mode. Baseline = `k30-clean` (mediana 9).
+  Variante = build con `loadWorkdirFiles()` (capeado: top-level, <2KB, ≤8 files).
+- **Resultado:** _(pendiente)_
+- **Conclusión:** _(pendiente)_
