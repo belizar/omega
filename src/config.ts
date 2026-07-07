@@ -50,6 +50,11 @@ interface ResolvedConfig {
   visionMaxTokens: number;
   /** Directorio de deliverables para el humano (o null si no se configuró). */
   docsDir: string | null;
+  /** Sandbox opcional: corre el bash del agente dentro de un contenedor Docker
+   *  (con el cwd montado) en vez del host. OFF por default — es para contextos
+   *  NO atendidos (benchmark, nube) donde no hay humano que apruebe. En la TUI
+   *  local se usan permisos, no aislación. Env: OMEGA_SANDBOX, OMEGA_SANDBOX_IMAGE. */
+  sandbox: { enabled: boolean; image: string };
 }
 
 // ── Defaults ─────────────────────────────────────────────────────────────────
@@ -192,6 +197,10 @@ function resolveProfile(
     visionModel: effectiveVisionModel,
     visionMaxTokens,
     docsDir: expandHome(config.docsDir),
+    sandbox: {
+      enabled: process.env.OMEGA_SANDBOX === "1" || process.env.OMEGA_SANDBOX === "true",
+      image: process.env.OMEGA_SANDBOX_IMAGE || "node:22-slim",
+    },
   };
 }
 

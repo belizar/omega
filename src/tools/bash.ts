@@ -17,6 +17,9 @@ export type BashToolOptions = {
   classifier?: CommandClassifier;
   /** Timeout por defecto (ms) cuando el comando no especifica `timeout`. */
   defaultTimeoutMs?: number;
+  /** Sandbox opcional: corre el comando dentro de un contenedor Docker con el
+   *  cwd montado, en vez del host. Para contextos no atendidos (benchmark, nube). */
+  sandbox?: { enabled: boolean; image: string };
 };
 
 const DEFAULT_TIMEOUT_MS = 120_000; // fallback si el constructor no pasa uno
@@ -83,6 +86,7 @@ const SAFE_PATTERNS = [
 export class BashTool extends Tool<BashInput, string> {
   #classifier?: CommandClassifier;
   #defaultTimeoutMs: number;
+  #sandbox?: { enabled: boolean; image: string };
 
   constructor(options?: BashToolOptions) {
     super({
@@ -117,6 +121,29 @@ export class BashTool extends Tool<BashInput, string> {
     });
     this.#classifier = options?.classifier;
     this.#defaultTimeoutMs = options?.defaultTimeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.#sandbox = options?.sandbox;
+  }
+
+  /**
+   * El comando a ejecutar en el host shell. Con sandbox off es el comando tal
+   * cual. Con sandbox on, lo envuelve en un `docker run` con el cwd montado en
+   * /workspace → el bash del agente queda confinado al cwd (no puede tocar el
+   * resto del filesystem del host). `--user` para que los archivos creados sean
+   * del usuario del host (no root). Sin cwd persistente: cada comando es un
+   * contenedor efímero; los cambios de archivos persisten (están en el volumen),
+   * el estado no-file (env, cd, procesos) no — aceptable para comandos de coding.
+   */
+  #wrapCommand(command: string): string {
+    if (!this.#sandbox?.enabled) return command;
+    const cwd = process.cwd();
+    const uid = process.getuid?.() ?? 0;
+    const gid = process.getgid?.() ?? 0;
+    const quoted = `'${command.replace(/'/g, `'\\''`)}'`;
+    return (
+      `docker run --rm --user ${uid}:${gid} ` +
+      `-v ${JSON.stringify(cwd)}:/workspace -w /workspace ` +
+      `${this.#sandbox.image} sh -c ${quoted}`
+    );
   }
 
   async execute(
@@ -207,7 +234,7 @@ export class BashTool extends Tool<BashInput, string> {
         // lo referencia para removerse; por eso lo declaramos acá.
         let onAbort = () => {};
 
-        const child = exec(command, {
+        const child = exec(this.#wrapCommand(command), {
           encoding: "buffer" as BufferEncoding,
           timeout: timeoutMs,
           maxBuffer: MAX_BUFFER,

@@ -79,6 +79,7 @@ export async function buildCore(): Promise<CoreServices> {
   const bashTool = new BashTool({
     classifier,
     defaultTimeoutMs: config.bashTimeoutMs,
+    sandbox: config.sandbox,
   });
 
   const toolRegistry = new ToolRegistry(logger);
