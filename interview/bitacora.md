@@ -139,10 +139,19 @@ el resultado de una corrida, es *qué aprendimos y qué decidimos*. Append-only.
   monorepo). Sirvió solo de control positivo. La versión escalable de "orientar
   al agente" es AGENT.md → EXP-10. loadWorkdirFiles se revierte.
 
-### EXP-10 · AGENT.md vs sin AGENT.md (la versión escalable, en curso)
-- **Hipótesis:** un AGENT.md curado (qué es el repo, estructura, cómo agregar un
-  stat) orienta al agente igual que el priming, pero **escala** (tamaño fijo,
-  sirve en un monorepo). Pregunta real para Medra: ¿cuánto rinde un buen AGENT.md?
-- **Setup:** flash, k=30, feat-mode. Build SIN loadWorkdirFiles (revertido).
-  Baseline = `k30-clean` (sin AGENT.md). Variante = repo + AGENT.md.
-- **Resultado:** _(pendiente)_
+### EXP-10 · AGENT.md vs sin AGENT.md (la versión escalable)
+- **Hipótesis:** un AGENT.md curado orienta al agente igual que el priming, pero
+  escala. ¿Cuánto rinde para Medra?
+- **Setup:** flash, k=30, feat-mode. Baseline `k30-clean` (sin AGENT.md, 9 pasos).
+- **Resultado:** con AGENT.md: pass 30/30, medSteps=**10** (+1), medTokIn=**45.954**
+  (+6%). Plano, quizás levemente peor. Contra el file-injection (−24% tokens) es
+  nada.
+- **Conclusión: AGENT.md NO ayudó en esta task — pero la task es DEMASIADO CHICA
+  para testearlo con justicia.** omega maneja AGENT.md como "avisá que existe +
+  sugerí leerlo" → el agente lee AGENT.md Y el código igual (suma una lectura). El
+  mecanismo que ayudó (EXP-9) era tener el CÓDIGO en contexto, no la orientación.
+  En un repo de 4 archivos no hay navegación que ahorrar → AGENT.md no tiene dónde
+  rendir. **Meta-lección: para medir cambios relevantes al monorepo de Medra
+  necesitamos questions a escala real (repos grandes), no toys.** El instrumento
+  es confiable (EXP-9 lo validó); el "plano" es señal real. AGENT.md se saca de
+  feat-mode (era artefacto del experimento).
