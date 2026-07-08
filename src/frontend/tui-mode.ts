@@ -44,7 +44,10 @@ export class TuiMode implements FrontendMode {
 
     const screen = new Screen(config.screenPadding);
     const spinner = new Spinner(screen);
-    const assistantText = new DisplayAssistantText(screen, new AnsiRenderer());
+    // El renderer capea las tablas al mismo ancho al que printAbove re-envuelve
+    // (paddingRight + indent), si no las tablas anchas se re-parten y se rompen.
+    // indent de Screen = 2 (su default; ver el constructor de Screen).
+    const assistantText = new DisplayAssistantText(screen, new AnsiRenderer(config.screenPadding + 2));
     const toolCallText = new DisplayToolCall(screen);
     const toolResultText = new DisplayToolResult(screen);
 
