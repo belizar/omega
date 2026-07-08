@@ -39,7 +39,7 @@ export class TuiMode implements FrontendMode {
       profile: session.profile,
       model: config.model,
       visionModel: config.visionModel,
-      toolCount: 8, // read, write, edit, bash, grep, outline, tool_search, ask_user
+      toolCount: 9, // read, write, edit, bash, grep, outline, tool_search, ask_user, web_fetch
     });
 
     const screen = new Screen(config.screenPadding);

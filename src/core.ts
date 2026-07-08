@@ -18,6 +18,7 @@ import { OutlineTool } from "./tools/outline.js";
 import { ReadTool } from "./tools/read.js";
 import { ToolRegistry } from "./tools/tool-registry.js";
 import { ToolSearchTool } from "./tools/tool-search.js";
+import { WebFetchTool } from "./tools/web-fetch.js";
 import { WriteTool } from "./tools/write.js";
 import { cleanOldVisionTemps, VisionAskTool } from "./tools/vision-ask.js";
 import { loadMcpConfig } from "./mcp/client.js";
@@ -109,6 +110,7 @@ export async function buildCore(): Promise<CoreServices> {
     .registerLocal(new ReadTool(config.outlineThreshold))
     .registerLocal(new EditTool())
     .registerLocal(new WriteTool())
+    .registerLocal(new WebFetchTool())
     // Servidores MCP desde .omega/mcp.json (carga lazy: no conectan hasta que se buscan)
     .configureMcp(loadMcpConfig(".omega"));
 
