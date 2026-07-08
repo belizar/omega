@@ -3,7 +3,9 @@
 > **Estado: ON HOLD.** Proyecto grande, va en otro branch. Este doc captura el
 > modelo para retomarlo. **Actualizado 2026-07-07:** se agrega la capa **belt
 > (loadout)** — el nivel de consumo que faltaba, y la razón por la que la shelf
-> escala. Ver "El belt (loadout): la capa de consumo".
+> escala. Ver "El belt (loadout): la capa de consumo". **2026-07-08:** la
+> unificación **skills-as-tools** — un solo riel de disclosure, con la regla
+> "tool del LLM ⟺ invoker incluye al modelo". Ver "Skills como tools".
 
 > Dos capas complementarias:
 > - **Shelf** = *dónde viven* las capabilities. El agente consulta una estantería
@@ -207,6 +209,56 @@ prematuro (por eso toda esta shelf está on-hold).
   "Para esta tarea, solo estas 2 skills activas" mantiene al agente enfocado a
   cualquier escala. Esa es la **semilla barata**: un belt mínimo por profile
   (lista de skills/tools activas), forward-compatible con la shelf completa.
+
+## Skills como tools: un solo riel de disclosure
+
+> La observación (Benja, 2026-07-08): una skill no *necesita* vivir en el system
+> prompt — puede modelarse como una **tool**, y así hereda el riel de disclosure
+> que ya existe (`tool_search`), sin catálogo aparte.
+
+Omega ya tiene progressive disclosure para tools: las MCP no están en el prompt,
+se descubren con `tool_search` y recién ahí quedan callable. Si una skill es una
+tool, hereda eso gratis: **no hay catálogo en el system prompt, no hay meta-tool
+`skill` aparte** — se descubre con `tool_search`, se registra, y el modelo la
+llama directo. (Al invocarla devuelve su receta/body; si compone tools, las
+activa.)
+
+**La regla de exposición** (resuelve la fricción "¿todo es una tool?"):
+
+> Una capability se expone como **tool del LLM ⟺ su invoker incluye al modelo.**
+
+- **Skill** (invoker = modelo) → sí, es una tool. Natural.
+- **Slash command** (invoker = humano) → NO es una tool del LLM (si lo fuera, el
+  modelo podría dispararse `/clear` o `/model` solo). Se queda en el dispatch de
+  comandos del humano.
+- Receta con invoker = **ambos** → tool *y* command. Mismo texto, dos canales.
+
+Esto **colapsa skills, tools y MCP en un riel**, con la perilla del belt como los
+dos extremos:
+
+| | Cómo entra | Costo parado | Disparo |
+|---|---|---|---|
+| **Belt** (equipado) | en la lista activa de tools | sí (eager) | confiable |
+| **Shelf** (inventario) | vía `tool_search` | cero (lazy) | el modelo tiene que *acordarse de buscar* |
+
+Las skills de #88 (catálogo en el system prompt + meta-tool `skill`) son **un
+punto** en este espacio: el extremo "eager". Modelarlas como tools las mueve al
+riel de `tool_search`. El diseño correcto es tener ambos extremos de la misma
+perilla, no dos sistemas.
+
+**Conexión con EXP-11 (bitácora de interviews):** el +37% de tokens-in que medimos
+era el costo del extremo eager (catálogo parado + round-trip de la meta-tool). El
+riel `tool_search` borra el catálogo parado — pero introduce el riesgo de disparo
+lazy (una skill que el modelo no piensa buscar, no se usa). Ese es el trade-off
+real, y el belt es la perilla entre confiable-y-caro vs barato-y-podés-perdértela.
+
+**Cuándo (honestidad YAGNI):** NO construir esto todavía. EXP-11 midió el *costo*
+de una skill, no su *beneficio* — no hay aún una sola prueba de que una skill
+ayude. Diseñar el riel de entrega perfecto antes de validar que las capabilities
+rinden es el carro delante del caballo. Primero: un experimento con headroom
+(trampa que el modelo falle, o navegación en repo grande) que muestre beneficio.
+Después, el mecanismo de entrega vale la pena optimizar. La arquitectura sigue a
+la necesidad validada.
 
 ## Nube / governance: el proxy de registry
 
