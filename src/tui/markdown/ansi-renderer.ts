@@ -84,6 +84,17 @@ function wrapToWidth(s: string, w: number): string[] {
  * Traduce markdown a secuencias ANSI para renderizado en terminal.
  */
 class AnsiRenderer implements MarkdownRenderer {
+  /** Columnas que Screen.printAbove le come al ancho del terminal antes de
+   *  imprimir: paddingRight + indent. La tabla DEBE capear a `columns - reserved`
+   *  —el mismo ancho al que printAbove re-envuelve— o sus líneas se pasan, se
+   *  re-parten, y la cola cae afuera del borde. Default 4 para callers que no lo
+   *  sepan (no-TUI); la TUI pasa el valor real (screenPadding + indent). */
+  #reserved: number;
+
+  constructor(reserved: number = 4) {
+    this.#reserved = reserved;
+  }
+
   text(text: string): string {
     return text;
   }
@@ -142,10 +153,11 @@ class AnsiRenderer implements MarkdownRenderer {
 
     // 2. Capear al ancho del terminal. Overhead de bordes: "│ " + " │" por
     //    columna = 3 por col, + 1 del "│" final.
-    //    Margen de 4: printAbove agrega indent (2) + padding y re-envuelve a
-    //    `columns - indent - padding`; si la tabla se pasa de eso, el word-wrap
-    //    parte las filas y escupe la cola afuera del borde. Dejamos aire.
-    const termWidth = (stdout.columns ?? columns ?? 80) - 4;
+    //    #reserved = lo que printAbove le come al ancho (paddingRight + indent).
+    //    La tabla capea a `columns - reserved` = el MISMO ancho al que printAbove
+    //    re-envuelve; si no, sus líneas se pasan, printAbove las re-parte y la
+    //    cola cae afuera del borde (tablas rotas).
+    const termWidth = (stdout.columns ?? columns ?? 80) - this.#reserved;
     const overhead = cols * 3 + 1;
     const widths = [...natural];
     const MIN_COL = 6;
