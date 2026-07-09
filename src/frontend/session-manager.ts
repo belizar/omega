@@ -24,15 +24,20 @@ export interface SessionInfo {
   title: string;
   cwd: string;
   isolated: boolean;
+  branch?: string;
   clients: number;
   live: true;
 }
 
 export interface CreateSessionOpts {
-  /** Título legible (default: prefijo del id). */
+  /** Título legible (default: la branch, o prefijo del id). */
   title?: string;
   /** Si true, la sesión corre en un git worktree dedicado (aislamiento real). */
   worktree?: boolean;
+  /** Nombre de la branch del worktree (default: omega/<idcorto>). */
+  branch?: string;
+  /** Branch base de la que se crea (default: config.worktree.baseBranch, o HEAD). */
+  base?: string;
 }
 
 /**
@@ -82,7 +87,10 @@ export class SessionManager {
     const workspace = await createWorkspace({
       baseDir: this.#baseDir,
       sessionId: session.id,
-      worktree: opts.worktree,
+      isolate: opts.worktree,
+      branch: opts.branch,
+      base: opts.base,
+      config: config.worktree,
     });
 
     // Stack de tools enraizado en el workspace de ESTA sesión.
@@ -110,7 +118,7 @@ export class SessionManager {
 
     const handle: SessionHandle = {
       id: session.id,
-      title: opts.title?.trim() || session.id.slice(0, 8),
+      title: opts.title?.trim() || workspace.branch || session.id.slice(0, 8),
       frontend,
       workspace,
       session,
@@ -145,6 +153,7 @@ export class SessionManager {
       title: h.title,
       cwd: h.workspace.cwd,
       isolated: h.workspace.isolated,
+      branch: h.workspace.branch,
       clients: h.frontend.clientCount,
       live: true,
     }));

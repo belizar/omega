@@ -21,6 +21,13 @@ export class ConfigFactory {
       visionModel: overrides?.visionModel ?? null,
       visionMaxTokens: overrides?.visionMaxTokens ?? 512,
       docsDir: overrides?.docsDir ?? null,
+      worktree: overrides?.worktree ?? {
+        dir: ".omega/worktrees",
+        baseBranch: "",
+        copy: [],
+        command: "",
+        removeCommand: "",
+      },
       sandbox: overrides?.sandbox ?? { enabled: false, image: "node:22-slim" },
     };
   }

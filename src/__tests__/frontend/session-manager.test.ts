@@ -41,6 +41,7 @@ function fakeBase(): CoreServices {
     maxContextTokens: 100_000,
     screenPadding: 6,
     classifierMode: "off",
+    worktree: { dir: ".omega/worktrees", baseBranch: "", copy: [], command: "", removeCommand: "" },
   } as unknown as CoreServices["config"];
 
   return {

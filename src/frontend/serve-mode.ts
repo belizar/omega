@@ -98,23 +98,33 @@ export class ServeMode implements FrontendMode {
     // ── Sesiones: crear ─────────────────────────────────────────────
     if (method === "POST" && path === "/sessions") {
       const body = await this.#readBody(req);
-      let opts: { title?: string; worktree?: boolean } = {};
+      let opts: { title?: string; worktree?: boolean; branch?: string; base?: string } = {};
       try {
-        const parsedBody = JSON.parse(body || "{}");
+        const b = JSON.parse(body || "{}");
         opts = {
-          title: typeof parsedBody.title === "string" ? parsedBody.title : undefined,
-          worktree: parsedBody.worktree === true,
+          title: typeof b.title === "string" ? b.title : undefined,
+          worktree: b.worktree === true,
+          branch: typeof b.branch === "string" && b.branch.trim() ? b.branch.trim() : undefined,
+          base: typeof b.base === "string" && b.base.trim() ? b.base.trim() : undefined,
         };
       } catch {
         res.writeHead(400).end();
         return;
       }
-      const handle = await manager.create(opts);
+      let handle;
+      try {
+        handle = await manager.create(opts);
+      } catch (err) {
+        // Ej: la branch ya tiene un worktree, o el path ya existe.
+        this.#json(res, 409, { error: err instanceof Error ? err.message : String(err) });
+        return;
+      }
       this.#json(res, 201, {
         id: handle.id,
         title: handle.title,
         cwd: handle.workspace.cwd,
         isolated: handle.workspace.isolated,
+        branch: handle.workspace.branch,
       });
       return;
     }

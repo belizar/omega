@@ -17,6 +17,25 @@ interface AgentProfile {
   classifier?: { model?: string; maxTokens?: number; learn?: boolean };
 }
 
+/** Config de cómo se crea el workspace (worktree) de una sesión aislada. */
+interface WorktreeConfig {
+  /** Base dir donde se crean los worktrees (relativo al cwd del server).
+   *  Default: ".omega/worktrees". El path final es <dir>/<branch>. */
+  dir?: string;
+  /** Branch base de la que se crea el worktree (default: "" = HEAD actual). */
+  baseBranch?: string;
+  /** Archivos/dirs (relativos al cwd del server) copiados a cada worktree nuevo.
+   *  Ej: [".env", ".env.local"]. Sin esto, el checkout de un repo con config por
+   *  proyecto (secretos, settings) nace inutilizable para el agente. */
+  copy?: string[];
+  /** Escape hatch: si se setea, se corre este comando en vez del git worktree
+   *  built-in. Recibe OMEGA_WORKTREE_{PATH,BRANCH,BASE} por env y debe dejar el
+   *  worktree en $OMEGA_WORKTREE_PATH. Ej: un wrapper de tu tree.sh. */
+  command?: string;
+  /** Limpieza (default: git worktree remove --force). Recibe las mismas env. */
+  removeCommand?: string;
+}
+
 interface OmegaConfig {
   /** Perfil activo por defecto. */
   defaultProfile: string;
@@ -26,6 +45,17 @@ interface OmegaConfig {
    *  reviews, summaries, HTMLs). Distinto de la memoria del agente (cabinet).
    *  Ej: tu vault de Obsidian. Soporta `~`. */
   docsDir?: string;
+  /** Config de worktrees para sesiones aisladas (server multi-sesión). */
+  worktree?: WorktreeConfig;
+}
+
+/** WorktreeConfig con los defaults ya resueltos (lo que ve el runtime). */
+export interface ResolvedWorktreeConfig {
+  dir: string;
+  baseBranch: string;
+  copy: string[];
+  command: string;
+  removeCommand: string;
 }
 
 interface ResolvedConfig {
@@ -50,6 +80,8 @@ interface ResolvedConfig {
   visionMaxTokens: number;
   /** Directorio de deliverables para el humano (o null si no se configuró). */
   docsDir: string | null;
+  /** Config de worktrees para sesiones aisladas (server multi-sesión). */
+  worktree: ResolvedWorktreeConfig;
   /** Sandbox opcional: corre el bash del agente dentro de un contenedor Docker
    *  (con el cwd montado) en vez del host. OFF por default — es para contextos
    *  NO atendidos (benchmark, nube) donde no hay humano que apruebe. En la TUI
@@ -103,6 +135,9 @@ export function loadOmegaConfig(): OmegaConfig {
   if (global) {
     if (typeof global.defaultProfile === "string") merged.defaultProfile = global.defaultProfile;
     if (typeof global.docsDir === "string") merged.docsDir = global.docsDir;
+    if (global.worktree && typeof global.worktree === "object") {
+      merged.worktree = { ...merged.worktree, ...(global.worktree as WorktreeConfig) };
+    }
     if (global.profiles && typeof global.profiles === "object") {
       for (const [name, p] of Object.entries(global.profiles as Record<string, unknown>)) {
         merged.profiles[name] = { ...merged.profiles[name], ...(p as AgentProfile) };
@@ -115,6 +150,9 @@ export function loadOmegaConfig(): OmegaConfig {
   if (project) {
     if (typeof project.defaultProfile === "string") merged.defaultProfile = project.defaultProfile;
     if (typeof project.docsDir === "string") merged.docsDir = project.docsDir;
+    if (project.worktree && typeof project.worktree === "object") {
+      merged.worktree = { ...merged.worktree, ...(project.worktree as WorktreeConfig) };
+    }
     if (project.profiles && typeof project.profiles === "object") {
       for (const [name, p] of Object.entries(project.profiles as Record<string, unknown>)) {
         merged.profiles[name] = { ...merged.profiles[name], ...(p as AgentProfile) };
@@ -200,6 +238,13 @@ function resolveProfile(
     visionModel: effectiveVisionModel,
     visionMaxTokens,
     docsDir: expandHome(config.docsDir),
+    worktree: {
+      dir: config.worktree?.dir ?? ".omega/worktrees",
+      baseBranch: config.worktree?.baseBranch ?? "",
+      copy: config.worktree?.copy ?? [],
+      command: config.worktree?.command ?? "",
+      removeCommand: config.worktree?.removeCommand ?? "",
+    },
     sandbox: {
       enabled: process.env.OMEGA_SANDBOX === "1" || process.env.OMEGA_SANDBOX === "true",
       image: process.env.OMEGA_SANDBOX_IMAGE || "node:22-slim",
