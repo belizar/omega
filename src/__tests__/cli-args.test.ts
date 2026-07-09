@@ -9,6 +9,8 @@ describe("parseCliArgs", () => {
       format: "json",
       model: null,
       temp: null,
+      serve: false,
+      port: 4477,
     });
   });
 
@@ -19,6 +21,8 @@ describe("parseCliArgs", () => {
       format: "json",
       model: null,
       temp: null,
+      serve: false,
+      port: 4477,
     });
   });
 
@@ -26,6 +30,14 @@ describe("parseCliArgs", () => {
     expect(parseCliArgs(["-p", "x", "--temp", "0"]).temp).toBe(0);
     expect(parseCliArgs(["-p", "x", "--temp", "0.7"]).temp).toBe(0.7);
     expect(parseCliArgs(["-p", "x"]).temp).toBeNull();
+  });
+
+  it("--serve activa el frontend web (puerto default 4477)", () => {
+    expect(parseCliArgs(["--serve"])).toMatchObject({ serve: true, port: 4477, headless: false });
+  });
+
+  it("--port cambia el puerto", () => {
+    expect(parseCliArgs(["--serve", "--port", "8080"]).port).toBe(8080);
   });
 
   it("--model setea el override de modelo", () => {

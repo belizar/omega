@@ -30,6 +30,14 @@ npm run dev
 
 Escribí tus tareas en lenguaje natural. Omega va a explorar el proyecto, editar archivos y ejecutar comandos para resolverlas.
 
+### Frontends
+
+Omega es un core con **puerto de frontend** — el mismo motor, distintas cabezas:
+
+- **TUI** (default): `omega` — la terminal interactiva.
+- **Headless**: `omega -p "tarea"` — one-shot, NDJSON. Para benchmarks y automatización.
+- **Web**: `omega --serve [--port 4477]` — hostea el core tras un server HTTP y lo manejás desde el browser (`http://localhost:4477`). SSE para el stream de eventos + POST para el input, cero dependencias. Es un **hub por sesión**: varios browsers pueden mirar (broadcast) y mandar (cola mergeada). Atado a `127.0.0.1` — un agente que corre bash no se expone a la red.
+
 ### Comandos slash
 
 Al tipear `/` aparece un menú en vivo con todos los comandos disponibles

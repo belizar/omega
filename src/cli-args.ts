@@ -13,6 +13,11 @@ export interface CliArgs {
   /** Temperatura de sampling (`--temp`). Null = no se manda (default del
    *  proveedor). Bajarla reduce la varianza corrida-a-corrida en interviews. */
   temp: number | null;
+  /** true si se pidió el frontend web (`--serve`): hostea el core tras un
+   *  server HTTP y se maneja desde el browser. */
+  serve: boolean;
+  /** Puerto del server web (`--port`). Default 4477. */
+  port: number;
 }
 
 /**
@@ -31,9 +36,20 @@ export function parseCliArgs(argv: string[]): CliArgs {
   let format: HeadlessFormat = "json";
   let model: string | null = null;
   let temp: number | null = null;
+  let serve = false;
+  let port = 4477;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
+    if (arg === "--serve") {
+      serve = true;
+      continue;
+    }
+    if (arg === "--port") {
+      const n = parseInt(argv[i + 1] ?? "", 10);
+      if (!Number.isNaN(n)) { port = n; i++; }
+      continue;
+    }
     if (arg === "-p" || arg === "--print") {
       headless = true;
       const next = argv[i + 1];
@@ -67,5 +83,5 @@ export function parseCliArgs(argv: string[]): CliArgs {
     }
   }
 
-  return { headless, prompt, format, model, temp };
+  return { headless, prompt, format, model, temp, serve, port };
 }
