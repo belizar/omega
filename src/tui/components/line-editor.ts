@@ -216,12 +216,21 @@ class LineEditor implements InputComponent<string> {
       physicalLines.push(...wrapped);
     }
 
+    // Placeholder tenue cuando el input está vacío (ghost text tras el prompt).
+    const PLACEHOLDER = "escribí tu tarea, o / para comandos";
+    const showPlaceholder =
+      this.#buffer === "" && promptLen + PLACEHOLDER.length <= innerW;
+
     // Cada línea va rodeada por bordes verticales
-    const body = physicalLines.map(l => {
-      // el contenido visible + bordes debe sumar W
-      const visible = l.length;
+    const body = physicalLines.map((l, idx) => {
+      let content = l;
+      let visible = l.length; // ancho visible (sin contar ANSI)
+      if (showPlaceholder && idx === 0) {
+        content = l + dim(PLACEHOLDER);
+        visible = l.length + PLACEHOLDER.length;
+      }
       const pad = innerW - visible;
-      return dim("│") + l + (pad > 0 ? " ".repeat(pad) : "") + dim("│");
+      return dim("│") + content + (pad > 0 ? " ".repeat(pad) : "") + dim("│");
     });
 
     return [topBar, ...body, botBar].join("\n");

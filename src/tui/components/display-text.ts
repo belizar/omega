@@ -463,6 +463,36 @@ export function shortenPath(p: string, cwd: string, home: string): string {
   return rel;
 }
 
+/** Glyph por tool, para escanear el tipo de acción de un vistazo. */
+const TOOL_GLYPH: Record<string, string> = {
+  read: "»", outline: "≡", write: "+", edit: "✎", bash: "$",
+  grep: "⌕", tool_search: "⌕", web_fetch: "↗", vision_ask: "◧",
+  ask_user: "?", skill: "◆",
+};
+function toolGlyph(name: string): string {
+  return TOOL_GLYPH[name] ?? "›";
+}
+
+/** Etiqueta compacta de una tool para el spinner ("qué está haciendo"). Una
+ *  línea, corta. */
+export function toolBrief(name: string, input: unknown): string {
+  const obj = input && typeof input === "object" ? (input as Record<string, unknown>) : {};
+  const short = (s: string, n = 32) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
+  const path = typeof obj.path === "string" ? shortenPath(obj.path, process.cwd(), homedir()) : null;
+  switch (name) {
+    case "read": case "write": case "edit": case "outline":
+      return path ? `${name} ${short(path)}` : name;
+    case "bash":
+      return typeof obj.command === "string" ? short(`bash ${(obj.command as string).replace(/\s+/g, " ").trim()}`) : "bash";
+    case "grep":
+      return `grep ${short(String(obj.pattern ?? ""), 20)}`;
+    case "web_fetch":
+      try { return `web_fetch ${new URL(String(obj.url)).hostname}`; } catch { return "web_fetch"; }
+    default:
+      return name;
+  }
+}
+
 class DisplayToolCall {
   #screen: Screen;
   constructor(screen: Screen) {
@@ -471,12 +501,13 @@ class DisplayToolCall {
 
   call(name: string, input: unknown, _verbose: boolean): void {
     const desc = this.#describeInput(name, input);
+    const glyph = toolGlyph(name);
     // Si es multilínea, cyan colorea cada línea para que no se pierda el color
     const lines = desc.split("\n");
     if (lines.length === 1) {
-      this.#screen.printAbove(cyan(`> ${desc}`));
+      this.#screen.printAbove(cyan(`${glyph} ${desc}`));
     } else {
-      this.#screen.printAbove(cyan(`> ${lines[0]}`) + "\n" + gray(lines.slice(1).join("\n")));
+      this.#screen.printAbove(cyan(`${glyph} ${lines[0]}`) + "\n" + gray(lines.slice(1).join("\n")));
     }
 
     // Diff compacto debajo del `> edit`: rojo lo que sale, verde lo que entra.
@@ -563,6 +594,10 @@ class DisplayToolCall {
         return "bash";
       case "grep":
         return `grep "${obj.pattern ?? "?"}" ${this.#pathStr(obj)}`;
+      case "web_fetch": {
+        const url = typeof obj.url === "string" ? obj.url : "?";
+        return `web_fetch ${url.length > 70 ? url.slice(0, 69) + "…" : url}`;
+      }
       case "vision_ask":
         if (typeof obj.question === "string") {
           const q = obj.question as string;

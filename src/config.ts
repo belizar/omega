@@ -188,7 +188,7 @@ function resolveProfile(
     maxContextMessages: 50, // no va en perfil por ahora
     maxContextTokens,
     nodeEnv: process.env.NODE_ENV || "development",
-    screenPadding: parseInt(process.env.SCREEN_PADDING || "20", 10),
+    screenPadding: parseInt(process.env.SCREEN_PADDING || "6", 10),
     classifierMode: (process.env.CLASSIFIER_MODE || "on") as "on" | "off",
     classifierModel,
     classifierLearn,

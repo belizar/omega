@@ -1,4 +1,4 @@
-import { color } from "../theme.js";
+import { color, dim } from "../theme.js";
 import { Screen } from "../screen.js";
 
 /**
@@ -12,15 +12,32 @@ class Spinner {
   #timer: ReturnType<typeof setTimeout> | null = null;
   #tickId = 0;
   #active = false;
+  /** Qué está haciendo (ej. "bash npm test"). null → "Pensando". */
+  #label: string | null = null;
+  /** Cuándo arrancó el turno (para el elapsed). Persiste entre stop/start
+   *  dentro del turno; se limpia con reset() al empezar el turno siguiente. */
+  #startedAt: number | null = null;
 
   constructor(screen: Screen) {
     this.#screen = screen;
+  }
+
+  /** Cambia el texto de actividad. Toma efecto en el próximo frame. */
+  setLabel(label: string | null): void {
+    this.#label = label;
+  }
+
+  /** Reinicia el cronómetro y el label — al empezar un turno nuevo. */
+  reset(): void {
+    this.#startedAt = null;
+    this.#label = null;
   }
 
   start(): void {
     if (this.#active) return;
     this.#active = true;
     this.#tickId++;
+    if (this.#startedAt === null) this.#startedAt = Date.now();
 
     const colors = ["39", "38", "45", "51", "45", "38"];
     const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
@@ -31,7 +48,11 @@ class Spinner {
       if (this.#tickId !== myTick) return;
       const c = colors[i % colors.length];
       const f = frames[i % frames.length];
-      this.#screen.setStatus(color(`${f} Pensando`, `38;5;${c}`));
+      const elapsed = this.#startedAt ? Math.floor((Date.now() - this.#startedAt) / 1000) : 0;
+      const what = this.#label ?? "Pensando";
+      this.#screen.setStatus(
+        color(`${f} ${what}`, `38;5;${c}`) + dim(` · ${elapsed}s · esc para cortar`),
+      );
       i++;
       this.#timer = setTimeout(tick, 100);
     };

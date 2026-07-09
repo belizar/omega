@@ -8,6 +8,7 @@ import {
   DisplayAssistantText,
   DisplayToolCall,
   DisplayToolResult,
+  toolBrief,
 } from "../tui/components/display-text.js";
 import { LineEditor } from "../tui/components/line-editor.js";
 import { Prompt } from "../tui/components/prompt.js";
@@ -46,6 +47,9 @@ export class TUIFrontend implements Frontend {
   #assistantText: DisplayAssistantText;
   #toolCallText: DisplayToolCall;
   #toolResultText: DisplayToolResult;
+  /** tool_use bufferados esperando su result — para imprimir el par junto. Los
+   *  result llegan en el mismo orden que los use, así que FIFO empareja bien. */
+  #pendingCalls: Array<{ name: string; input: unknown }> = [];
   #lineEditor: LineEditor;
   #ctx: Context;
   #modals: typeof modalCommandsMap;
@@ -170,6 +174,8 @@ export class TUIFrontend implements Frontend {
   }
 
   turnStarted(): void {
+    this.#pendingCalls = [];
+    this.#spinner.reset();
     this.#spinner.start();
   }
 
@@ -187,18 +193,32 @@ export class TUIFrontend implements Frontend {
         this.#assistantText.display(event.text);
         break;
       case "tool_use":
-        this.#spinner.stop();
-        this.#toolCallText.call(event.name, event.input, this.#getVerbose());
+        // No imprimimos todavía: bufferamos la call para emparejarla con su
+        // result (llegan en el mismo orden). El spinner muestra qué está en vuelo.
+        this.#pendingCalls.push({ name: event.name, input: event.input });
+        this.#spinner.setLabel(toolBrief(event.name, event.input));
+        this.#spinner.start();
         break;
-      case "tool_result":
+      case "tool_result": {
+        // Imprimimos el par `call` + `result` junto (FIFO con las pendientes).
+        this.#spinner.stop();
+        const call = this.#pendingCalls.shift();
+        if (call) this.#toolCallText.call(call.name, call.input, this.#getVerbose());
         this.#toolResultText.result(
           event.output,
           this.#getVerbose(),
           event.rawOutput,
           event.isError,
         );
+        // La próxima tool en vuelo (si hay) al label; si no, "Pensando".
+        this.#spinner.setLabel(
+          this.#pendingCalls.length > 0
+            ? toolBrief(this.#pendingCalls[0].name, this.#pendingCalls[0].input)
+            : null,
+        );
         this.#spinner.start();
         break;
+      }
       // "state" lo consume el loop (persistencia); "ask_user" va por askUser().
     }
   }
@@ -243,7 +263,12 @@ export class TUIFrontend implements Frontend {
     const thrashStr =
       thrashParts.length > 0 ? ` · ${thrashParts.join(" · ")}` : "";
 
-    const line = `~ ctx: ${m.contextTokens} tk · ${m.toolCalls} tools · in: ${m.inputTokens} · out: ${m.outputTokens} tokens · ${durationSec}s · ${costStr} (total: ${runningStr})${thrashStr}`;
+    // Compacto por default (tiempo · tools · costo); el detalle de tokens/ctx
+    // —ruido para el 95% de los turnos— solo en verbose.
+    const toolsStr = m.toolCalls > 0 ? ` · ${m.toolCalls} tools` : "";
+    const line = this.#getVerbose()
+      ? `~ ctx: ${m.contextTokens} tk · ${m.toolCalls} tools · in: ${m.inputTokens} · out: ${m.outputTokens} tokens · ${durationSec}s · ${costStr} (total: ${runningStr})${thrashStr}`
+      : `~ ${durationSec}s${toolsStr} · ${costStr} (total ${runningStr})${thrashStr}`;
     this.notify(`\n${line}`);
   }
 
