@@ -78,11 +78,13 @@ describe("Prompt — menú de slash-commands", () => {
     expect(p.getResult()).toEqual({ kind: "submit", text: "/he" });
   });
 
-  it("un espacio (inicio de args) cierra el menú", () => {
+  it("un espacio (inicio de args) cierra el menú y los args fluyen", () => {
     const p = makePrompt();
-    type(p, "/help ");
+    // Si el menú NO se cerrara, Enter elegiría del picker y submitearía solo
+    // "/help"; que llegue "/help ahora" completo prueba que se cerró.
+    type(p, "/help ahora");
     p.handleKey({ type: "enter" });
-    expect(p.getResult()).toEqual({ kind: "submit", text: "/help" });
+    expect(p.getResult()).toEqual({ kind: "submit", text: "/help ahora" });
   });
 
   it("no abre menú si el prefijo no matchea ningún comando", () => {
