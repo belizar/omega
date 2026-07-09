@@ -43,6 +43,17 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
   .body pre { font-family:var(--mono); font-size:12.5px; background:var(--surface); border:1px solid var(--border);
               border-radius:8px; padding:11px 13px; overflow-x:auto; margin:9px 0; }
   .body pre code { background:none; padding:0; color:var(--ink); }
+  /* syntax highlight (highlight.js) con la paleta de Omega, sin theme externo */
+  .hljs-comment,.hljs-quote { color:var(--faint); font-style:italic; }
+  .hljs-keyword,.hljs-selector-tag,.hljs-literal,.hljs-built_in,.hljs-type,.hljs-name,.hljs-tag { color:var(--tool); }
+  .hljs-string,.hljs-regexp,.hljs-attribute,.hljs-symbol { color:var(--ok); }
+  .hljs-number,.hljs-bullet,.hljs-link { color:var(--warn); }
+  .hljs-title,.hljs-title.function_,.hljs-section { color:var(--human); }
+  .hljs-title.class_ { color:var(--tool); }
+  .hljs-attr,.hljs-property,.hljs-variable,.hljs-template-variable,.hljs-params { color:var(--dim); }
+  .hljs-meta { color:var(--faint); }
+  .hljs-emphasis { font-style:italic; } .hljs-strong { font-weight:650; }
+  .hljs-deletion { color:var(--err); } .hljs-addition { color:var(--ok); }
   .body strong { color:#fff; font-weight:650; }
   .mermaid-block { margin:10px 0; }
   .mermaid-block svg { max-width:100%; height:auto; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px; }
@@ -98,9 +109,11 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
   .hint { max-width:820px; margin:7px auto 0; font-family:var(--mono); font-size:11px; color:var(--faint); }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script>
-  // mermaid como asset del browser (CDN); si no carga, los bloques quedan como
-  // código. Node/Omega sigue zero-dep. Render manual (no en streaming).
+  // mermaid + highlight.js como assets del browser (CDN); si no cargan, los
+  // bloques quedan como código plano. Node/Omega sigue zero-dep. Los tokens de
+  // hljs los pinto con la paleta de Omega (abajo), sin theme externo.
   if (window.mermaid) mermaid.initialize({ startOnLoad:false, theme:"dark", securityLevel:"strict", fontFamily:"ui-monospace, monospace" });
 </script>
 </head>
@@ -177,7 +190,8 @@ function md(t){
     if(lang === 'mermaid'){
       code.push('<div class="mermaid-block" data-src="'+encodeURIComponent(src)+'"><pre class="mmsrc"><code>'+esc(src)+'</code></pre></div>');
     } else {
-      code.push('<pre><code>'+esc(src)+'</code></pre>');
+      const cls = lang ? ' class="language-'+lang+'"' : '';
+      code.push('<pre><code'+cls+'>'+esc(src)+'</code></pre>');
     }
     return '\x00C'+(code.length-1)+'\x00';
   });
@@ -260,6 +274,16 @@ async function hydrateMermaid(){
   }
 }
 
+// Syntax highlight con highlight.js (si cargó). Al finalizar, no en streaming.
+function hydrateCode(){
+  if(!window.hljs) return;
+  for(const el of document.querySelectorAll('pre:not(.mmsrc) code:not([data-hl])')){
+    try { hljs.highlightElement(el); } catch {}
+    el.setAttribute('data-hl','1');
+  }
+}
+function hydrate(){ hydrateMermaid(); hydrateCode(); }
+
 // ── SSE ──────────────────────────────────────────────────────────
 let lastTool = null;
 const es = new EventSource('/events');
@@ -276,11 +300,11 @@ es.onmessage = (e)=>{
       curAsst.innerHTML = md(curAsst.dataset.raw);
       if(atBottom()) scroll();
       break;
-    case 'assistant_end': curAsst=null; hydrateMermaid(); break;
-    case 'assistant': { const b=addMsg('omega','asst'); b.dataset.raw=ev.text; b.innerHTML=md(ev.text); hydrateMermaid(); break; }
+    case 'assistant_end': curAsst=null; hydrate(); break;
+    case 'assistant': { const b=addMsg('omega','asst'); b.dataset.raw=ev.text; b.innerHTML=md(ev.text); hydrate(); break; }
     case 'tool_use': lastTool = addTool(ev.name, ev.input); break;
     case 'tool_result': addToolResult(lastTool, ev.output, ev.isError); lastTool=null; break;
-    case 'turn_end': $("thinking").classList.remove('on'); curAsst=null; hydrateMermaid(); break;
+    case 'turn_end': $("thinking").classList.remove('on'); curAsst=null; hydrate(); break;
     case 'metrics': {
       const c = ev.turnCost<0.01?'<$0.01':'$'+ev.turnCost.toFixed(2);
       const m=document.createElement('div'); m.className='metrics';
