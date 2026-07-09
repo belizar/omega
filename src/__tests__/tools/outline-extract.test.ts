@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { mkdirSync, rmdirSync } from "fs";
+import { mkdirSync, rmdirSync, mkdtempSync, writeFileSync, rmSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 import { outlineFile, outlineDir } from "../../tools/outline-extract.js";
 
 // ── outlineFile ───────────────────────────────────────────────────────
@@ -127,10 +129,19 @@ describe("outlineDir", () => {
   });
 
   it("debe listar subdirectorios cuando existen", () => {
-    const result = outlineDir("src/outline");
-    expect(result).toContain("src/outline · 1 archivos");
-    expect(result).toContain("extract.ts");
-    expect(result).toContain("(sin subdirs)");
+    // Hermético: temp dir con un archivo + un subdir (antes apuntaba a
+    // "src/outline", que ya no existe — el outline vive en src/tools/).
+    const dir = mkdtempSync(join(tmpdir(), "omega-outline-"));
+    writeFileSync(join(dir, "extract.ts"), "export const x = 1;\n");
+    mkdirSync(join(dir, "nested"));
+    try {
+      const result = outlineDir(dir);
+      expect(result).toContain("extract.ts");
+      expect(result).toContain("nested"); // lista el subdir
+      expect(result).not.toContain("(sin subdirs)"); // porque SÍ hay subdirs
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("debe manejar un directorio vacío sin crashear", () => {

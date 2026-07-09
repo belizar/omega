@@ -1,4 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { mkdtempSync, writeFileSync, rmSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 import { ClearCommand } from "../../commands/clear.js";
 import { RenameCommand } from "../../commands/rename.js";
 import { ResumeCommand } from "../../commands/resume.js";
@@ -106,32 +109,44 @@ describe("RenameCommand", () => {
 // ── ResumeCommand ────────────────────────────────────────────────────────────
 
 describe("ResumeCommand", () => {
-  it("should show no sessions message when dir is empty", () => {
+  // Dir de sesiones inyectado (temp) — antes leía `.omega/sessions` del cwd, así
+  // que pasaba/fallaba según cuántas sesiones reales hubiera en el worktree.
+  let sessionsDir: string;
+
+  beforeEach(() => {
+    sessionsDir = mkdtempSync(join(tmpdir(), "omega-sessions-"));
+    writeFileSync(
+      join(sessionsDir, "abc123.json"),
+      JSON.stringify({ id: "abc123", name: "Sesión de prueba", messages: [] }),
+    );
+  });
+  afterEach(() => rmSync(sessionsDir, { recursive: true, force: true }));
+
+  it("con sesiones y sin args, muestra el uso", () => {
     const ctx = createMockContext();
     const screen = ctx.screen as unknown as MockScreen;
 
-    const cmd = new ResumeCommand();
-    cmd.handler(ctx, []);
+    new ResumeCommand(sessionsDir).handler(ctx, []);
 
     expect(screen.getLastLine()).toContain("Usá /resume");
   });
 
-  it("should show usage when no args", () => {
+  it("sin sesiones, muestra el mensaje de vacío", () => {
+    const empty = mkdtempSync(join(tmpdir(), "omega-empty-"));
     const ctx = createMockContext();
     const screen = ctx.screen as unknown as MockScreen;
 
-    const cmd = new ResumeCommand();
-    cmd.handler(ctx, []);
+    new ResumeCommand(empty).handler(ctx, []);
 
-    expect(screen.getLastLine()).toContain("Usá /resume");
+    expect(screen.getLastLine()).toContain("No hay sesiones guardadas");
+    rmSync(empty, { recursive: true, force: true });
   });
 
-  it("should show not found for non-existent session id", () => {
+  it("id inexistente (con sesiones), muestra no encontrado", () => {
     const ctx = createMockContext();
     const screen = ctx.screen as unknown as MockScreen;
 
-    const cmd = new ResumeCommand();
-    cmd.handler(ctx, ["nonexistent-id"]);
+    new ResumeCommand(sessionsDir).handler(ctx, ["nonexistent-id"]);
 
     expect(screen.getLastLine()).toContain("No se encontró");
   });

@@ -8,9 +8,16 @@ class ResumeCommand implements Command<void> {
   description =
     "Resume una sesión anterior. Sin args abre un selector; o /resume <n|id|nombre> directo.";
 
+  /** Dir de sesiones. Inyectable para tests (default: el real, relativo al cwd). */
+  #sessionsDir: string;
+
+  constructor(sessionsDir: string = SESSIONS_DIR) {
+    this.#sessionsDir = sessionsDir;
+  }
+
   handler(ctx: Context, args: string[]): void {
     const display = new DisplayAssistantText(ctx.screen);
-    const sessions = Session.listSessions(SESSIONS_DIR);
+    const sessions = Session.listSessions(this.#sessionsDir);
 
     if (sessions.length === 0) {
       display.display("No hay sesiones guardadas.");

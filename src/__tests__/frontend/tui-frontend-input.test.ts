@@ -3,8 +3,11 @@ import { describe, it, expect, vi } from "vitest";
 // dispatchCommand se importa como módulo en tui-frontend; lo mockeamos para que
 // nunca matchee un comando (así el input fluye como mensaje/exit).
 vi.mock("../../commands/index.js", () => ({
-  dispatchCommand: vi.fn().mockResolvedValue(false),
+  // dispatchCommand devuelve una unión discriminada (desde #86), no un boolean.
+  dispatchCommand: vi.fn().mockResolvedValue({ kind: "not-command" }),
   modalCommandsMap: {},
+  // listCommands lo usa el Prompt para el menú de `/` (desde #87).
+  listCommands: vi.fn().mockReturnValue([]),
 }));
 
 import { TUIFrontend } from "../../frontend/tui-frontend.js";

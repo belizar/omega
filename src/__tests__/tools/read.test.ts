@@ -96,7 +96,8 @@ export const MAX = 100;
     expect(result).toContain("imports: ./foo");
     expect(result).toContain("export sumar(a: number, b: number): number");
     expect(result).toContain("— Este archivo tiene");
-    expect(result).toContain("full: true");
+    // La guía del outline pide leer por rango (no el escape hatch full: true).
+    expect(result).toContain("offset y limit");
     // NO debe contener el cuerpo
     expect(result).not.toContain("return a + b");
   });
