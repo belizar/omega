@@ -9,7 +9,7 @@ import { logger } from "./logger.js";
 import { OpenRouterProvider } from "./providers/openrouter-llm-provider.js";
 import { Sandbox } from "./sandbox.js";
 import { Session } from "./session.js";
-import { loadSkills } from "./skills.js";
+import { loadSkills, Skill } from "./skills.js";
 import { buildSystemPrompt } from "./system-prompt.js";
 import { SkillTool } from "./tools/skill.js";
 import { AskUserTool } from "./tools/ask-user.js";
@@ -47,6 +47,75 @@ export interface CoreServices {
   classifier?: CommandClassifier;
   llmProvider: OpenRouterProvider;
   visionAskTool: VisionAskTool | null;
+  /** Skills instaladas (compartidas por todas las sesiones). */
+  skills: Skill[];
+  /** System prompt ya armado (compartido). */
+  systemPrompt: string;
+}
+
+/**
+ * Dependencias compartidas por TODAS las sesiones al armar su stack de tools.
+ * Lo que NO depende del workspace: config, clasificador, visión, prompt, skills.
+ * El SessionManager las reusa para construir un stack por-sesión con su cwd.
+ */
+export interface SharedAgentDeps {
+  config: ResolvedConfig;
+  classifier?: CommandClassifier;
+  visionAskTool: VisionAskTool | null;
+  systemPrompt: string;
+  skills: Skill[];
+  /** Sandbox opcional (contenedor). En multi-sesión va undefined: el aislamiento
+   *  es por git worktree, no por contenedor. */
+  sandbox?: Sandbox;
+}
+
+/**
+ * Arma un stack de agente (toolRegistry + agentConfig) enraizado en un `cwd`.
+ * Las file-tools resuelven paths relativos contra ese cwd, así cada sesión opera
+ * en su propio workspace dentro de un mismo proceso. `buildCore` lo usa con el
+ * cwd del proceso; el SessionManager, con el cwd de cada sesión.
+ */
+export function createAgentStack(
+  cwd: string,
+  deps: SharedAgentDeps,
+): { toolRegistry: ToolRegistry; agentConfig: AgentConfig } {
+  const bashTool = new BashTool({
+    classifier: deps.classifier,
+    defaultTimeoutMs: deps.config.bashTimeoutMs,
+    sandbox: deps.sandbox,
+    cwd,
+  });
+
+  const toolRegistry = new ToolRegistry(logger);
+  toolRegistry
+    .registerLocal(new AskUserTool())
+    .registerLocal(bashTool)
+    .registerLocal(new GrepTool(cwd))
+    .registerLocal(new OutlineTool(cwd))
+    .registerLocal(new ReadTool(deps.config.outlineThreshold, cwd))
+    .registerLocal(new EditTool(cwd))
+    .registerLocal(new WriteTool(cwd))
+    .registerLocal(new WebFetchTool())
+    // MCP desde el .omega del server (relativo a process.cwd, no al worktree:
+    // .omega está gitignoreado y no viaja al checkout de la sesión).
+    .configureMcp(loadMcpConfig(".omega"));
+
+  if (deps.visionAskTool) {
+    toolRegistry.registerLocal(deps.visionAskTool);
+  }
+
+  const agentConfig = new AgentConfig({
+    systemPrompt: deps.systemPrompt,
+    model: deps.config.model,
+    maxTokens: deps.config.maxTokens,
+    toolRegistry,
+  });
+  agentConfig.addTool(new ToolSearchTool(toolRegistry));
+  if (deps.skills.length > 0) {
+    agentConfig.addTool(new SkillTool(deps.skills));
+  }
+
+  return { toolRegistry, agentConfig };
 }
 
 /**
@@ -95,36 +164,21 @@ export async function buildCore(): Promise<CoreServices> {
     process.on("exit", () => sandbox.stop());
   }
 
-  const bashTool = new BashTool({
-    classifier,
-    defaultTimeoutMs: config.bashTimeoutMs,
-    sandbox,
-  });
-
-  const toolRegistry = new ToolRegistry(logger);
-
   // Tool de visión (solo si VISION_MODEL está configurado)
   const visionAskTool = config.visionModel
     ? new VisionAskTool(config.visionModel, config.visionMaxTokens, config.openrouterApiKey)
     : null;
 
-  toolRegistry
-    .registerLocal(new AskUserTool())
-    .registerLocal(bashTool)
-    .registerLocal(new GrepTool())
-    .registerLocal(new OutlineTool())
-    .registerLocal(new ReadTool(config.outlineThreshold))
-    .registerLocal(new EditTool())
-    .registerLocal(new WriteTool())
-    .registerLocal(new WebFetchTool())
-    // Servidores MCP desde .omega/mcp.json (carga lazy: no conectan hasta que se buscan)
-    .configureMcp(loadMcpConfig(".omega"));
-
-  // Registrar vision_ask si hay modelo de visión (incluso sin VISION_MODEL,
-  // así el agente recibe un error manejado en vez de tool desconocida)
-  if (visionAskTool) {
-    toolRegistry.registerLocal(visionAskTool);
-  }
+  // El stack de tools de la sesión por defecto, enraizado en el cwd del proceso.
+  // El mismo helper lo usa el SessionManager con el cwd de cada sesión.
+  const { toolRegistry, agentConfig } = createAgentStack(process.cwd(), {
+    config,
+    classifier,
+    visionAskTool,
+    systemPrompt: fullSystemPrompt,
+    skills,
+    sandbox,
+  });
 
   // Limpiar temp files de visión viejos (> 1 hora)
   cleanOldVisionTemps();
@@ -133,23 +187,17 @@ export async function buildCore(): Promise<CoreServices> {
   process.on("exit", () => toolRegistry.disconnectAll());
   process.on("SIGTERM", () => process.exit(0));
 
-  const agentConfig = new AgentConfig({
-    systemPrompt: fullSystemPrompt,
-    model: config.model,
-    maxTokens: config.maxTokens,
-    toolRegistry,
-  });
-
-  // tool_search va al AgentConfig (como tool local) para que el agente la use
-  agentConfig.addTool(new ToolSearchTool(toolRegistry));
-
-  // La tool `skill` solo se registra si hay skills instaladas: sin skills no
-  // tiene sentido ofrecerla (y el system prompt tampoco lista la sección).
-  if (skills.length > 0) {
-    agentConfig.addTool(new SkillTool(skills));
-  }
-
   const llmProvider = new OpenRouterProvider(config.openrouterApiKey);
 
-  return { config, session, agentConfig, toolRegistry, classifier, llmProvider, visionAskTool };
+  return {
+    config,
+    session,
+    agentConfig,
+    toolRegistry,
+    classifier,
+    llmProvider,
+    visionAskTool,
+    skills,
+    systemPrompt: fullSystemPrompt,
+  };
 }
