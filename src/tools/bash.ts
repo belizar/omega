@@ -21,6 +21,10 @@ export type BashToolOptions = {
   /** Sandbox opcional: el "workspace" persistente donde corre el bash del agente
    *  (contenedor Docker). undefined = corre en el host (flujo local). */
   sandbox?: Sandbox;
+  /** Directorio de trabajo del comando (default: el del proceso). En el server
+   *  multi-sesión, el workspace de la sesión. Ignorado si hay sandbox (el
+   *  contenedor tiene su propio workdir). */
+  cwd?: string;
 };
 
 const DEFAULT_TIMEOUT_MS = 120_000; // fallback si el constructor no pasa uno
@@ -88,6 +92,7 @@ export class BashTool extends Tool<BashInput, string> {
   #classifier?: CommandClassifier;
   #defaultTimeoutMs: number;
   #sandbox?: Sandbox;
+  #cwd: string;
 
   constructor(options?: BashToolOptions) {
     super({
@@ -123,6 +128,7 @@ export class BashTool extends Tool<BashInput, string> {
     this.#classifier = options?.classifier;
     this.#defaultTimeoutMs = options?.defaultTimeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.#sandbox = options?.sandbox;
+    this.#cwd = options?.cwd ?? process.cwd();
   }
 
   /**
@@ -238,6 +244,7 @@ export class BashTool extends Tool<BashInput, string> {
           encoding: "buffer" as BufferEncoding,
           timeout: timeoutMs,
           maxBuffer: MAX_BUFFER,
+          cwd: this.#cwd,
         }, (error, stdout, stderr) => {
           closed = true;
           signal?.removeEventListener("abort", onAbort);

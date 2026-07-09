@@ -1,4 +1,5 @@
 import { readFile, writeFile } from "fs/promises";
+import { resolve } from "path";
 import { Tool } from "./tool.js";
 import { logger } from "../logger.js";
 import { isEnvFile, ENV_BLOCK_MESSAGE } from "./env-guard.js";
@@ -176,7 +177,10 @@ function findOccurrenceLines(content: string, search: string): number[] {
 // ── tool ─────────────────────────────────────────────────────────────
 
 export class EditTool extends Tool<EditInput, string> {
-  constructor() {
+  /** cwd contra el que se resuelven paths relativos (default: el del proceso). */
+  #cwd: string;
+
+  constructor(cwd: string = process.cwd()) {
     super({
       name: "edit",
       description:
@@ -229,6 +233,7 @@ export class EditTool extends Tool<EditInput, string> {
         required: ["path"],
       },
     });
+    this.#cwd = cwd;
   }
 
   async execute(input: unknown): Promise<string> {
@@ -271,7 +276,7 @@ export class EditTool extends Tool<EditInput, string> {
       if (hasOldText && hasRange) {
         // Si ambos: validamos que oldText matchee el rango indicado
         isEnvFileGuard(path);
-        const content = await readFileOrThrow(path);
+        const content = await readFileOrThrow(resolve(this.#cwd, path));
         const fileLines = content.split("\n");
         if (startLine < 1 || endLine > fileLines.length || startLine > endLine) {
           return `Error: startLine=${startLine}, endLine=${endLine} fuera de rango (1-${fileLines.length}).`;
@@ -293,7 +298,7 @@ export class EditTool extends Tool<EditInput, string> {
 
       // ── Modo rango (startLine/endLine sin oldText) ──
       if (hasRange) {
-        const content = await readFileOrThrow(path);
+        const content = await readFileOrThrow(resolve(this.#cwd, path));
         const fileLines = content.split("\n");
         if (startLine < 1 || endLine > fileLines.length || startLine > endLine) {
           return `Error: startLine=${startLine}, endLine=${endLine} fuera de rango (archivo tiene ${fileLines.length} líneas).`;
@@ -325,7 +330,7 @@ export class EditTool extends Tool<EditInput, string> {
     });
 
     let content: string;
-    content = await readFileOrThrow(path);
+    content = await readFileOrThrow(resolve(this.#cwd, path));
 
     const occurrences = content.split(oldText).length - 1;
 
@@ -338,7 +343,7 @@ export class EditTool extends Tool<EditInput, string> {
     if (occurrences > 1) {
       if (replaceAll) {
         const updated = content.split(oldText).join(newText);
-        await writeFile(path, updated, "utf-8");
+        await writeFile(resolve(this.#cwd, path),updated, "utf-8");
         logger.info("File edited (replaceAll)", { path, occurrences });
         return `Editado ${path} correctamente (${occurrences} ocurrencias reemplazadas).`;
       }
@@ -355,7 +360,7 @@ export class EditTool extends Tool<EditInput, string> {
 
     // ── Exactamente 1 ocurrencia ──
     const updated = content.replace(oldText, newText);
-    await writeFile(path, updated, "utf-8");
+    await writeFile(resolve(this.#cwd, path),updated, "utf-8");
     logger.info("File edited successfully", { path });
     return `Editado ${path} correctamente.`;
   }
@@ -384,7 +389,7 @@ export class EditTool extends Tool<EditInput, string> {
         [before, indentedNewText, after].filter((s) => s !== "").join("\n") ||
         indentedNewText;
 
-      await writeFile(path, updated, "utf-8");
+      await writeFile(resolve(this.#cwd, path),updated, "utf-8");
       logger.info("File edited (flexible match)", { path, delta });
       return `Editado ${path} correctamente (match flexible, delta indentación: ${delta > 0 ? "+" : ""}${delta}).`;
     }
@@ -429,7 +434,7 @@ export class EditTool extends Tool<EditInput, string> {
 
     let content: string;
     try {
-      content = await readFileOrThrow(path);
+      content = await readFileOrThrow(resolve(this.#cwd, path));
     } catch (err: unknown) {
       if (err instanceof Error) throw err;
       throw new Error(`Could not read ${path}: ${String(err)}`);
@@ -500,7 +505,7 @@ export class EditTool extends Tool<EditInput, string> {
       results.push(`Edit #${i + 1}: OK`);
     }
 
-    await writeFile(path, current, "utf-8");
+    await writeFile(resolve(this.#cwd, path),current, "utf-8");
     logger.info("Multi-edit completed", { path, count: edits.length });
     return (
       `Editado ${path} correctamente (${edits.length} ediciones):\n` +
@@ -521,7 +526,7 @@ export class EditTool extends Tool<EditInput, string> {
     const updated =
       [...before, newText, ...after].filter((s) => s !== "").join("\n") ||
       newText;
-    await writeFile(path, updated, "utf-8");
+    await writeFile(resolve(this.#cwd, path),updated, "utf-8");
     logger.info("File edited (range)", { path, startLine, endLine });
     return `Editado ${path} correctamente (líneas ${startLine}-${endLine}).`;
   }

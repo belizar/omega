@@ -18,7 +18,10 @@ const MAX_BUFFER = 5 * 1024 * 1024;
 const DEFAULT_MAX_RESULTS = 50;
 
 export class GrepTool extends Tool<GrepInput, string> {
-  constructor() {
+  /** cwd base de la búsqueda y de la resolución de paths relativos. */
+  #cwd: string;
+
+  constructor(cwd: string = process.cwd()) {
     super({
       name: "grep",
       description:
@@ -54,6 +57,7 @@ export class GrepTool extends Tool<GrepInput, string> {
         required: ["pattern"],
       },
     });
+    this.#cwd = cwd;
   }
 
   async execute(input: GrepInput): Promise<string> {
@@ -69,7 +73,7 @@ export class GrepTool extends Tool<GrepInput, string> {
       return "Error: pattern es requerido y debe ser un string";
     }
 
-    const absPath = resolve(searchPath);
+    const absPath = resolve(this.#cwd, searchPath);
     if (isEnvFile(absPath)) {
       return "Error: no se puede buscar en archivos .env por seguridad";
     }
@@ -102,7 +106,7 @@ export class GrepTool extends Tool<GrepInput, string> {
           encoding: "buffer" as BufferEncoding,
           timeout: TIMEOUT_MS,
           maxBuffer: MAX_BUFFER,
-          cwd: process.cwd(),
+          cwd: this.#cwd,
         }, (error, stdout, stderr) => {
           const out = Buffer.isBuffer(stdout) ? stdout.toString("utf-8") : String(stdout);
           const err = Buffer.isBuffer(stderr) ? stderr.toString("utf-8") : String(stderr);
@@ -127,7 +131,7 @@ export class GrepTool extends Tool<GrepInput, string> {
 
       // Formatear: agregar filepath relativo y cabecera
       const header = `${limited.length} líneas de resultados`;
-      const summary = `\n-- grep "${pattern}" en ${relative(process.cwd(), absPath) || "."} --`;
+      const summary = `\n-- grep "${pattern}" en ${relative(this.#cwd, absPath) || "."} --`;
 
       return `${summary}\n${truncated}`;
     } catch (err: unknown) {
