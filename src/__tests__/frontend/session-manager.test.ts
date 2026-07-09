@@ -5,6 +5,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { promisify } from "util";
 import { SessionManager } from "../../frontend/session-manager.js";
+import { SessionIndex } from "../../frontend/session-index.js";
 import type { CoreServices } from "../../core.js";
 
 const execFileAsync = promisify(execFile);
@@ -27,11 +28,6 @@ async function exists(p: string): Promise<boolean> {
   }
 }
 
-/**
- * Config mínima: solo los campos que toca el stack por-sesión (createAgentStack +
- * Session + Screen + WebFrontend). El llmProvider nunca se usa porque no mandamos
- * input → no corre ningún turno → no hay llamada al LLM.
- */
 function fakeBase(): CoreServices {
   const config = {
     outlineThreshold: 200,
@@ -58,12 +54,23 @@ describe("SessionManager", () => {
   let baseDir: string;
   let sessionsDir: string;
   let mgr: SessionManager;
+  let indexPath: string;
+
+  function newMgr(): SessionManager {
+    // Índice hermético: NO tocar el ~/.omega real.
+    return new SessionManager(fakeBase(), {
+      baseDir,
+      sessionsDir,
+      index: new SessionIndex(indexPath),
+    });
+  }
 
   beforeEach(async () => {
     baseDir = await realpath(await mkdtemp(join(tmpdir(), "omega-sm-")));
     sessionsDir = join(baseDir, "sessions-store");
+    indexPath = join(baseDir, "index.json");
     await initRepo(baseDir);
-    mgr = new SessionManager(fakeBase(), { baseDir, sessionsDir });
+    mgr = newMgr();
   });
 
   afterEach(async () => {
@@ -71,13 +78,12 @@ describe("SessionManager", () => {
     await rm(baseDir, { recursive: true, force: true });
   });
 
-  it("crea una sesión compartida y la lista", async () => {
+  it("crea una sesión compartida y la lista como viva", async () => {
     const h = await mgr.create({ title: "primera" });
     expect(mgr.has(h.id)).toBe(true);
     expect(h.workspace.isolated).toBe(false);
-    expect(h.workspace.cwd).toBe(baseDir);
 
-    const list = mgr.list();
+    const list = mgr.listAll();
     expect(list).toHaveLength(1);
     expect(list[0].title).toBe("primera");
     expect(list[0].live).toBe(true);
@@ -86,34 +92,66 @@ describe("SessionManager", () => {
   it("cada sesión worktree tiene su propio cwd aislado", async () => {
     const a = await mgr.create({ worktree: true });
     const b = await mgr.create({ worktree: true });
-
-    expect(a.id).not.toBe(b.id);
     expect(a.workspace.cwd).not.toBe(b.workspace.cwd);
     expect(a.workspace.isolated).toBe(true);
     expect(await exists(a.workspace.cwd)).toBe(true);
-    expect(mgr.list()).toHaveLength(2);
+    expect(mgr.listAll()).toHaveLength(2);
   });
 
-  it("las sesiones no comparten frontend ni toolRegistry (hubs independientes)", async () => {
+  it("las sesiones no comparten frontend ni toolRegistry", async () => {
     const a = await mgr.create();
     const b = await mgr.create();
     expect(a.frontend).not.toBe(b.frontend);
     expect(a.toolRegistry).not.toBe(b.toolRegistry);
   });
 
-  it("remove baja la sesión y limpia su worktree", async () => {
+  it("detach DUERME la sesión pero conserva el worktree (revivible)", async () => {
     const h = await mgr.create({ worktree: true });
     const cwd = h.workspace.cwd;
-    expect(await exists(cwd)).toBe(true);
 
-    await mgr.remove(h.id);
-    expect(mgr.has(h.id)).toBe(false);
-    expect(mgr.list()).toHaveLength(0);
-    expect(await exists(cwd)).toBe(false); // worktree removido
+    await mgr.detach(h.id);
+    expect(mgr.has(h.id)).toBe(false); // ya no está viva
+    expect(await exists(cwd)).toBe(true); // pero el worktree SIGUE en disco
+
+    // Sigue listada como dormida
+    const list = mgr.listAll();
+    expect(list).toHaveLength(1);
+    expect(list[0].live).toBe(false);
   });
 
-  it("remove de un id inexistente es noop", async () => {
-    await mgr.remove("no-existe"); // no debe reventar
-    expect(mgr.list()).toHaveLength(0);
+  it("revive trae de vuelta una sesión dormida con su transcript", async () => {
+    const h = await mgr.create({ title: "con-historia", worktree: true });
+    h.session.addUserMessage("acordate de esto"); // persiste al .json
+    const cwd = h.workspace.cwd;
+    await mgr.detach(h.id);
+
+    const revived = await mgr.revive(h.id);
+    expect(revived).not.toBeNull();
+    expect(revived!.id).toBe(h.id);
+    expect(revived!.workspace.cwd).toBe(cwd); // re-attacheó el MISMO worktree
+    // El transcript volvió del disco
+    const texts = JSON.stringify(revived!.session.messages);
+    expect(texts).toContain("acordate de esto");
+    expect(mgr.listAll()[0].live).toBe(true);
+  });
+
+  it("las sesiones sobreviven a un 'reinicio' del manager (índice en disco)", async () => {
+    const h = await mgr.create({ title: "persistente" });
+    h.session.addUserMessage("hola de ayer");
+    await mgr.disposeAll(); // "apagar el server"
+
+    // Manager nuevo, mismo índice en disco → ve la sesión dormida
+    const mgr2 = newMgr();
+    const list = mgr2.listAll();
+    expect(list.some((s) => s.id === h.id)).toBe(true);
+    expect(list.find((s) => s.id === h.id)!.live).toBe(false);
+
+    const revived = await mgr2.revive(h.id);
+    expect(JSON.stringify(revived!.session.messages)).toContain("hola de ayer");
+    await mgr2.disposeAll();
+  });
+
+  it("revive de un id desconocido devuelve null", async () => {
+    expect(await mgr.revive("no-existe")).toBeNull();
   });
 });

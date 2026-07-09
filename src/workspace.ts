@@ -143,30 +143,64 @@ export async function createWorkspace(opts: CreateWorkspaceOpts): Promise<Worksp
   // Config por proyecto (.env, settings): sin esto el checkout no funciona.
   await copyConfigFiles(baseDir, wtPath, config.copy);
 
-  let disposed = false;
   return {
     cwd: wtPath,
     isolated: true,
     branch,
-    async dispose(): Promise<void> {
-      if (disposed) return;
-      disposed = true;
-      try {
-        if (config.removeCommand.trim()) {
-          await runHook(config.removeCommand, baseDir, { path: wtPath, branch, base });
-        } else {
-          // Removemos el worktree pero DEJAMOS la branch (por si querés PR-earla).
-          await execFileAsync("git", ["worktree", "remove", "--force", wtPath], { cwd: baseDir });
-        }
-        logger.info("workspace worktree removido", { branch, wtPath });
-      } catch (err) {
-        logger.warn("no se pudo remover el worktree", {
-          branch,
-          wtPath,
-          err: err instanceof Error ? err.message : String(err),
-        });
+    dispose: makeWorktreeDispose(baseDir, wtPath, branch, base, config),
+  };
+}
+
+/**
+ * Re-arma el Workspace de una sesión que ya tiene su worktree en disco (revivir).
+ * No crea nada: apunta a un cwd existente. Su dispose SÍ puede remover el worktree
+ * (si algún día cerrás la sesión de verdad), pero revivir/detach no lo llaman.
+ */
+export function attachWorkspace(opts: {
+  baseDir: string;
+  cwd: string;
+  isolated: boolean;
+  branch?: string;
+  config: ResolvedWorktreeConfig;
+}): Workspace {
+  if (!opts.isolated) {
+    return { cwd: opts.cwd, isolated: false, dispose: NOOP_DISPOSE };
+  }
+  return {
+    cwd: opts.cwd,
+    isolated: true,
+    branch: opts.branch,
+    dispose: makeWorktreeDispose(opts.baseDir, opts.cwd, opts.branch ?? "", "", opts.config),
+  };
+}
+
+/** Fabrica el dispose de un worktree (remove-command o git worktree remove). Idempotente. */
+function makeWorktreeDispose(
+  baseDir: string,
+  wtPath: string,
+  branch: string,
+  base: string,
+  config: ResolvedWorktreeConfig,
+): () => Promise<void> {
+  let disposed = false;
+  return async (): Promise<void> => {
+    if (disposed) return;
+    disposed = true;
+    try {
+      if (config.removeCommand.trim()) {
+        await runHook(config.removeCommand, baseDir, { path: wtPath, branch, base });
+      } else {
+        // Removemos el worktree pero DEJAMOS la branch (por si querés PR-earla).
+        await execFileAsync("git", ["worktree", "remove", "--force", wtPath], { cwd: baseDir });
       }
-    },
+      logger.info("workspace worktree removido", { branch, wtPath });
+    } catch (err) {
+      logger.warn("no se pudo remover el worktree", {
+        branch,
+        wtPath,
+        err: err instanceof Error ? err.message : String(err),
+      });
+    }
   };
 }
 

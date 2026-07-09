@@ -1,3 +1,5 @@
+import { existsSync } from "fs";
+import { resolve } from "path";
 import { Context } from "../app-context.js";
 import { CoreServices, createAgentStack, SharedAgentDeps } from "../core.js";
 import { logger } from "../logger.js";
@@ -5,7 +7,8 @@ import { Session } from "../session.js";
 import { ToolRegistry } from "../tools/tool-registry.js";
 import { TurnRunner } from "../turn-runner.js";
 import { Screen } from "../tui/screen.js";
-import { createWorkspace, Workspace } from "../workspace.js";
+import { attachWorkspace, createWorkspace, Workspace } from "../workspace.js";
+import { SessionIndex } from "./session-index.js";
 import { WebFrontend } from "./web-frontend.js";
 
 /** Una sesión viva hospedada por el server: su hub, su workspace y su loop. */
@@ -18,7 +21,7 @@ export interface SessionHandle {
   readonly toolRegistry: ToolRegistry;
 }
 
-/** Vista serializable de una sesión para el protocolo (GET /sessions). */
+/** Vista serializable de una sesión (viva o dormida) para el protocolo. */
 export interface SessionInfo {
   id: string;
   title: string;
@@ -26,7 +29,9 @@ export interface SessionInfo {
   isolated: boolean;
   branch?: string;
   clients: number;
-  live: true;
+  /** true = corriendo ahora; false = dormida (en el índice, revivible). */
+  live: boolean;
+  lastActive?: number;
 }
 
 export interface CreateSessionOpts {
@@ -40,16 +45,19 @@ export interface CreateSessionOpts {
   base?: string;
 }
 
+/** Ahora vs "hace un rato" sin depender del reloj en tests que lo prohíben. */
+const now = (): number => Date.now();
+
 /**
  * Hospeda N sesiones de agente en un solo proceso. Cada sesión es independiente:
- * su propia conversación (`Session`), su propio hub de clientes SSE
- * (`WebFrontend`), su propio stack de tools enraizado en su workspace, y su
- * propio loop concurrente. Lo que comparten —config, provider LLM, clasificador,
- * skills, system prompt— entra por `SharedAgentDeps` y no se copia.
+ * su propia conversación (`Session`), su hub de clientes SSE (`WebFrontend`), su
+ * stack de tools enraizado en su workspace, y su loop concurrente. Lo compartido
+ * —config, provider, clasificador, skills, prompt— entra por `SharedAgentDeps`.
  *
- * Es la forma del backend de nube: hoy son loops en un proceso local; mañana el
- * mismo mapa vive en un contenedor con auth adelante. El `WebFrontend` como hub
- * ya resolvió "múltiples clientes por sesión"; esto resuelve "múltiples sesiones".
+ * Persistencia (Increment A): cada sesión se registra en un `SessionIndex` global.
+ * Al reiniciar el server, `listAll()` muestra las **dormidas** del índice y
+ * `revive()` las trae de vuelta cargando su transcript del disco y re-attacheando
+ * su workspace. El server deja de tener amnesia: bajar un loop NO destruye nada.
  */
 export class SessionManager {
   #sessions = new Map<string, SessionHandle>();
@@ -58,12 +66,17 @@ export class SessionManager {
   #base: CoreServices;
   #baseDir: string;
   #sessionsDir: string;
+  #index: SessionIndex;
   #shared: SharedAgentDeps;
 
-  constructor(base: CoreServices, opts: { baseDir: string; sessionsDir?: string }) {
+  constructor(
+    base: CoreServices,
+    opts: { baseDir: string; sessionsDir?: string; index?: SessionIndex },
+  ) {
     this.#base = base;
     this.#baseDir = opts.baseDir;
     this.#sessionsDir = opts.sessionsDir ?? ".omega/sessions";
+    this.#index = opts.index ?? new SessionIndex();
     this.#shared = {
       config: base.config,
       classifier: base.classifier,
@@ -74,7 +87,12 @@ export class SessionManager {
     };
   }
 
-  /** Crea una sesión, arranca su loop y devuelve su handle. */
+  /** Path absoluto del transcript de una sesión (para el índice). */
+  #sessionFile(id: string): string {
+    return resolve(this.#baseDir, this.#sessionsDir, `${id}.json`);
+  }
+
+  /** Crea una sesión nueva, la registra en el índice y arranca su loop. */
   async create(opts: CreateSessionOpts = {}): Promise<SessionHandle> {
     const { config } = this.#base;
 
@@ -93,7 +111,76 @@ export class SessionManager {
       config: config.worktree,
     });
 
-    // Stack de tools enraizado en el workspace de ESTA sesión.
+    const title = opts.title?.trim() || workspace.branch || session.id.slice(0, 8);
+    const handle = this.#spawn(session, workspace, title);
+
+    const ts = now();
+    this.#index.upsert({
+      id: handle.id,
+      title,
+      project: this.#baseDir,
+      sessionFile: this.#sessionFile(handle.id),
+      cwd: workspace.cwd,
+      branch: workspace.branch,
+      isolated: workspace.isolated,
+      createdAt: ts,
+      lastActive: ts,
+    });
+
+    logger.info("sesión creada", { id: handle.id, cwd: workspace.cwd, isolated: workspace.isolated });
+    return handle;
+  }
+
+  /**
+   * Trae de vuelta una sesión dormida: carga su transcript del disco y re-attachea
+   * su workspace (el worktree ya existe). Si ya está viva, devuelve la viva. null
+   * si no está ni viva ni en el índice.
+   */
+  async revive(id: string): Promise<SessionHandle | null> {
+    const live = this.#sessions.get(id);
+    if (live) return live;
+
+    const entry = this.#index.get(id);
+    if (!entry) return null;
+
+    const { config } = this.#base;
+    // Session con id explícito → el constructor carga el .json si existe.
+    const session = new Session({
+      id: entry.id,
+      dir: this.#sessionsDir,
+      maxContextTokens: config.maxContextTokens,
+      model: config.model,
+    });
+
+    // El worktree pudo haber sido borrado por afuera (tree.sh, rm). Si el cwd ya no
+    // existe, revivimos en modo compartido para que la sesión al menos abra.
+    let isolated = entry.isolated;
+    let cwd = entry.cwd;
+    if (isolated && !existsSync(cwd)) {
+      logger.warn("worktree de la sesión ya no existe; revivo en cwd compartido", {
+        id, cwd,
+      });
+      isolated = false;
+      cwd = this.#baseDir;
+    }
+
+    const workspace = attachWorkspace({
+      baseDir: this.#baseDir,
+      cwd,
+      isolated,
+      branch: isolated ? entry.branch : undefined,
+      config: config.worktree,
+    });
+
+    const handle = this.#spawn(session, workspace, entry.title);
+    this.#index.touch(id, now());
+    logger.info("sesión revivida", { id, cwd: workspace.cwd });
+    return handle;
+  }
+
+  /** Arma el stack (tools/frontend/runner), el handle y arranca el loop. */
+  #spawn(session: Session, workspace: Workspace, title: string): SessionHandle {
+    const { config } = this.#base;
     const { toolRegistry, agentConfig } = createAgentStack(workspace.cwd, this.#shared);
 
     const frontend = new WebFrontend({ model: config.model, sessionId: session.id });
@@ -108,17 +195,12 @@ export class SessionManager {
 
     // CoreServices por-sesión: comparte provider/config/classifier, pero lleva la
     // session, el agentConfig y el toolRegistry propios. TurnRunner lee de acá.
-    const perSessionCore: CoreServices = {
-      ...this.#base,
-      session,
-      agentConfig,
-      toolRegistry,
-    };
+    const perSessionCore: CoreServices = { ...this.#base, session, agentConfig, toolRegistry };
     const turnRunner = new TurnRunner(perSessionCore, ctx, frontend);
 
     const handle: SessionHandle = {
       id: session.id,
-      title: opts.title?.trim() || workspace.branch || session.id.slice(0, 8),
+      title,
       frontend,
       workspace,
       session,
@@ -127,15 +209,7 @@ export class SessionManager {
     this.#sessions.set(handle.id, handle);
 
     frontend.start();
-    // Cada sesión corre su propio loop concurrente (promesa independiente: no
-    // bloquea a las otras). Guardamos la promesa para poder esperar su cleanup.
     this.#loops.set(handle.id, this.#runLoop(handle, turnRunner));
-
-    logger.info("sesión creada", {
-      id: handle.id,
-      cwd: workspace.cwd,
-      isolated: workspace.isolated,
-    });
     return handle;
   }
 
@@ -147,8 +221,42 @@ export class SessionManager {
     return this.#sessions.has(id);
   }
 
-  list(): SessionInfo[] {
-    return [...this.#sessions.values()].map((h) => ({
+  /** ¿Está registrada (viva o dormida)? */
+  knows(id: string): boolean {
+    return this.#sessions.has(id) || this.#index.get(id) !== undefined;
+  }
+
+  /** Solo las vivas (para usos internos). */
+  liveList(): SessionInfo[] {
+    return [...this.#sessions.values()].map((h) => this.#liveInfo(h));
+  }
+
+  /** Vivas + dormidas del proyecto, más recientes primero. Es lo que ve el sidebar. */
+  listAll(): SessionInfo[] {
+    const live = new Map(this.#sessions.entries());
+    const infos: SessionInfo[] = [...live.values()].map((h) => this.#liveInfo(h));
+    for (const e of this.#index.forProject(this.#baseDir)) {
+      if (live.has(e.id)) continue; // ya la contamos como viva
+      infos.push({
+        id: e.id,
+        title: e.title,
+        cwd: e.cwd,
+        isolated: e.isolated,
+        branch: e.branch,
+        clients: 0,
+        live: false,
+        lastActive: e.lastActive,
+      });
+    }
+    // vivas primero, después dormidas por lastActive desc
+    return infos.sort((a, b) => {
+      if (a.live !== b.live) return a.live ? -1 : 1;
+      return (b.lastActive ?? 0) - (a.lastActive ?? 0);
+    });
+  }
+
+  #liveInfo(h: SessionHandle): SessionInfo {
+    return {
       id: h.id,
       title: h.title,
       cwd: h.workspace.cwd,
@@ -156,7 +264,8 @@ export class SessionManager {
       branch: h.workspace.branch,
       clients: h.frontend.clientCount,
       live: true,
-    }));
+      lastActive: this.#index.get(h.id)?.lastActive,
+    };
   }
 
   /** El loop de un agente: input de la red → turno. Uno por sesión. */
@@ -169,6 +278,7 @@ export class SessionManager {
         if (inp.kind === "none") continue;
         session.addUserMessage(inp.text);
         await turnRunner.run();
+        this.#index.touch(handle.id, now(), handle.title);
       }
     } catch (err: unknown) {
       logger.error("loop de sesión murió", {
@@ -176,28 +286,32 @@ export class SessionManager {
         err: err instanceof Error ? err.message : String(err),
       });
     } finally {
-      await this.#cleanup(handle);
+      this.#cleanup(handle);
     }
   }
 
-  /** Baja una sesión: corta su loop (inyecta exit), libera sus recursos y espera
-   *  a que el cleanup termine. */
-  async remove(id: string): Promise<void> {
+  /**
+   * Baja el LOOP de una sesión y la deja DORMIDA: para el runtime, pero NO destruye
+   * su workspace ni su transcript (siguen en disco, revivibles). Es lo que corre el
+   * shutdown y el "cerrar" del sidebar. Nada se borra por sorpresa.
+   */
+  async detach(id: string): Promise<void> {
     const handle = this.#sessions.get(id);
     if (!handle) return;
-    // Desbloquea el loop parado en nextInput; el cleanup lo hace el finally del loop.
-    handle.frontend.submitInput("/exit");
+    handle.frontend.submitInput("/exit"); // desbloquea el loop parado en nextInput
     await this.#loops.get(id);
   }
 
-  /** Baja todas las sesiones (shutdown del server). */
+  /** Baja todas las sesiones vivas (shutdown). No destruye workspaces. */
   async disposeAll(): Promise<void> {
-    await Promise.all([...this.#sessions.keys()].map((id) => this.remove(id)));
+    await Promise.all([...this.#sessions.keys()].map((id) => this.detach(id)));
   }
 
-  async #cleanup(handle: SessionHandle): Promise<void> {
+  /** Limpia el runtime de una sesión (sin tocar disco). Lo llama el finally del loop. */
+  #cleanup(handle: SessionHandle): void {
     if (!this.#sessions.delete(handle.id)) return; // ya limpiada
     this.#loops.delete(handle.id);
+    this.#index.touch(handle.id, now(), handle.title);
     handle.frontend.stop();
     // Cierra procesos MCP hijos que ESTA sesión haya arrancado (registry propio).
     try {
@@ -205,7 +319,6 @@ export class SessionManager {
     } catch {
       /* best-effort */
     }
-    await handle.workspace.dispose();
-    logger.info("sesión bajada", { id: handle.id });
+    logger.info("sesión dormida", { id: handle.id });
   }
 }

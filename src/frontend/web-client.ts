@@ -38,8 +38,13 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
   .sb-item:hover { background:var(--surface2); }
   .sb-item.active { background:var(--surface2); border-color:var(--border); }
   .sb-item.active::before { content:""; position:absolute; left:0; top:8px; bottom:8px; width:2px; border-radius:2px; background:var(--tool); }
-  .sb-item .nm { font-family:var(--mono); font-size:13px; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; padding-right:14px; }
-  .sb-item .meta { font-family:var(--mono); font-size:10px; color:var(--faint); }
+  .sb-item .nm { font-family:var(--mono); font-size:13px; color:var(--ink); display:flex; align-items:center; gap:7px; padding-right:14px; }
+  .sb-item .nm .tt { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .sb-item .pdot { width:7px; height:7px; border-radius:50%; background:var(--tool); box-shadow:0 0 6px var(--tool); flex:none; }
+  .sb-item.dormant { opacity:.62; }
+  .sb-item.dormant .nm { color:var(--dim); }
+  .sb-item.dormant .pdot { background:var(--faint); box-shadow:none; }
+  .sb-item .meta { font-family:var(--mono); font-size:10px; color:var(--faint); padding-left:14px; }
   .sb-item .meta .iso { color:var(--warn); }
   .sb-item .x { position:absolute; top:6px; right:6px; width:17px; height:17px; line-height:15px; text-align:center;
                 background:none; border:none; color:var(--faint); font-size:14px; cursor:pointer; border-radius:5px; opacity:0; }
@@ -337,7 +342,7 @@ function openES(){
   es.onmessage = (e)=>{
   let ev; try { ev = JSON.parse(e.data); } catch { return; }
   switch(ev.type){
-    case 'ready': $("stat").textContent = ev.model; break;
+    case 'ready': $("stat").textContent = ev.model; loadSessions(); break;
     case 'turn_start': $("thinking").classList.add('on'); curAsst=null; scroll(); break;
     case 'delta':
       if(!curAsst) curAsst = addMsg('omega','asst');
@@ -382,18 +387,28 @@ function renderSessions(list){
   const box = $("sblist"); box.innerHTML='';
   list.forEach(function(s){
     const it = document.createElement('div');
-    it.className = 'sb-item' + (s.id===current ? ' active' : '');
+    it.className = 'sb-item' + (s.id===current ? ' active' : '') + (s.live ? '' : ' dormant');
     it.onclick = function(){ selectSession(s.id); };
-    const nm = document.createElement('div'); nm.className='nm'; nm.textContent = s.title;
+
+    const nm = document.createElement('div'); nm.className='nm';
+    const dot = document.createElement('span'); dot.className='pdot';
+    const tt = document.createElement('span'); tt.className='tt'; tt.textContent = s.title;
+    nm.appendChild(dot); nm.appendChild(tt);
+
     const meta = document.createElement('div'); meta.className='meta';
-    meta.innerHTML = s.isolated ? '<span class="iso">⎇ aislada</span>' : '· compartida';
-    if(s.clients) meta.innerHTML += ' · ' + s.clients + ' ◉';
-    it.appendChild(nm); it.appendChild(meta);
-    if(list.length > 1){
-      const x = document.createElement('button'); x.className='x'; x.textContent='×'; x.title='cerrar sesión';
-      x.onclick = function(e){ e.stopPropagation(); closeSession(s.id); };
-      it.appendChild(x);
+    if(s.live){
+      meta.innerHTML = s.isolated ? '<span class="iso">⎇ aislada</span>' : '· compartida';
+      if(s.clients) meta.innerHTML += ' · ' + s.clients + ' ◉';
+    } else {
+      meta.textContent = '⦿ dormida' + (s.branch ? ' · ' + s.branch : '');
     }
+    it.appendChild(nm); it.appendChild(meta);
+
+    // × duerme la sesión (no la borra). El default siempre queda.
+    const x = document.createElement('button'); x.className='x'; x.textContent='×'; x.title='dormir sesión';
+    x.onclick = function(e){ e.stopPropagation(); closeSession(s.id); };
+    it.appendChild(x);
+
     box.appendChild(it);
   });
 }

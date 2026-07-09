@@ -39,10 +39,17 @@ export class ServeMode implements FrontendMode {
     const manager = new SessionManager(this.#core, { baseDir });
     this.#manager = manager;
 
-    // Sesión por defecto: comparte el cwd del server (la UX single-sesión de
-    // siempre). Sesiones nuevas pueden pedir un worktree aislado desde el sidebar.
-    const first = await manager.create({ title: "principal" });
-    this.#defaultId = first.id;
+    // Arranque sin amnesia: si el índice ya tiene sesiones de este proyecto,
+    // revivo la más reciente como default (te devuelve donde estabas). Si no hay
+    // ninguna, creo la "principal" (comparte cwd — la UX single-sesión de siempre).
+    const dormant = manager.listAll();
+    if (dormant.length > 0) {
+      const revived = await manager.revive(dormant[0].id);
+      this.#defaultId = revived ? revived.id : (await manager.create({ title: "principal" })).id;
+      logger.info("sesiones dormidas encontradas", { total: dormant.length, revived: this.#defaultId });
+    } else {
+      this.#defaultId = (await manager.create({ title: "principal" })).id;
+    }
 
     const server = createServer((req, res) => {
       // El dispatch puede ser async (crear sesión); atrapamos para no tirar el server.
@@ -58,9 +65,10 @@ export class ServeMode implements FrontendMode {
     });
     const url = `http://localhost:${this.#port}`;
     process.stderr.write(`\n  Ω omega serve  →  ${url}\n  (Ctrl+C para cortar)\n\n`);
-    logger.info("web server up (multi-sesión)", { url, default: first.id });
+    logger.info("web server up (multi-sesión)", { url, default: this.#defaultId });
 
-    // Shutdown ordenado: baja todas las sesiones (limpia worktrees) y cierra.
+    // Shutdown ordenado: DORMIMOS las sesiones (para los loops) — NO destruimos
+    // workspaces ni transcripts. Al reiniciar el server se rehidratan del índice.
     const shutdown = async (): Promise<void> => {
       logger.info("serve shutdown");
       await manager.disposeAll();
@@ -89,9 +97,9 @@ export class ServeMode implements FrontendMode {
       return;
     }
 
-    // ── Sesiones: listar ────────────────────────────────────────────
+    // ── Sesiones: listar (vivas + dormidas) ─────────────────────────
     if (method === "GET" && path === "/sessions") {
-      this.#json(res, 200, { sessions: manager.list(), default: this.#defaultId });
+      this.#json(res, 200, { sessions: manager.listAll(), default: this.#defaultId });
       return;
     }
 
@@ -129,23 +137,19 @@ export class ServeMode implements FrontendMode {
       return;
     }
 
-    // ── Sesiones: bajar ─────────────────────────────────────────────
+    // ── Sesiones: dormir (detach) ───────────────────────────────────
+    // No destruye nada: para el loop y la deja dormida (sigue en la lista,
+    // revivible). Cerrar ≠ borrar — nada se elimina por sorpresa.
     if (method === "DELETE" && path === "/sessions") {
-      // No permitir bajar la última sesión: el server quedaría sin default usable.
-      if (manager.list().length <= 1) {
-        this.#json(res, 409, { error: "no se puede bajar la única sesión" });
-        return;
-      }
-      await manager.remove(sessionId);
-      if (sessionId === this.#defaultId) {
-        this.#defaultId = manager.list()[0]?.id ?? "";
-      }
+      await manager.detach(sessionId);
       res.writeHead(204).end();
       return;
     }
 
     // ── A partir de acá, todo es contra una sesión concreta ─────────
-    const handle = manager.get(sessionId);
+    // Si está dormida (en el índice pero sin loop), la revivimos on-demand:
+    // cargar el transcript y re-attachear su workspace.
+    const handle = manager.get(sessionId) ?? (await manager.revive(sessionId)) ?? undefined;
     if (!handle) {
       this.#json(res, 404, { error: `sesión ${sessionId} no encontrada` });
       return;
