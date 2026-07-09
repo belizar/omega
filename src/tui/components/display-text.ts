@@ -437,6 +437,32 @@ class DisplayAssistantText implements DisplayText {
  * Tool call compacto: "> read src/index.ts" o "> bash 'git status'".
  * Verbose: igual que compacto (el input ya es visible).
  */
+/** Longitud a partir de la cual un path se colapsa a padre/archivo. */
+const PATH_MAX = 40;
+
+/**
+ * Acorta un path para mostrarlo en un tool-call:
+ *  1. relativo al cwd si está adentro, o con `~` si está bajo el home;
+ *  2. si aun así queda largo (> PATH_MAX), lo colapsa a los últimos 2 segmentos
+ *     (carpeta contenedora + archivo) — compacto y sin ambigüedad. Los paths ya
+ *     cortos (típicamente dentro del cwd) quedan igual.
+ * Pura (cwd/home inyectados) para poder testearla.
+ */
+export function shortenPath(p: string, cwd: string, home: string): string {
+  if (!p) return p;
+  let rel = p;
+  if (p === cwd) return ".";
+  else if (p.startsWith(`${cwd}/`)) rel = p.slice(cwd.length + 1);
+  else if (p === home) return "~";
+  else if (p.startsWith(`${home}/`)) rel = `~/${p.slice(home.length + 1)}`;
+
+  if (rel.length > PATH_MAX) {
+    const segs = rel.split("/").filter(Boolean);
+    if (segs.length > 2) return segs.slice(-2).join("/");
+  }
+  return rel;
+}
+
 class DisplayToolCall {
   #screen: Screen;
   constructor(screen: Screen) {
@@ -582,17 +608,8 @@ class DisplayToolCall {
     return typeof obj.path === "string" ? this.#shortPath(obj.path) : "?";
   }
 
-  /** Acorta un path absoluto: relativo al cwd si está adentro, o con ~ si
-   *  está bajo el home. Fuera de ambos, se deja tal cual. */
   #shortPath(p: string): string {
-    if (!p) return p;
-    const cwd = process.cwd();
-    if (p === cwd) return ".";
-    if (p.startsWith(`${cwd}/`)) return p.slice(cwd.length + 1);
-    const home = homedir();
-    if (p === home) return "~";
-    if (p.startsWith(`${home}/`)) return `~/${p.slice(home.length + 1)}`;
-    return p;
+    return shortenPath(p, process.cwd(), homedir());
   }
 
   /** Saca el `cd <cwd> && ` redundante que el agente antepone a los bash:
