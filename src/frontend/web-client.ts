@@ -21,7 +21,34 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
   * { box-sizing:border-box; }
   html,body { height:100%; margin:0; }
   body { background:var(--bg); color:var(--ink); font-family:var(--sans); font-size:15px; line-height:1.6;
-         display:flex; flex-direction:column; }
+         display:flex; }
+  .col { flex:1; display:flex; flex-direction:column; min-width:0; height:100%; }
+
+  /* Sidebar de sesiones (multi-sesión) */
+  .sidebar { width:236px; flex-shrink:0; background:var(--surface); border-right:1px solid var(--border);
+             display:flex; flex-direction:column; height:100%; }
+  .sb-hd { display:flex; align-items:center; gap:8px; padding:13px 13px 11px; border-bottom:1px solid var(--border); }
+  .sb-hd .t { font-family:var(--mono); letter-spacing:0.2em; text-transform:uppercase; font-size:10.5px; color:var(--dim); }
+  .sb-new { margin-left:auto; background:var(--surface2); color:var(--tool); border:1px solid var(--border);
+            border-radius:7px; height:26px; padding:0 9px; font-family:var(--mono); font-size:12px; font-weight:700; cursor:pointer; }
+  .sb-new:hover { border-color:var(--tool); }
+  .sb-list { flex:1; overflow-y:auto; padding:8px; display:flex; flex-direction:column; gap:4px; }
+  .sb-item { position:relative; border:1px solid transparent; border-radius:9px; padding:8px 10px; cursor:pointer;
+             display:flex; flex-direction:column; gap:2px; }
+  .sb-item:hover { background:var(--surface2); }
+  .sb-item.active { background:var(--surface2); border-color:var(--border); }
+  .sb-item.active::before { content:""; position:absolute; left:0; top:8px; bottom:8px; width:2px; border-radius:2px; background:var(--tool); }
+  .sb-item .nm { font-family:var(--mono); font-size:13px; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; padding-right:14px; }
+  .sb-item .meta { font-family:var(--mono); font-size:10px; color:var(--faint); }
+  .sb-item .meta .iso { color:var(--warn); }
+  .sb-item .x { position:absolute; top:6px; right:6px; width:17px; height:17px; line-height:15px; text-align:center;
+                background:none; border:none; color:var(--faint); font-size:14px; cursor:pointer; border-radius:5px; opacity:0; }
+  .sb-item:hover .x { opacity:1; } .sb-item .x:hover { color:var(--err); background:color-mix(in srgb,var(--err) 14%,transparent); }
+  .sb-foot { padding:10px 13px; border-top:1px solid var(--border); }
+  .sb-foot label { display:flex; align-items:center; gap:7px; font-family:var(--mono); font-size:11px; color:var(--dim); cursor:pointer; }
+  .sb-foot input { accent-color:var(--tool); }
+  .sb-foot .hint2 { margin-top:5px; font-family:var(--mono); font-size:9.5px; color:var(--faint); line-height:1.4; }
+  @media (max-width:640px) { .sidebar { display:none; } }
   header { display:flex; align-items:center; gap:11px; padding:12px 18px; border-bottom:1px solid var(--border);
            background:var(--surface); position:sticky; top:0; z-index:2; }
   header .om { font-family:var(--mono); font-weight:700; font-size:22px; color:var(--tool); line-height:1; }
@@ -118,6 +145,15 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
 </script>
 </head>
 <body>
+  <aside class="sidebar">
+    <div class="sb-hd"><span class="t">sesiones</span><button class="sb-new" id="sbnew" title="nueva sesión">+ nueva</button></div>
+    <div class="sb-list" id="sblist"></div>
+    <div class="sb-foot">
+      <label><input type="checkbox" id="wt"> worktree aislado</label>
+      <div class="hint2">aislada = git worktree propio, no pisa el repo. compartida = mismo cwd del server.</div>
+    </div>
+  </aside>
+  <div class="col">
   <header>
     <span class="om">Ω</span><span class="nm">omega</span>
     <span class="st"><span class="dotc" id="dot"></span><span id="stat">conectando…</span></span>
@@ -133,6 +169,7 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
     </div>
     <div class="hint" id="hint">Ω omega · frontend web · localhost</div>
   </form>
+  </div>
 
 <script>
 const GLYPH = { read:"»", outline:"≡", write:"+", edit:"✎", bash:"$", grep:"⌕", tool_search:"⌕", web_fetch:"↗", vision_ask:"◧", ask_user:"?", skill:"◆" };
@@ -284,12 +321,20 @@ function hydrateCode(){
 }
 function hydrate(){ hydrateMermaid(); hydrateCode(); }
 
-// ── SSE ──────────────────────────────────────────────────────────
+// ── SSE + sesiones ────────────────────────────────────────────────
 let lastTool = null;
-const es = new EventSource('/events');
-es.onopen = ()=>{ $("dot").classList.add('on'); $("stat").textContent='conectado'; };
-es.onerror = ()=>{ $("dot").classList.remove('on'); $("stat").textContent='reconectando…'; };
-es.onmessage = (e)=>{
+let current = null;   // id de la sesión activa
+let es = null;        // EventSource de la sesión activa
+
+// Agrega ?session=<id> a una ruta (cada request va contra la sesión activa).
+function q(p){ return p + (p.indexOf('?')>=0?'&':'?') + 'session=' + encodeURIComponent(current); }
+
+function openES(){
+  if(es) es.close();
+  es = new EventSource(q('/events'));
+  es.onopen = ()=>{ $("dot").classList.add('on'); $("stat").textContent='conectado'; };
+  es.onerror = ()=>{ $("dot").classList.remove('on'); $("stat").textContent='reconectando…'; };
+  es.onmessage = (e)=>{
   let ev; try { ev = JSON.parse(e.data); } catch { return; }
   switch(ev.type){
     case 'ready': $("stat").textContent = ev.model; break;
@@ -318,7 +363,70 @@ es.onmessage = (e)=>{
     }
     case 'notify': { const n=document.createElement('div'); n.className='sys'; n.textContent=ev.text; thread.appendChild(n); if(atBottom()) scroll(); break; }
   }
-};
+  };
+}
+
+// Limpia el hilo al cambiar de sesión (los eventos pasados no se re-emiten: el
+// hub no bufferea historial; ves la sesión desde el próximo evento).
+function resetThread(){ thread.innerHTML=''; curAsst=null; lastTool=null; $("thinking").classList.remove('on'); }
+
+function selectSession(id, force){
+  if(!force && id===current && es) return;
+  current = id;
+  resetThread();
+  openES();
+  loadSessions();
+}
+
+function renderSessions(list){
+  const box = $("sblist"); box.innerHTML='';
+  list.forEach(function(s){
+    const it = document.createElement('div');
+    it.className = 'sb-item' + (s.id===current ? ' active' : '');
+    it.onclick = function(){ selectSession(s.id); };
+    const nm = document.createElement('div'); nm.className='nm'; nm.textContent = s.title;
+    const meta = document.createElement('div'); meta.className='meta';
+    meta.innerHTML = s.isolated ? '<span class="iso">⎇ aislada</span>' : '· compartida';
+    if(s.clients) meta.innerHTML += ' · ' + s.clients + ' ◉';
+    it.appendChild(nm); it.appendChild(meta);
+    if(list.length > 1){
+      const x = document.createElement('button'); x.className='x'; x.textContent='×'; x.title='cerrar sesión';
+      x.onclick = function(e){ e.stopPropagation(); closeSession(s.id); };
+      it.appendChild(x);
+    }
+    box.appendChild(it);
+  });
+}
+
+async function loadSessions(){
+  try {
+    const r = await fetch('/sessions'); const d = await r.json();
+    if(!current) current = d.default;
+    renderSessions(d.sessions);
+  } catch(_){}
+}
+
+async function newSession(){
+  const worktree = $("wt").checked;
+  try {
+    const r = await fetch('/sessions', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({worktree:worktree}) });
+    const s = await r.json();
+    await loadSessions();
+    selectSession(s.id, true);
+  } catch(_){}
+}
+
+async function closeSession(id){
+  const wasCurrent = (id === current);
+  try { await fetch('/sessions?session=' + encodeURIComponent(id), { method:'DELETE' }); } catch(_){}
+  if(wasCurrent){ current = null; await loadSessions(); selectSession(current, true); }
+  else { loadSessions(); }
+}
+
+$("sbnew").addEventListener('click', newSession);
+
+// Boot: descubrí las sesiones, elegí la default, abrí su stream.
+(async function(){ await loadSessions(); openES(); })();
 
 // ── Input ────────────────────────────────────────────────────────
 const input = $("input");
@@ -329,7 +437,7 @@ $("form").addEventListener('submit', async (e)=>{
   const text = input.value.trim(); if(!text) return;
   addMsg('vos','user').textContent = text;
   input.value=''; input.style.height='auto'; $("hint").textContent='Ω omega · frontend web · localhost'; scroll();
-  await fetch('/input', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({text}) });
+  await fetch(q('/input'), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({text}) });
 });
 input.focus();
 
@@ -337,7 +445,7 @@ input.focus();
 async function interrupt(){
   if(!$("thinking").classList.contains('on')) return;
   $("thinking").classList.remove('on');
-  try { await fetch('/interrupt', { method:'POST' }); } catch {}
+  try { await fetch(q('/interrupt'), { method:'POST' }); } catch {}
 }
 $("stop").addEventListener('click', interrupt);
 window.addEventListener('keydown', (e)=>{ if(e.key==='Escape') interrupt(); });
