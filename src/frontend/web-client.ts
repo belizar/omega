@@ -44,11 +44,25 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
               border-radius:8px; padding:11px 13px; overflow-x:auto; margin:9px 0; }
   .body pre code { background:none; padding:0; color:var(--ink); }
   .body strong { color:#fff; font-weight:650; }
+  .mermaid-block { margin:10px 0; }
+  .mermaid-block svg { max-width:100%; height:auto; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px; }
+  .mermaid-block pre.mmsrc { opacity:.7; }
+  .mermaid-block[data-done] pre.mmsrc { display:none; }
   .body table { border-collapse:collapse; margin:10px 0; display:block; overflow-x:auto; font-size:13.5px; }
   .body th, .body td { border:1px solid var(--border); padding:7px 11px; text-align:left; vertical-align:top; }
   .body thead th { background:var(--surface2); font-family:var(--mono); font-size:11.5px; text-transform:uppercase;
                    letter-spacing:0.06em; color:var(--dim); font-weight:600; }
   .body tbody tr:nth-child(even) td { background:rgba(255,255,255,.02); }
+  .body h1,.body h2,.body h3,.body h4,.body h5,.body h6 { font-family:var(--mono); font-weight:650; line-height:1.3; margin:16px 0 8px; color:#fff; }
+  .body h1 { font-size:1.42em; } .body h2 { font-size:1.24em; } .body h3 { font-size:1.09em; color:var(--ink); }
+  .body h4,.body h5,.body h6 { font-size:1em; color:var(--dim); }
+  .body a { color:var(--tool); text-decoration:underline; text-underline-offset:2px; }
+  .body em { font-style:italic; }
+  .body del { color:var(--faint); }
+  .body blockquote { margin:9px 0; padding:3px 0 3px 13px; border-left:2px solid var(--tool); color:var(--dim); }
+  .body ul,.body ol { margin:8px 0; padding-left:22px; } .body li { margin:2px 0; }
+  .body li.task { list-style:none; margin-left:-18px; } .body li.task input { margin-right:6px; accent-color:var(--tool); vertical-align:middle; }
+  .body hr { border:none; border-top:1px solid var(--border); margin:16px 0; }
 
   .tool { font-family:var(--mono); font-size:13px; display:flex; flex-direction:column; gap:2px; }
   .tool .call { color:var(--gl,var(--tool)); }
@@ -83,6 +97,12 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
   button:disabled { opacity:.4; cursor:default; }
   .hint { max-width:820px; margin:7px auto 0; font-family:var(--mono); font-size:11px; color:var(--faint); }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+  // mermaid como asset del browser (CDN); si no carga, los bloques quedan como
+  // código. Node/Omega sigue zero-dep. Render manual (no en streaming).
+  if (window.mermaid) mermaid.initialize({ startOnLoad:false, theme:"dark", securityLevel:"strict", fontFamily:"ui-monospace, monospace" });
+</script>
 </head>
 <body>
   <header>
@@ -112,37 +132,75 @@ function esc(s){ return String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;
 function atBottom(){ return main.scrollHeight - main.scrollTop - main.clientHeight < 80; }
 function scroll(){ main.scrollTop = main.scrollHeight; }
 
-// inline: escapa y aplica \x60code\x60 + **bold** (para prosa y celdas de tabla)
+// inline: escapa, luego links, code, bold, italic, tachado. El orden importa
+// (links y code antes que bold/italic para no romper su contenido).
 function inlineMd(s){
   s = esc(s);
-  s = s.replace(/\x60([^\x60]+)\x60/g, (_,c)=>'<code>'+c+'</code>');
+  s = s.replace(/\x60([^\x60]+)\x60/g, (_,c)=>'\x01'+c+'\x02');                 // code (protegido)
+  s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_,t,u)=>'<a href="'+u+'" target="_blank" rel="noopener">'+t+'</a>');
   s = s.replace(/\*\*([^*]+)\*\*/g, (_,c)=>'<strong>'+c+'</strong>');
+  s = s.replace(/(^|[^*])\*([^*\s][^*]*?)\*/g, (_,p,c)=>p+'<em>'+c+'</em>');    // *itálica*
+  s = s.replace(/(^|[^\w])_([^_]+)_(?=[^\w]|$)/g, (_,p,c)=>p+'<em>'+c+'</em>'); // _énfasis_
+  s = s.replace(/~~([^~]+)~~/g, (_,c)=>'<del>'+c+'</del>');
+  s = s.replace(/\x01([^\x02]*)\x02/g, (_,c)=>'<code>'+c+'</code>');            // code restaurado
   return s;
 }
 function splitRow(line){ return line.trim().replace(/^\||\|$/g,'').split('|').map(c=>c.trim()); }
+const LIST_RE = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/;
 
-// markdown-lite: code blocks, TABLAS, párrafos con inline. Line-based para que
-// las tablas (varias líneas contiguas) se detecten bien.
+// Lista (anidada por indentación) desde lines[start]. Devuelve [html, next].
+function parseList(lines, start){
+  const base = lines[start].match(LIST_RE)[1].length;
+  const ordered = /\d/.test(lines[start].match(LIST_RE)[2]);
+  let html = ordered ? '<ol>' : '<ul>'; let i = start;
+  while(i < lines.length){
+    const m = lines[i].match(LIST_RE); if(!m) break;
+    const ind = m[1].length;
+    if(ind < base) break;
+    if(ind === base && /\d/.test(m[2]) !== ordered) break; // cambió ol↔ul → lista nueva
+    if(ind > base){ const [sub, ni] = parseList(lines, i); html = html.replace(/<\/li>$/, sub + '</li>'); i = ni; continue; }
+    const task = m[3].match(/^\[([ xX])\]\s+(.*)$/);
+    if(task){ const on = task[1].toLowerCase()==='x';
+      html += '<li class="task"><input type="checkbox" disabled'+(on?' checked':'')+'> '+inlineMd(task[2])+'</li>'; }
+    else html += '<li>'+inlineMd(m[3])+'</li>';
+    i++;
+  }
+  return [html + (ordered ? '</ol>' : '</ul>'), i];
+}
+
+// Renderer markdown por bloques (line-based). Cubre headings, hr, blockquote,
+// tablas, listas anidadas, code blocks y párrafos; inline vía inlineMd.
 function md(t){
   const code = [];
   t = t.replace(/\x60\x60\x60(\w*)\n?([\s\S]*?)\x60\x60\x60/g, (_,lang,c) => {
-    code.push('<pre><code>'+esc(c.replace(/\n$/,''))+'</code></pre>'); return '\x00C'+(code.length-1)+'\x00';
+    const src = c.replace(/\n$/,'');
+    if(lang === 'mermaid'){
+      code.push('<div class="mermaid-block" data-src="'+encodeURIComponent(src)+'"><pre class="mmsrc"><code>'+esc(src)+'</code></pre></div>');
+    } else {
+      code.push('<pre><code>'+esc(src)+'</code></pre>');
+    }
+    return '\x00C'+(code.length-1)+'\x00';
   });
   const lines = t.split('\n');
   const html = []; let para = []; let i = 0;
   const flush = ()=>{ if(para.length){ html.push('<p>'+para.map(inlineMd).join('<br>')+'</p>'); para=[]; } };
   while(i < lines.length){
     const line = lines[i];
-    const isTable = line.includes('|') && i+1 < lines.length && /^\s*\|?[\s:|-]*-[\s:|-]*\|?\s*$/.test(lines[i+1]);
-    if(isTable){
-      flush();
-      const head = splitRow(line); i += 2; const rows = [];
-      while(i < lines.length && lines[i].includes('|') && lines[i].trim() !== ''){ rows.push(splitRow(lines[i])); i++; }
-      let tb = '<table><thead><tr>'+head.map(h=>'<th>'+inlineMd(h)+'</th>').join('')+'</tr></thead><tbody>';
-      tb += rows.map(r=>'<tr>'+r.map(c=>'<td>'+inlineMd(c)+'</td>').join('')+'</tr>').join('');
-      html.push(tb + '</tbody></table>');
-    } else if(line.trim() === ''){ flush(); i++; }
-    else { para.push(line); i++; }
+    if(/^\x00C\d+\x00$/.test(line.trim())){ flush(); html.push(line.trim()); i++; continue; }
+    const h = line.match(/^(#{1,6})\s+(.*)$/);
+    if(h){ flush(); const n=h[1].length; html.push('<h'+n+'>'+inlineMd(h[2])+'</h'+n+'>'); i++; continue; }
+    if(/^\s*([-*_])\1{2,}\s*$/.test(line)){ flush(); html.push('<hr>'); i++; continue; }
+    if(/^\s*>\s?/.test(line)){ flush(); const bq=[]; while(i<lines.length && /^\s*>\s?/.test(lines[i])){ bq.push(lines[i].replace(/^\s*>\s?/,'')); i++; } html.push('<blockquote>'+bq.map(inlineMd).join('<br>')+'</blockquote>'); continue; }
+    if(line.includes('|') && i+1<lines.length && /^\s*\|?[\s:|-]*-[\s:|-]*\|?\s*$/.test(lines[i+1])){
+      flush(); const head=splitRow(line); i+=2; const rows=[];
+      while(i<lines.length && lines[i].includes('|') && lines[i].trim()!==''){ rows.push(splitRow(lines[i])); i++; }
+      let tb='<table><thead><tr>'+head.map(x=>'<th>'+inlineMd(x)+'</th>').join('')+'</tr></thead><tbody>';
+      tb+=rows.map(r=>'<tr>'+r.map(c=>'<td>'+inlineMd(c)+'</td>').join('')+'</tr>').join('');
+      html.push(tb+'</tbody></table>'); continue;
+    }
+    if(LIST_RE.test(line)){ flush(); const [lh, ni]=parseList(lines, i); html.push(lh); i=ni; continue; }
+    if(line.trim()===''){ flush(); i++; continue; }
+    para.push(line); i++;
   }
   flush();
   return html.join('').replace(/\x00C(\d+)\x00/g, (_,n)=>code[+n]);
@@ -189,6 +247,19 @@ function addToolResult(wrap, output, isError){
 }
 function short2(s){ s=String(s).trim(); return s.length>240? s.slice(0,239)+'…' : s; }
 
+// Renderiza los bloques mermaid pendientes (al finalizar el mensaje, no en
+// streaming: un grafo a medias no compila). Si mermaid no cargó, quedan como código.
+async function hydrateMermaid(){
+  if(!window.mermaid) return;
+  for(const el of document.querySelectorAll('.mermaid-block:not([data-done])')){
+    const src = decodeURIComponent(el.getAttribute('data-src')||'');
+    try {
+      const { svg } = await mermaid.render('mm'+Math.random().toString(36).slice(2), src);
+      el.innerHTML = svg; el.setAttribute('data-done','1');
+    } catch { el.setAttribute('data-done','err'); }
+  }
+}
+
 // ── SSE ──────────────────────────────────────────────────────────
 let lastTool = null;
 const es = new EventSource('/events');
@@ -205,11 +276,11 @@ es.onmessage = (e)=>{
       curAsst.innerHTML = md(curAsst.dataset.raw);
       if(atBottom()) scroll();
       break;
-    case 'assistant_end': curAsst=null; break;
-    case 'assistant': { const b=addMsg('omega','asst'); b.dataset.raw=ev.text; b.innerHTML=md(ev.text); break; }
+    case 'assistant_end': curAsst=null; hydrateMermaid(); break;
+    case 'assistant': { const b=addMsg('omega','asst'); b.dataset.raw=ev.text; b.innerHTML=md(ev.text); hydrateMermaid(); break; }
     case 'tool_use': lastTool = addTool(ev.name, ev.input); break;
     case 'tool_result': addToolResult(lastTool, ev.output, ev.isError); lastTool=null; break;
-    case 'turn_end': $("thinking").classList.remove('on'); curAsst=null; break;
+    case 'turn_end': $("thinking").classList.remove('on'); curAsst=null; hydrateMermaid(); break;
     case 'metrics': {
       const c = ev.turnCost<0.01?'<$0.01':'$'+ev.turnCost.toFixed(2);
       const m=document.createElement('div'); m.className='metrics';
