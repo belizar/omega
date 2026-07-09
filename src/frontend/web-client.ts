@@ -44,6 +44,11 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
               border-radius:8px; padding:11px 13px; overflow-x:auto; margin:9px 0; }
   .body pre code { background:none; padding:0; color:var(--ink); }
   .body strong { color:#fff; font-weight:650; }
+  .body table { border-collapse:collapse; margin:10px 0; display:block; overflow-x:auto; font-size:13.5px; }
+  .body th, .body td { border:1px solid var(--border); padding:7px 11px; text-align:left; vertical-align:top; }
+  .body thead th { background:var(--surface2); font-family:var(--mono); font-size:11.5px; text-transform:uppercase;
+                   letter-spacing:0.06em; color:var(--dim); font-weight:600; }
+  .body tbody tr:nth-child(even) td { background:rgba(255,255,255,.02); }
 
   .tool { font-family:var(--mono); font-size:13px; display:flex; flex-direction:column; gap:2px; }
   .tool .call { color:var(--gl,var(--tool)); }
@@ -60,6 +65,11 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
   .thinking.on { display:flex; }
   .sp { width:9px; height:9px; border-radius:50%; background:var(--tool); animation:pulse 1s ease-in-out infinite; }
   @keyframes pulse { 0%,100%{opacity:.25;transform:scale(.8)} 50%{opacity:1;transform:scale(1)} }
+  .stopbtn { margin-left:auto; font-family:var(--mono); font-size:11.5px; color:var(--err); background:none;
+             border:1px solid color-mix(in srgb,var(--err) 40%,transparent); border-radius:7px; padding:3px 10px;
+             cursor:pointer; }
+  .stopbtn:hover { background:color-mix(in srgb,var(--err) 14%,transparent); }
+  @media (prefers-reduced-motion: reduce) { .sp { animation:none; } }
 
   form { border-top:1px solid var(--border); background:var(--surface); padding:12px 18px 16px; }
   .inbar { max-width:820px; margin:0 auto; display:flex; gap:10px; align-items:flex-end; }
@@ -81,7 +91,7 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
   </header>
   <main id="main">
     <div class="thread" id="thread"></div>
-    <div class="thinking" id="thinking"><span class="sp"></span><span id="thinkLbl">Pensando…</span></div>
+    <div class="thinking" id="thinking"><span class="sp"></span><span id="thinkLbl">Pensando…</span><button type="button" class="stopbtn" id="stop">■ detener · Esc</button></div>
   </main>
   <form id="form">
     <div class="inbar">
@@ -102,18 +112,40 @@ function esc(s){ return String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;
 function atBottom(){ return main.scrollHeight - main.scrollTop - main.clientHeight < 80; }
 function scroll(){ main.scrollTop = main.scrollHeight; }
 
-// markdown-lite: escapa, luego bloques de código, inline code, bold, párrafos
+// inline: escapa y aplica \x60code\x60 + **bold** (para prosa y celdas de tabla)
+function inlineMd(s){
+  s = esc(s);
+  s = s.replace(/\x60([^\x60]+)\x60/g, (_,c)=>'<code>'+c+'</code>');
+  s = s.replace(/\*\*([^*]+)\*\*/g, (_,c)=>'<strong>'+c+'</strong>');
+  return s;
+}
+function splitRow(line){ return line.trim().replace(/^\||\|$/g,'').split('|').map(c=>c.trim()); }
+
+// markdown-lite: code blocks, TABLAS, párrafos con inline. Line-based para que
+// las tablas (varias líneas contiguas) se detecten bien.
 function md(t){
-  const blocks = [];
-  t = t.replace(/\x60\x60\x60(\w*)\n?([\s\S]*?)\x60\x60\x60/g, (_,lang,code) => {
-    blocks.push('<pre><code>'+esc(code.replace(/\n$/,''))+'</code></pre>'); return '\x00'+(blocks.length-1)+'\x00';
+  const code = [];
+  t = t.replace(/\x60\x60\x60(\w*)\n?([\s\S]*?)\x60\x60\x60/g, (_,lang,c) => {
+    code.push('<pre><code>'+esc(c.replace(/\n$/,''))+'</code></pre>'); return '\x00C'+(code.length-1)+'\x00';
   });
-  t = esc(t);
-  t = t.replace(/\x60([^\x60]+)\x60/g, (_,c)=>'<code>'+c+'</code>');
-  t = t.replace(/\*\*([^*]+)\*\*/g, (_,c)=>'<strong>'+c+'</strong>');
-  t = t.split(/\n{2,}/).map(p=>'<p>'+p.replace(/\n/g,'<br>')+'</p>').join('');
-  t = t.replace(/\x00(\d+)\x00/g, (_,i)=>blocks[+i]);
-  return t;
+  const lines = t.split('\n');
+  const html = []; let para = []; let i = 0;
+  const flush = ()=>{ if(para.length){ html.push('<p>'+para.map(inlineMd).join('<br>')+'</p>'); para=[]; } };
+  while(i < lines.length){
+    const line = lines[i];
+    const isTable = line.includes('|') && i+1 < lines.length && /^\s*\|?[\s:|-]*-[\s:|-]*\|?\s*$/.test(lines[i+1]);
+    if(isTable){
+      flush();
+      const head = splitRow(line); i += 2; const rows = [];
+      while(i < lines.length && lines[i].includes('|') && lines[i].trim() !== ''){ rows.push(splitRow(lines[i])); i++; }
+      let tb = '<table><thead><tr>'+head.map(h=>'<th>'+inlineMd(h)+'</th>').join('')+'</tr></thead><tbody>';
+      tb += rows.map(r=>'<tr>'+r.map(c=>'<td>'+inlineMd(c)+'</td>').join('')+'</tr>').join('');
+      html.push(tb + '</tbody></table>');
+    } else if(line.trim() === ''){ flush(); i++; }
+    else { para.push(line); i++; }
+  }
+  flush();
+  return html.join('').replace(/\x00C(\d+)\x00/g, (_,n)=>code[+n]);
 }
 
 function addMsg(who, cls){
@@ -205,6 +237,15 @@ $("form").addEventListener('submit', async (e)=>{
   await fetch('/input', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({text}) });
 });
 input.focus();
+
+// ── Interrupción: Esc o el botón "detener" cortan el turno en curso ──
+async function interrupt(){
+  if(!$("thinking").classList.contains('on')) return;
+  $("thinking").classList.remove('on');
+  try { await fetch('/interrupt', { method:'POST' }); } catch {}
+}
+$("stop").addEventListener('click', interrupt);
+window.addEventListener('keydown', (e)=>{ if(e.key==='Escape') interrupt(); });
 </script>
 </body>
 </html>`;

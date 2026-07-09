@@ -97,6 +97,13 @@ export class ServeMode implements FrontendMode {
       return;
     }
 
+    // ── Interrupt: cortar el turno en curso (Esc / botón stop) ─────
+    if (method === "POST" && url === "/interrupt") {
+      frontend.interrupt();
+      res.writeHead(204).end();
+      return;
+    }
+
     // ── Input: un mensaje del browser → la cola del agente ─────────
     if (method === "POST" && url === "/input") {
       let body = "";
