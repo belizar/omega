@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
-import { existsSync, mkdirSync, rmSync } from "fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from "fs";
 import { join } from "path";
-import { homedir } from "os";
+import { homedir, tmpdir } from "os";
 import {
   record,
   listProjects,
@@ -18,10 +18,18 @@ const HM = homedir();
 
 describe("inferProjectSlug", () => {
   it("should detect .git parent as project root", () => {
-    const cwd = join(HM, "Workspace", "omega", "src");
-    const result = inferProjectSlug(cwd);
-    expect(result.slug).toBe("omega");
-    expect(result.root).toContain("omega");
+    // Hermético: creamos un repo real en un temp (antes se asumía que existía
+    // ~/Workspace/omega/.git, cosa que en un layout bare o CI no es cierta).
+    const tmp = mkdtempSync(join(tmpdir(), "omega-proj-"));
+    mkdirSync(join(tmp, "myproj", ".git"), { recursive: true });
+    mkdirSync(join(tmp, "myproj", "src"), { recursive: true });
+    try {
+      const result = inferProjectSlug(join(tmp, "myproj", "src"));
+      expect(result.slug).toBe("myproj");
+      expect(result.root).toContain("myproj");
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
   });
 
   it("should use basename when no .git found", () => {

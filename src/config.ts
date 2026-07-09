@@ -86,7 +86,10 @@ function loadJsonFile(path: string): Record<string, unknown> | null {
 /** Carga ~/.omega/config.json y .omega/config.json, mergea.
  *  En modo test no lee archivos: devuelve los defaults hardcodeados. */
 export function loadOmegaConfig(): OmegaConfig {
-  if (process.env.NODE_ENV === "test") {
+  // En tests no leemos archivos del usuario (global/proyecto) — si no, el
+  // resultado depende de la máquina/cwd. `VITEST` lo setea vitest siempre;
+  // `NODE_ENV` no es confiable. Devolvemos los defaults hardcodeados.
+  if (process.env.NODE_ENV === "test" || process.env.VITEST) {
     return { ...DEFAULT_CONFIG, profiles: { ...DEFAULT_CONFIG.profiles } };
   }
 

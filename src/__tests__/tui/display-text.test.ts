@@ -110,12 +110,14 @@ describe("DisplayToolCall", () => {
     expect(screen.getLastAbove()).toContain("bash 'git status'");
   });
 
-  it("should truncate long bash commands", () => {
-    const longCmd = "x".repeat(100);
+  it("muestra comandos bash largos completos, en una línea aparte (no trunca)", () => {
+    // Diseño: un comando > 70 chars se muestra ENTERO en su propia línea
+    // (`bash\n<cmd>`), no truncado — para no perder el comando real.
+    const longCmd = "echo " + "x".repeat(100);
     display.call("bash", { command: longCmd }, false);
     const line = screen.getLastAbove();
-    expect(line).toContain("...");
-    expect(line.length).toBeLessThan(longCmd.length + 20);
+    expect(line).toContain(longCmd); // completo
+    expect(line).toContain("\n"); // en línea aparte
   });
 
   it("should handle unknown tool names", () => {
