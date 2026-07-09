@@ -33,12 +33,20 @@ function barContent(buffer: string, width = 80): string {
   const botBar = `${DIM}└${"─".repeat(innerW)}┘${RST}`;
   const promptLen = 2; // "> "
   const indent = " ".repeat(promptLen);
+  // Placeholder tenue del render real cuando el buffer está vacío.
+  const PLACEHOLDER = "escribí tu tarea, o / para comandos";
   const lines = buffer.split("\n");
   const content = lines.map((l, i) => {
     const prefix = i === 0 ? "> " : indent;
     const visible = prefix + l;
-    const pad = innerW - visible.length;
-    return `${DIM}│${RST}` + visible + (pad > 0 ? " ".repeat(pad) : "") + `${DIM}│${RST}`;
+    let extra = "";
+    let extraLen = 0;
+    if (buffer === "" && i === 0 && promptLen + PLACEHOLDER.length <= innerW) {
+      extra = `${DIM}${PLACEHOLDER}${RST}`;
+      extraLen = PLACEHOLDER.length;
+    }
+    const pad = innerW - visible.length - extraLen;
+    return `${DIM}│${RST}` + visible + extra + (pad > 0 ? " ".repeat(pad) : "") + `${DIM}│${RST}`;
   });
   return [topBar, ...content, botBar].join("\n");
 }
