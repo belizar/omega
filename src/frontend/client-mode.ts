@@ -284,7 +284,7 @@ export class ClientMode implements FrontendMode {
             running = false;
             this.#assistant.endStream();
             this.#spinner.stop();
-            this.#screen.printAbove(dim("\n  ⏹ cortando el turno…"));
+            this.#screen.printAbove(dim("\n  ⏹ Interrumpido por el usuario."));
             void client.interrupt(info.id);
           }),
         );
@@ -387,7 +387,9 @@ export class ClientMode implements FrontendMode {
         logger.info("client: render history", { count: items.length });
         for (const it of items) {
           if (it.kind === "user") {
-            this.#screen.printAbove(dim(`\n  › ${it.text}`));
+            // Mismo estilo prominente (▌ barra + bold) que el echo en vivo, para
+            // que tus mensajes se distingan del output del agente también acá.
+            this.#screen.printAbove("\n" + this.#editor.renderEchoOf(String(it.text)));
           } else if (it.kind === "assistant") {
             this.#assistant.display(it.text);
           } else if (it.kind === "tool_use") {
