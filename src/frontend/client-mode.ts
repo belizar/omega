@@ -270,7 +270,14 @@ export class ClientMode implements FrontendMode {
       // y entrar a otra sesión a laburar en paralelo. Es el punto de todo esto.
       for (;;) {
         const input = await this.#screen.readLine(
-          new ChatInput(this.#editor, () => void client.interrupt(info.id)),
+          new ChatInput(this.#editor, () => {
+            // Feedback INSTANTÁNEO al apretar Esc (no esperamos el roundtrip del
+            // daemon): cerramos el stream colgado, paramos el spinner, y avisamos.
+            this.#assistant.endStream();
+            this.#spinner.stop();
+            this.#screen.printAbove(dim("\n  ⏹ cortando el turno…"));
+            void client.interrupt(info.id);
+          }),
         );
         const typed = input.trim();
         if (typed === BACK || typed === "/back" || typed === "/list") { this.#editor.reset(); break; }
@@ -321,6 +328,7 @@ export class ClientMode implements FrontendMode {
         this.#assistant.endStream();
         break;
       case "assistant":
+        logger.info("client: render assistant", { text: String(ev.text ?? "").slice(0, 40) });
         this.#spinner.stop();
         // Flush de un stream colgado (ej. te uniste a mitad, o se interrumpió sin
         // assistant_end): si no, el mensaje —incluido "⏹ Interrumpido"— no se ve.
