@@ -16,7 +16,10 @@ export interface CliArgs {
   /** true si se pidió el frontend web (`--serve`): hostea el core tras un
    *  server HTTP y se maneja desde el browser. */
   serve: boolean;
-  /** Puerto del server web (`--port`). Default 4477. */
+  /** true si se pidió el mission-control en la terminal (`omega mc`): la TUI como
+   *  cliente del daemon (lista de sesiones + chat, el turno corre en el daemon). */
+  mc: boolean;
+  /** Puerto del server/daemon (`--port`). Default 4477. */
   port: number;
 }
 
@@ -37,10 +40,15 @@ export function parseCliArgs(argv: string[]): CliArgs {
   let model: string | null = null;
   let temp: number | null = null;
   let serve = false;
+  let mc = false;
   let port = 4477;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
+    if (arg === "mc" || arg === "--mc") {
+      mc = true;
+      continue;
+    }
     if (arg === "--serve") {
       serve = true;
       continue;
@@ -83,5 +91,5 @@ export function parseCliArgs(argv: string[]): CliArgs {
     }
   }
 
-  return { headless, prompt, format, model, temp, serve, port };
+  return { headless, prompt, format, model, temp, serve, mc, port };
 }
