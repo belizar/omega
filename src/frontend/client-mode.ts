@@ -30,19 +30,26 @@ type ListItem =
 const BACK = "\x00BACK";
 
 /**
- * Editor del chat que además maneja Esc → volver a la lista. Envuelve el
- * LineEditor (que ignora Esc): cuando el turno NO está en curso, Esc te saca a
- * la lista en vez de no hacer nada. (El Esc de interrumpir un turno es otra cosa.)
+ * Editor del chat. Envuelve el LineEditor y maneja dos teclas propias:
+ *  - **Esc** → interrumpe el turno en curso (como la TUI normal). Se queda en la
+ *    sesión; el spinner promete "esc para cortar", así que Esc corta.
+ *  - **Ctrl-O** → vuelve a la lista de sesiones (out).
  */
 class ChatInput implements InputComponent<string> {
   #editor: LineEditor;
   #back = false;
-  constructor(editor: LineEditor) {
+  #onInterrupt: () => void;
+  constructor(editor: LineEditor, onInterrupt: () => void) {
     this.#editor = editor;
+    this.#onInterrupt = onInterrupt;
   }
   handleKey(key: Key): void {
     if (key.type === "escape") {
-      this.#back = true;
+      this.#onInterrupt(); // Esc corta el turno (no sale de la sesión)
+      return;
+    }
+    if (key.type === "ctrl" && key.key === "o") {
+      this.#back = true; // Ctrl-O vuelve a la lista
       return;
     }
     this.#editor.handleKey(key);
@@ -212,7 +219,7 @@ export class ClientMode implements FrontendMode {
     this.#screen.printAbove(
       dim(`\n\n  ── ${info.title}${info.branch ? " · " + info.branch : ""} · ${info.cwd}`),
     );
-    this.#screen.printAbove(dim("  (esc o /back a la lista · /exit para salir)\n"));
+    this.#screen.printAbove(dim("  (esc corta el turno · ctrl-o a la lista · /exit salir)\n"));
 
     const pending: Array<{ name: string; input: unknown }> = [];
     const onEvent = (ev: DaemonEvent): void => this.#renderEvent(ev, pending);
@@ -229,7 +236,9 @@ export class ClientMode implements FrontendMode {
       // MOMENTO para volver a la lista — el turno sigue corriendo en el daemon —
       // y entrar a otra sesión a laburar en paralelo. Es el punto de todo esto.
       for (;;) {
-        const input = await this.#screen.readLine(new ChatInput(this.#editor));
+        const input = await this.#screen.readLine(
+          new ChatInput(this.#editor, () => void client.interrupt(info.id)),
+        );
         const typed = input.trim();
         if (typed === BACK || typed === "/back" || typed === "/list") { this.#editor.reset(); break; }
         if (typed === "") { this.#editor.reset(); continue; }
@@ -251,6 +260,10 @@ export class ClientMode implements FrontendMode {
       }
     } finally {
       unsub();
+      // Parar el spinner: si te vas con un turno corriendo, no debe filtrarse
+      // "Pensando…" a la vista de la lista.
+      this.#spinner.stop();
+      this.#spinner.reset();
     }
     return quit;
   }
