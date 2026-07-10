@@ -126,6 +126,17 @@ export class ClientMode implements FrontendMode {
     }
   }
 
+  /** readLine para vistas de LISTA: oculta el cursor de texto (la lista navega
+   *  con ❯, no tipeás), así no queda un bloque suelto al pie. Lo restaura al salir. */
+  async #pickFrom<T>(component: InputComponent<T>): Promise<T> {
+    process.stdout.write("\x1b[?25l");
+    try {
+      return await this.#screen.readLine(component);
+    } finally {
+      process.stdout.write("\x1b[?25h");
+    }
+  }
+
   // ── Lista de sesiones ─────────────────────────────────────────────
 
   async #pickSession(client: DaemonClient): Promise<ListItem> {
@@ -164,7 +175,7 @@ export class ClientMode implements FrontendMode {
     // Vista full-screen: limpiamos para no apilar scrollback entre navegaciones.
     this.#screen.clearScreen();
     this.#screen.printAbove(dim("\n\n  Ω omega · sesiones   (↑↓ mover · ↵ entrar · esc salir)\n"));
-    const result = await this.#screen.readLine(list);
+    const result = await this.#pickFrom(list);
     if (!result) return { kind: "quit" }; // esc
     return result;
   }
@@ -183,7 +194,7 @@ export class ClientMode implements FrontendMode {
     });
     this.#screen.clearScreen();
     this.#screen.printAbove(dim("\n\n  nueva sesión — elegí el modo   (↵ elegir · esc cancelar)\n"));
-    const mode = await this.#screen.readLine(list);
+    const mode = await this.#pickFrom(list);
     if (!mode) return; // esc → cancela
 
     let opts: { mode: string; cwd?: string; branch?: string } = { mode: mode.key };
