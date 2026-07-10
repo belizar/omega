@@ -156,7 +156,7 @@ export class ClientMode implements FrontendMode {
 
     // Vista full-screen: limpiamos para no apilar scrollback entre navegaciones.
     this.#screen.clearScreen();
-    this.#screen.printAbove(dim("  Ω omega · sesiones   (↑↓ mover · ↵ entrar · esc salir)\n"));
+    this.#screen.printAbove(dim("\n\n  Ω omega · sesiones   (↑↓ mover · ↵ entrar · esc salir)\n"));
     const result = await this.#screen.readLine(list);
     if (!result) return { kind: "quit" }; // esc
     return result;
@@ -175,7 +175,7 @@ export class ClientMode implements FrontendMode {
       return `${arrow}${m.label}${dim(`  — ${m.desc}`)}`;
     });
     this.#screen.clearScreen();
-    this.#screen.printAbove(dim("  nueva sesión — elegí el modo   (↵ elegir · esc cancelar)\n"));
+    this.#screen.printAbove(dim("\n\n  nueva sesión — elegí el modo   (↵ elegir · esc cancelar)\n"));
     const mode = await this.#screen.readLine(list);
     if (!mode) return; // esc → cancela
 
@@ -210,28 +210,12 @@ export class ClientMode implements FrontendMode {
     // Entrar a una sesión = pantalla limpia (el chat es scrollback desde acá).
     this.#screen.clearScreen();
     this.#screen.printAbove(
-      dim(`  ── ${info.title}${info.branch ? " · " + info.branch : ""} · ${info.cwd}`),
+      dim(`\n\n  ── ${info.title}${info.branch ? " · " + info.branch : ""} · ${info.cwd}`),
     );
     this.#screen.printAbove(dim("  (esc o /back a la lista · /exit para salir)\n"));
 
-    // ── Estado del turno + settle ──
-    let busy = false;
-    let needsInput = false;
-    let waiters: Array<() => void> = [];
-    const wake = (): void => {
-      const w = waiters;
-      waiters = [];
-      w.forEach((r) => r());
-    };
-    const settle = (): Promise<void> =>
-      busy && !needsInput ? new Promise<void>((r) => waiters.push(r)) : Promise.resolve();
-
     const pending: Array<{ name: string; input: unknown }> = [];
-    const onEvent = (ev: DaemonEvent): void => this.#renderEvent(ev, pending, {
-      onBusy: () => (busy = true),
-      onIdle: () => { busy = false; wake(); },
-      onAsk: () => { needsInput = true; wake(); },
-    });
+    const onEvent = (ev: DaemonEvent): void => this.#renderEvent(ev, pending);
 
     const unsub = client.events(info.id, onEvent);
     // Dale un momento al daemon para mandar ready + history y que se rendericen
@@ -240,12 +224,12 @@ export class ClientMode implements FrontendMode {
 
     let quit = false;
     try {
+      // NO bloqueamos esperando el turno: el input queda vivo mientras el agente
+      // trabaja (el stream aparece arriba). Así podés APRETAR ESC EN CUALQUIER
+      // MOMENTO para volver a la lista — el turno sigue corriendo en el daemon —
+      // y entrar a otra sesión a laburar en paralelo. Es el punto de todo esto.
       for (;;) {
-        // Si hay un turno en curso (ej. entraste a una sesión corriendo), esperá.
-        while (busy && !needsInput) await settle();
-
         const input = await this.#screen.readLine(new ChatInput(this.#editor));
-        needsInput = false;
         const typed = input.trim();
         if (typed === BACK || typed === "/back" || typed === "/list") { this.#editor.reset(); break; }
         if (typed === "") { this.#editor.reset(); continue; }
@@ -262,8 +246,8 @@ export class ClientMode implements FrontendMode {
         this.#screen.printBlankLine();
 
         await client.input(info.id, input);
-        // Renderizamos el turno mientras llega por SSE; settle resuelve en turn_end.
-        while (busy && !needsInput) await settle();
+        // Volvemos a readLine de una: el turno se renderiza por SSE mientras tanto,
+        // y podés irte (esc) o encolar otro mensaje sin esperar a que termine.
       }
     } finally {
       unsub();
@@ -276,11 +260,9 @@ export class ClientMode implements FrontendMode {
   #renderEvent(
     ev: DaemonEvent,
     pending: Array<{ name: string; input: unknown }>,
-    hooks: { onBusy: () => void; onIdle: () => void; onAsk: () => void },
   ): void {
     switch (ev.type) {
       case "turn_start":
-        hooks.onBusy();
         pending.length = 0;
         this.#spinner.reset();
         this.#spinner.start();
@@ -313,12 +295,10 @@ export class ClientMode implements FrontendMode {
       case "turn_end":
         this.#spinner.stop();
         this.#screen.redrawLive();
-        hooks.onIdle();
         break;
       case "ask_user":
         this.#spinner.stop();
         this.#screen.printAbove(dim(`\n  ? ${String(ev.question ?? "")}`));
-        hooks.onAsk();
         break;
       case "notify":
         this.#screen.printAbove(dim(String(ev.text ?? "")));
