@@ -10,6 +10,7 @@ describe("parseCliArgs", () => {
       model: null,
       temp: null,
       serve: false,
+      serveCmd: null,
       mc: false,
       port: 4477,
     });
@@ -23,6 +24,7 @@ describe("parseCliArgs", () => {
       model: null,
       temp: null,
       serve: false,
+      serveCmd: null,
       mc: false,
       port: 4477,
     });
@@ -40,7 +42,22 @@ describe("parseCliArgs", () => {
   });
 
   it("--serve activa el frontend web (puerto default 4477)", () => {
-    expect(parseCliArgs(["--serve"])).toMatchObject({ serve: true, port: 4477, headless: false });
+    expect(parseCliArgs(["--serve"])).toMatchObject({ serve: true, serveCmd: null, port: 4477, headless: false });
+  });
+
+  it("`serve` (sin --) también arranca el daemon", () => {
+    expect(parseCliArgs(["serve"])).toMatchObject({ serve: true, serveCmd: null });
+  });
+
+  it("`serve stop` / `serve status` setean el subcomando de control", () => {
+    expect(parseCliArgs(["serve", "stop"])).toMatchObject({ serve: true, serveCmd: "stop" });
+    expect(parseCliArgs(["serve", "status"])).toMatchObject({ serve: true, serveCmd: "status" });
+    expect(parseCliArgs(["serve", "stop", "--port", "5000"])).toMatchObject({ serveCmd: "stop", port: 5000 });
+  });
+
+  it("`serve` con un token cualquiera NO lo toma como subcomando", () => {
+    // Solo stop/status son subcomandos; cualquier otra cosa se ignora.
+    expect(parseCliArgs(["serve", "foo"])).toMatchObject({ serve: true, serveCmd: null });
   });
 
   it("--port cambia el puerto", () => {

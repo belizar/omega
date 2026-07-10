@@ -13,9 +13,13 @@ export interface CliArgs {
   /** Temperatura de sampling (`--temp`). Null = no se manda (default del
    *  proveedor). Bajarla reduce la varianza corrida-a-corrida en interviews. */
   temp: number | null;
-  /** true si se pidió el frontend web (`--serve`): hostea el core tras un
-   *  server HTTP y se maneja desde el browser. */
+  /** true si se pidió el frontend web (`--serve` / `serve`): hostea el core tras
+   *  un server HTTP y se maneja desde el browser o la TUI cliente. */
   serve: boolean;
+  /** Subcomando de control del daemon: `omega serve stop` / `omega serve status`.
+   *  null = arrancar (el default de `serve`). No levanta el core: es un CLI liviano
+   *  que le habla al daemon ya corriendo (o al registro en disco). */
+  serveCmd: "stop" | "status" | null;
   /** true si se pidió el mission-control en la terminal (`omega mc`): la TUI como
    *  cliente del daemon (lista de sesiones + chat, el turno corre en el daemon). */
   mc: boolean;
@@ -40,6 +44,7 @@ export function parseCliArgs(argv: string[]): CliArgs {
   let model: string | null = null;
   let temp: number | null = null;
   let serve = false;
+  let serveCmd: "stop" | "status" | null = null;
   let mc = false;
   let port = 4477;
 
@@ -49,8 +54,14 @@ export function parseCliArgs(argv: string[]): CliArgs {
       mc = true;
       continue;
     }
-    if (arg === "--serve") {
+    if (arg === "serve" || arg === "--serve") {
       serve = true;
+      // `serve stop` / `serve status`: subcomando de control (no arranca el core).
+      const next = argv[i + 1];
+      if (next === "stop" || next === "status") {
+        serveCmd = next;
+        i++;
+      }
       continue;
     }
     if (arg === "--port") {
@@ -91,5 +102,5 @@ export function parseCliArgs(argv: string[]): CliArgs {
     }
   }
 
-  return { headless, prompt, format, model, temp, serve, mc, port };
+  return { headless, prompt, format, model, temp, serve, serveCmd, mc, port };
 }

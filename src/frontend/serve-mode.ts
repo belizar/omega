@@ -4,6 +4,8 @@ import { promisify } from "util";
 import { CoreServices } from "../core.js";
 import { logger } from "../logger.js";
 import { CreateSessionOpts, SessionHandle, SessionManager, SessionMode } from "./session-manager.js";
+import { DaemonClient } from "./daemon-client.js";
+import { writeDaemonInfo, clearDaemonInfo } from "./daemon-info.js";
 import { WEB_CLIENT_HTML } from "./web-client.js";
 import type { FrontendMode } from "./mode.js";
 
@@ -55,6 +57,18 @@ export class ServeMode implements FrontendMode {
 
   async run(): Promise<void> {
     this.#baseDir = process.cwd();
+
+    // Guard de colisión: si YA hay un daemon respondiendo en este puerto, no
+    // arrancamos un segundo (chocaría con EADDRINUSE y encima pisaría el registro).
+    // El cliente (`omega mc`) hace ping antes de spawnnear, pero un `omega serve`
+    // manual podría chocar igual — lo atajamos acá con un mensaje claro.
+    if (await new DaemonClient(this.#port).ping()) {
+      process.stderr.write(
+        `\n  Ω ya hay un daemon en :${this.#port} — usá 'omega mc' o 'omega serve status'.\n\n`,
+      );
+      return;
+    }
+
     const manager = new SessionManager(this.#core, { baseDir: this.#baseDir });
     this.#manager = manager;
     this.#routes = this.#buildRoutes(manager);
@@ -84,8 +98,19 @@ export class ServeMode implements FrontendMode {
       server.listen(this.#port, "127.0.0.1", () => resolve());
     });
     const url = `http://localhost:${this.#port}`;
-    process.stderr.write(`\n  Ω omega serve  →  ${url}\n  (Ctrl+C para cortar)\n\n`);
+    process.stderr.write(`\n  Ω omega serve  →  ${url}\n  (Ctrl+C para cortar · 'omega serve stop' desde otra terminal)\n\n`);
     logger.info("web server up (multi-sesión)", { url, default: this.#defaultId });
+
+    // Registro de sí mismo: así 'omega serve stop/status' desde OTRA terminal puede
+    // encontrar a este proceso (que corre detached). Guardamos también el bin/cwd
+    // para diagnosticar el "dead-dist" (un daemon sirviendo un build ya borrado).
+    writeDaemonInfo({
+      pid: process.pid,
+      port: this.#port,
+      cwd: this.#baseDir,
+      bin: process.argv[1] ?? "",
+      startedAt: Date.now(),
+    });
 
     // Onboarding EN BACKGROUND: descubrir tus sesiones existentes (las de la TUI,
     // por worktree) escaneando el cwd de arranque + los `projects` configurados.
@@ -99,6 +124,7 @@ export class ServeMode implements FrontendMode {
     // workspaces ni transcripts. Al reiniciar el server se rehidratan del índice.
     const shutdown = async (): Promise<void> => {
       logger.info("serve shutdown");
+      clearDaemonInfo(); // borramos el registro: ya no hay daemon que encontrar.
       await manager.disposeAll();
       server.close();
       process.exit(0);
