@@ -390,6 +390,7 @@ export class ClientMode implements FrontendMode {
             // Mismo estilo prominente (▌ barra + bold) que el echo en vivo, para
             // que tus mensajes se distingan del output del agente también acá.
             this.#screen.printAbove("\n" + this.#editor.renderEchoOf(String(it.text)));
+            this.#screen.printBlankLine(); // gap antes de la respuesta del agente
           } else if (it.kind === "assistant") {
             this.#assistant.display(it.text);
           } else if (it.kind === "tool_use") {
