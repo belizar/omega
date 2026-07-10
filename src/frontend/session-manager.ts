@@ -294,6 +294,11 @@ export class SessionManager {
     return this.#sessions.has(id) || this.#index.get(id) !== undefined;
   }
 
+  /** cwd de una sesión (viva o dormida), para revelarla en el explorador. */
+  cwdOf(id: string): string | undefined {
+    return this.#sessions.get(id)?.workspace.cwd ?? this.#index.get(id)?.cwd;
+  }
+
   /** Solo las vivas (para usos internos). */
   liveList(): SessionInfo[] {
     return [...this.#sessions.values()].map((h) => this.#liveInfo(h));

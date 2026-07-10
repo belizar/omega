@@ -1,6 +1,10 @@
+import { execFile } from "child_process";
 import { createServer, IncomingMessage, ServerResponse } from "http";
+import { promisify } from "util";
 import { CoreServices } from "../core.js";
 import { logger } from "../logger.js";
+
+const execFileAsync = promisify(execFile);
 import { CreateSessionOpts, SessionManager, SessionMode } from "./session-manager.js";
 import { WEB_CLIENT_HTML } from "./web-client.js";
 import type { FrontendMode } from "./mode.js";
@@ -28,6 +32,7 @@ export class ServeMode implements FrontendMode {
   #port: number;
   #manager: SessionManager | null = null;
   #defaultId = "";
+  #baseDir = "";
 
   constructor(core: CoreServices, port: number) {
     this.#core = core;
@@ -36,6 +41,7 @@ export class ServeMode implements FrontendMode {
 
   async run(): Promise<void> {
     const baseDir = process.cwd();
+    this.#baseDir = baseDir;
     const manager = new SessionManager(this.#core, { baseDir });
     this.#manager = manager;
 
@@ -153,6 +159,26 @@ export class ServeMode implements FrontendMode {
       return;
     }
 
+    // ── Worktrees del repo: sugerencias para el modo attach ─────────
+    if (method === "GET" && path === "/worktrees") {
+      this.#json(res, 200, { worktrees: await this.#listWorktrees() });
+      return;
+    }
+
+    // ── Revelar el cwd de la sesión en el explorador (Finder/etc) ───
+    // Usa cwdOf (no revive): funciona para vivas y dormidas. Solo abre el cwd
+    // conocido de una sesión — nunca un path arbitrario del cliente.
+    if (method === "POST" && path === "/reveal") {
+      const cwd = manager.cwdOf(sessionId);
+      if (!cwd) {
+        this.#json(res, 404, { error: `sesión ${sessionId} desconocida` });
+        return;
+      }
+      this.#reveal(cwd);
+      res.writeHead(204).end();
+      return;
+    }
+
     // ── A partir de acá, todo es contra una sesión concreta ─────────
     // Si está dormida (en el índice pero sin loop), la revivimos on-demand:
     // cargar el transcript y re-attachear su workspace.
@@ -215,5 +241,41 @@ export class ServeMode implements FrontendMode {
   #json(res: ServerResponse, status: number, obj: unknown): void {
     res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
     res.end(JSON.stringify(obj));
+  }
+
+  /** Lista los git worktrees del repo (para sugerir en el modo attach). Excluye
+   *  el bare y el propio baseDir del server. Vacío si no es repo git. */
+  async #listWorktrees(): Promise<Array<{ path: string; branch?: string }>> {
+    try {
+      const { stdout } = await execFileAsync("git", ["worktree", "list", "--porcelain"], {
+        cwd: this.#baseDir,
+      });
+      const out: Array<{ path: string; branch?: string }> = [];
+      let cur: { path: string; branch?: string } | null = null;
+      for (const line of stdout.split("\n")) {
+        if (line.startsWith("worktree ")) {
+          cur = { path: line.slice("worktree ".length).trim() };
+          out.push(cur);
+        } else if (line.startsWith("branch ") && cur) {
+          cur.branch = line.slice("branch refs/heads/".length).trim();
+        }
+      }
+      return out.filter((w) => w.path && w.path !== this.#baseDir);
+    } catch {
+      return [];
+    }
+  }
+
+  /** Abre un directorio en el explorador del SO (best-effort). */
+  #reveal(cwd: string): void {
+    const cmd =
+      process.platform === "darwin"
+        ? "open"
+        : process.platform === "win32"
+          ? "explorer"
+          : "xdg-open";
+    execFile(cmd, [cwd], () => {
+      /* best-effort: si falla, no rompemos el server */
+    });
   }
 }

@@ -64,6 +64,8 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
   header .om { font-family:var(--mono); font-weight:700; font-size:22px; color:var(--tool); line-height:1; }
   header .nm { font-family:var(--mono); letter-spacing:0.3em; text-transform:uppercase; font-size:12px; color:var(--ink); }
   header .st { margin-left:auto; font-family:var(--mono); font-size:11.5px; color:var(--faint); display:flex; gap:8px; align-items:center; }
+  header .hbtn { font-family:var(--mono); font-size:11px; color:var(--dim); background:var(--surface2); border:1px solid var(--border); border-radius:7px; padding:3px 9px; cursor:pointer; }
+  header .hbtn:hover { border-color:var(--tool); color:var(--tool); }
   header .dotc { width:7px; height:7px; border-radius:50%; background:var(--faint); }
   header .dotc.on { background:var(--ok); box-shadow:0 0 8px var(--ok); }
 
@@ -186,7 +188,7 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
   <div class="col">
   <header>
     <span class="om">Ω</span><span class="nm">omega</span>
-    <span class="st"><span class="dotc" id="dot"></span><span id="stat">conectando…</span></span>
+    <span class="st"><button class="hbtn" id="reveal" title="abrir la carpeta de la sesión en el explorador">carpeta ↗</button><span class="dotc" id="dot"></span><span id="stat">conectando…</span></span>
   </header>
   <main id="main">
     <div class="thread" id="thread"></div>
@@ -214,7 +216,7 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
         <div><label>base (opcional)</label><input type="text" id="i-base" placeholder="main"></div>
       </div>
       <div class="fields" id="f-attach" style="display:none">
-        <div><label>ruta del worktree</label><input type="text" id="i-cwd" placeholder="/Users/vos/Workspace/…/MED-2050"></div>
+        <div><label>ruta del worktree</label><input type="text" id="i-cwd" list="wtlist" placeholder="/Users/vos/Workspace/…/MED-2050" autocomplete="off"><datalist id="wtlist"></datalist></div>
       </div>
       <div class="acts">
         <button class="btn" id="m-cancel" type="button">cancelar</button>
@@ -499,8 +501,21 @@ function syncModal(){
   $("f-create").style.display = modalMode==='create' ? 'flex' : 'none';
   $("f-attach").style.display = modalMode==='attach' ? 'flex' : 'none';
 }
-function openModal(){ modalMode='shared'; syncModal(); $("modalbg").classList.add('on'); }
+function openModal(){ modalMode='shared'; syncModal(); loadWorktrees(); $("modalbg").classList.add('on'); }
 function closeModal(){ $("modalbg").classList.remove('on'); }
+
+// Sugerencias para el modo attach: tus worktrees reales del repo.
+async function loadWorktrees(){
+  try {
+    const r = await fetch('/worktrees'); const d = await r.json();
+    const dl = $("wtlist"); dl.innerHTML='';
+    (d.worktrees||[]).forEach(function(w){
+      const o = document.createElement('option'); o.value = w.path;
+      if(w.branch) o.label = w.branch;
+      dl.appendChild(o);
+    });
+  } catch(_){}
+}
 
 for(const el of document.querySelectorAll('#modes .mode')){
   el.onclick = function(){ modalMode = el.getAttribute('data-mode'); syncModal(); };
@@ -538,6 +553,7 @@ async function closeSession(id){
 }
 
 $("sbnew").addEventListener('click', openModal);
+$("reveal").addEventListener('click', function(){ if(current) fetch(q('/reveal'), { method:'POST' }).catch(function(){}); });
 
 // Boot: descubrí las sesiones, elegí la default, abrí su stream.
 (async function(){ await loadSessions(); openES(); })();
