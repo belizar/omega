@@ -47,6 +47,10 @@ interface OmegaConfig {
   docsDir?: string;
   /** Config de worktrees para sesiones aisladas (server multi-sesión). */
   worktree?: WorktreeConfig;
+  /** Raíces de proyectos que el daemon escanea al arrancar para descubrir tus
+   *  sesiones existentes (las de la TUI, por worktree). Soporta `~`. Ej:
+   *  ["~/Workspace/Medra/medra-functions"]. El cwd de arranque se escanea siempre. */
+  projects?: string[];
 }
 
 /** WorktreeConfig con los defaults ya resueltos (lo que ve el runtime). */
@@ -82,6 +86,8 @@ interface ResolvedConfig {
   docsDir: string | null;
   /** Config de worktrees para sesiones aisladas (server multi-sesión). */
   worktree: ResolvedWorktreeConfig;
+  /** Raíces de proyectos a escanear en busca de sesiones existentes (absolutas). */
+  projects: string[];
   /** Sandbox opcional: corre el bash del agente dentro de un contenedor Docker
    *  (con el cwd montado) en vez del host. OFF por default — es para contextos
    *  NO atendidos (benchmark, nube) donde no hay humano que apruebe. En la TUI
@@ -138,6 +144,7 @@ export function loadOmegaConfig(): OmegaConfig {
     if (global.worktree && typeof global.worktree === "object") {
       merged.worktree = { ...merged.worktree, ...(global.worktree as WorktreeConfig) };
     }
+    if (Array.isArray(global.projects)) merged.projects = global.projects.filter((p) => typeof p === "string");
     if (global.profiles && typeof global.profiles === "object") {
       for (const [name, p] of Object.entries(global.profiles as Record<string, unknown>)) {
         merged.profiles[name] = { ...merged.profiles[name], ...(p as AgentProfile) };
@@ -153,6 +160,7 @@ export function loadOmegaConfig(): OmegaConfig {
     if (project.worktree && typeof project.worktree === "object") {
       merged.worktree = { ...merged.worktree, ...(project.worktree as WorktreeConfig) };
     }
+    if (Array.isArray(project.projects)) merged.projects = project.projects.filter((p) => typeof p === "string");
     if (project.profiles && typeof project.profiles === "object") {
       for (const [name, p] of Object.entries(project.profiles as Record<string, unknown>)) {
         merged.profiles[name] = { ...merged.profiles[name], ...(p as AgentProfile) };
@@ -245,6 +253,9 @@ function resolveProfile(
       command: config.worktree?.command ?? "",
       removeCommand: config.worktree?.removeCommand ?? "",
     },
+    projects: (config.projects ?? [])
+      .map((p) => expandHome(p))
+      .filter((p): p is string => p !== null),
     sandbox: {
       enabled: process.env.OMEGA_SANDBOX === "1" || process.env.OMEGA_SANDBOX === "true",
       image: process.env.OMEGA_SANDBOX_IMAGE || "node:22-slim",

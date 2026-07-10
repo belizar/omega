@@ -87,6 +87,14 @@ export class ServeMode implements FrontendMode {
     process.stderr.write(`\n  Ω omega serve  →  ${url}\n  (Ctrl+C para cortar)\n\n`);
     logger.info("web server up (multi-sesión)", { url, default: this.#defaultId });
 
+    // Onboarding EN BACKGROUND: descubrir tus sesiones existentes (las de la TUI,
+    // por worktree) escaneando el cwd de arranque + los `projects` configurados.
+    // No bloquea el arranque (escanear muchos worktrees puede tardar); aparecen en
+    // el sidebar vía el poll del cliente a medida que se importan.
+    void manager.importExisting(this.#scanRoots()).then((n) => {
+      if (n > 0) logger.info("onboarding: sesiones existentes importadas", { imported: n });
+    });
+
     // Shutdown ordenado: DORMIMOS las sesiones (para los loops) — NO destruimos
     // workspaces ni transcripts. Al reiniciar el server se rehidratan del índice.
     const shutdown = async (): Promise<void> => {
@@ -120,8 +128,12 @@ export class ServeMode implements FrontendMode {
         } },
       { method: "GET", path: "/worktrees", handler: async ({ res }) =>
           this.#json(res, 200, { worktrees: await this.#listWorktrees() }) },
-      { method: "POST", path: "/rescan", handler: async ({ res }) =>
-          this.#json(res, 200, { imported: await m.rescan() }) },
+      { method: "POST", path: "/rescan", handler: async ({ res }) => {
+          // Onboarding (worktrees) + reconciliación del store global.
+          const fromWorktrees = await m.importExisting(this.#scanRoots());
+          const orphans = await m.rescan();
+          this.#json(res, 200, { imported: fromWorktrees + orphans });
+        } },
       { method: "POST", path: "/reveal", handler: ({ res, sessionId }) => {
           // cwdOf (no revive): anda para vivas y dormidas. Solo abre un cwd conocido.
           const cwd = m.cwdOf(sessionId);
@@ -235,6 +247,12 @@ export class ServeMode implements FrontendMode {
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────
+
+  /** Raíces a escanear en busca de sesiones existentes: el cwd de arranque + los
+   *  `projects` de ~/.omega/config.json. */
+  #scanRoots(): string[] {
+    return [this.#baseDir, ...this.#core.config.projects];
+  }
 
   #readBody(req: IncomingMessage): Promise<string> {
     return new Promise((resolve) => {

@@ -28,6 +28,7 @@ export class ConfigFactory {
         command: "",
         removeCommand: "",
       },
+      projects: overrides?.projects ?? [],
       sandbox: overrides?.sandbox ?? { enabled: false, image: "node:22-slim" },
     };
   }

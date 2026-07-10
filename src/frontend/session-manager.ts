@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
-import { existsSync, readdirSync, readFileSync } from "fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "fs";
 import { homedir } from "os";
-import { join, resolve } from "path";
+import { dirname, join, resolve } from "path";
 import { Context } from "../app-context.js";
 import { CoreServices, createAgentStack, SharedAgentDeps } from "../core.js";
 import { logger } from "../logger.js";
@@ -226,10 +226,13 @@ export class SessionManager {
     if (!entry) return null;
 
     const { config } = this.#base;
-    // Session con id explícito → el constructor carga el .json si existe.
+    // Session con id explícito → el constructor carga el .json si existe. Usamos
+    // el dir REAL del transcript (dirname del sessionFile del índice), no el store
+    // global: así revive tanto las sesiones del daemon como las importadas de tus
+    // worktrees (que viven en <worktree>/.omega/sessions).
     const session = new Session({
       id: entry.id,
-      dir: this.#sessionsDir,
+      dir: dirname(entry.sessionFile),
       maxContextTokens: config.maxContextTokens,
       model: config.model,
     });
@@ -320,10 +323,8 @@ export class SessionManager {
   }
 
   /**
-   * Reconciliación: escanea el store de transcripts y re-importa al índice los que
-   * no estén (recupera si el índice se pierde/corrompe — el filesystem es la
-   * verdad). El workspace original no se recupera (no está en el transcript): el
-   * huérfano vuelve como compartido bajo el proyecto actual. Devuelve cuántos importó.
+   * Reconciliación del store global: re-importa transcripts huérfanos del índice
+   * (recupera si el índice se pierde). El filesystem es la verdad.
    */
   async rescan(): Promise<number> {
     let files: string[];
@@ -337,25 +338,14 @@ export class SessionManager {
     for (const f of files) {
       const id = f.replace(/\.json$/, "");
       if (this.#sessions.has(id) || this.#index.get(id)) continue;
-      let title = id.slice(0, 8);
-      try {
-        const data = JSON.parse(readFileSync(join(this.#sessionsDir, f), "utf-8"));
-        if (typeof data.name === "string" && data.name.trim()) {
-          title = data.name.trim();
-        } else {
-          const firstUser = (data.messages ?? []).find((m: { role?: string }) => m.role === "user");
-          const c = firstUser?.content;
-          if (typeof c === "string" && c.trim()) title = c.trim().slice(0, 40);
-        }
-      } catch {
-        continue; // .json ilegible: lo salteamos
-      }
+      const sessionFile = join(this.#sessionsDir, f);
+      if (!existsSync(sessionFile)) continue;
       const ts = now();
       this.#index.upsert({
         id,
-        title,
+        title: this.#titleFrom(sessionFile) || id.slice(0, 8),
         project,
-        sessionFile: this.#sessionFile(id),
+        sessionFile,
         cwd: this.#baseDir,
         isolated: false,
         owned: false,
@@ -364,8 +354,109 @@ export class SessionManager {
       });
       imported++;
     }
-    if (imported > 0) logger.info("rescan importó sesiones huérfanas", { imported });
+    if (imported > 0) logger.info("rescan importó huérfanos del store global", { imported });
     return imported;
+  }
+
+  /**
+   * Onboarding: escanea `roots` buscando sesiones existentes en
+   * `<worktree>/.omega/sessions/*.json` (las que crea la TUI in-process, por
+   * worktree) y las importa al índice con su cwd y proyecto REALES. Es lo que
+   * trae tu laburo previo al mission-control. No mueve ni toca nada: solo agrega
+   * referencias (el transcript sigue donde estaba). Devuelve cuántas importó.
+   */
+  async importExisting(roots: string[]): Promise<number> {
+    const dirs = new Set<string>();
+    for (const root of roots) {
+      for (const d of this.#findSessionDirs(root, 4)) dirs.add(d);
+    }
+    let imported = 0;
+    for (const wt of dirs) {
+      const sdir = join(wt, ".omega", "sessions");
+      let files: string[];
+      try {
+        files = readdirSync(sdir).filter((f) => f.endsWith(".json"));
+      } catch {
+        continue;
+      }
+      if (files.length === 0) continue;
+      const project = await detectProject(wt);
+      const branch = await detectBranch(wt);
+      const isolated = resolve(wt) !== resolve(this.#baseDir);
+      for (const f of files) {
+        const id = f.replace(/\.json$/, "");
+        if (this.#sessions.has(id) || this.#index.get(id)) continue;
+        const sessionFile = join(sdir, f);
+        // Título útil para TU flujo: el nombre explícito, o la branch (feat/MED-x),
+        // o el primer mensaje, o el id. La branch primero porque tus sesiones son
+        // por-ticket y "feat/MED-1400" dice más que el primer mensaje.
+        const title = this.#titleFrom(sessionFile, { preferBranch: branch }) || id.slice(0, 8);
+        let lastActive = now();
+        try {
+          lastActive = Math.floor(statSync(sessionFile).mtimeMs);
+        } catch {
+          /* sin mtime: queda now() */
+        }
+        this.#index.upsert({
+          id,
+          title,
+          project,
+          sessionFile,
+          cwd: wt,
+          branch,
+          isolated,
+          owned: false, // son TUS worktrees; Omega no los creó ni los borra
+          createdAt: lastActive,
+          lastActive,
+        });
+        imported++;
+      }
+    }
+    if (imported > 0) {
+      logger.info("importadas sesiones existentes de worktrees", { imported, dirs: dirs.size });
+    }
+    return imported;
+  }
+
+  /** Busca dirs con `.omega/sessions` bajo `root` (acotado, sin node_modules/.git). */
+  #findSessionDirs(root: string, maxDepth: number): string[] {
+    const found: string[] = [];
+    const walk = (dir: string, depth: number): void => {
+      if (depth > maxDepth) return;
+      let entries: import("fs").Dirent[];
+      try {
+        entries = readdirSync(dir, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const e of entries) {
+        if (!e.isDirectory()) continue;
+        if (e.name === "node_modules" || e.name === ".git" || e.name.endsWith(".git")) continue;
+        if (e.name === ".omega") {
+          if (existsSync(join(dir, ".omega", "sessions"))) found.push(dir);
+          continue; // no recursamos dentro de .omega
+        }
+        walk(join(dir, e.name), depth + 1);
+      }
+    };
+    walk(root, 0);
+    return found;
+  }
+
+  /** Extrae un título del transcript: nombre explícito → (branch si se prefiere) →
+   *  primer mensaje del usuario. "" si no encuentra nada usable. */
+  #titleFrom(path: string, opts?: { preferBranch?: string }): string {
+    try {
+      const data = JSON.parse(readFileSync(path, "utf-8"));
+      if (typeof data.name === "string" && data.name.trim()) return data.name.trim();
+      if (opts?.preferBranch) return opts.preferBranch;
+      const firstUser = (data.messages ?? []).find((m: { role?: string }) => m.role === "user");
+      const c = firstUser?.content;
+      if (typeof c === "string" && c.trim()) return c.trim().slice(0, 40);
+    } catch {
+      /* .json ilegible */
+    }
+    return "";
   }
 
   /** Solo las vivas (para usos internos). */
