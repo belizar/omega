@@ -250,8 +250,15 @@ export class ClientMode implements FrontendMode {
     );
     this.#screen.printAbove(dim("  (esc corta el turno · ctrl-o a la lista · /exit salir)\n"));
 
+    // ¿Hay un turno corriendo? (para que Esc corte SOLO si hay algo que cortar).
+    let running = info.status === "running";
     const pending: Array<{ name: string; input: unknown }> = [];
-    const onEvent = (ev: DaemonEvent): void => this.#renderEvent(ev, pending);
+    const onEvent = (ev: DaemonEvent): void => {
+      if (ev.type === "turn_start") running = true;
+      else if (ev.type === "turn_end") running = false;
+      else if (ev.type === "status") running = ev.status === "running";
+      this.#renderEvent(ev, pending);
+    };
 
     const unsub = client.events(info.id, onEvent);
     // Dale un momento al daemon para mandar ready + history y que se rendericen
@@ -271,8 +278,10 @@ export class ClientMode implements FrontendMode {
       for (;;) {
         const input = await this.#screen.readLine(
           new ChatInput(this.#editor, () => {
+            if (!running) return; // no hay turno → Esc no hace nada
             // Feedback INSTANTÁNEO al apretar Esc (no esperamos el roundtrip del
             // daemon): cerramos el stream colgado, paramos el spinner, y avisamos.
+            running = false;
             this.#assistant.endStream();
             this.#spinner.stop();
             this.#screen.printAbove(dim("\n  ⏹ cortando el turno…"));
