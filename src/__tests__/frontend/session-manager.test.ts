@@ -154,4 +154,24 @@ describe("SessionManager", () => {
   it("revive de un id desconocido devuelve null", async () => {
     expect(await mgr.revive("no-existe")).toBeNull();
   });
+
+  it("attach: se engancha a un worktree existente y NO lo borra al detach", async () => {
+    // Tu flujo: el worktree ya existe (lo hiciste con tree.sh, acá lo simulamos).
+    const ext = join(baseDir, "external-wt");
+    await execFileAsync("git", ["worktree", "add", "-b", "feat/mine", ext], { cwd: baseDir });
+
+    const h = await mgr.create({ mode: "attach", cwd: ext });
+    expect(h.workspace.cwd).toBe(ext);
+    expect(h.workspace.isolated).toBe(true);
+    expect(h.workspace.branch).toBe("feat/mine"); // detectó la branch del worktree
+
+    await mgr.detach(h.id);
+    expect(await exists(ext)).toBe(true); // prestado (owned=false) → intacto
+  });
+
+  it("attach a un directorio inexistente tira error", async () => {
+    await expect(
+      mgr.create({ mode: "attach", cwd: join(baseDir, "no-existe") }),
+    ).rejects.toThrow();
+  });
 });

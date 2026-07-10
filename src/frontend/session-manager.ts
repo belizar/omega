@@ -7,9 +7,9 @@ import { Session } from "../session.js";
 import { ToolRegistry } from "../tools/tool-registry.js";
 import { TurnRunner } from "../turn-runner.js";
 import { Screen } from "../tui/screen.js";
-import { attachWorkspace, createWorkspace, Workspace } from "../workspace.js";
+import { attachWorkspace, createWorkspace, detectBranch, Workspace } from "../workspace.js";
 import { SessionIndex } from "./session-index.js";
-import { WebFrontend } from "./web-frontend.js";
+import { SessionStatus, WebFrontend } from "./web-frontend.js";
 
 /** Una sesión viva hospedada por el server: su hub, su workspace y su loop. */
 export interface SessionHandle {
@@ -31,17 +31,29 @@ export interface SessionInfo {
   clients: number;
   /** true = corriendo ahora; false = dormida (en el índice, revivible). */
   live: boolean;
+  /** Estado si está viva: idle / running / waiting. */
+  status?: SessionStatus;
   lastActive?: number;
 }
+
+export type SessionMode = "shared" | "create" | "attach";
 
 export interface CreateSessionOpts {
   /** Título legible (default: la branch, o prefijo del id). */
   title?: string;
-  /** Si true, la sesión corre en un git worktree dedicado (aislamiento real). */
+  /** Cómo se arma el workspace:
+   *  - shared: comparte el cwd del server (default).
+   *  - create: Omega crea un git worktree nuevo (branch/base).
+   *  - attach: se engancha a un dir/worktree que YA existe (cwd), sin crear ni
+   *    borrar nada (tu flujo tree.sh). */
+  mode?: SessionMode;
+  /** Directorio a attachear (solo mode attach). */
+  cwd?: string;
+  /** Legacy: equivale a mode "create". Lo usa el sidebar viejo. */
   worktree?: boolean;
-  /** Nombre de la branch del worktree (default: omega/<idcorto>). */
+  /** Nombre de la branch del worktree (mode create; default: omega/<idcorto>). */
   branch?: string;
-  /** Branch base de la que se crea (default: config.worktree.baseBranch, o HEAD). */
+  /** Branch base de la que se crea (mode create; default: config, o HEAD). */
   base?: string;
 }
 
@@ -102,14 +114,7 @@ export class SessionManager {
       model: config.model,
     });
 
-    const workspace = await createWorkspace({
-      baseDir: this.#baseDir,
-      sessionId: session.id,
-      isolate: opts.worktree,
-      branch: opts.branch,
-      base: opts.base,
-      config: config.worktree,
-    });
+    const { workspace, owned } = await this.#buildWorkspace(session.id, opts);
 
     const title = opts.title?.trim() || workspace.branch || session.id.slice(0, 8);
     const handle = this.#spawn(session, workspace, title);
@@ -123,12 +128,70 @@ export class SessionManager {
       cwd: workspace.cwd,
       branch: workspace.branch,
       isolated: workspace.isolated,
+      owned,
       createdAt: ts,
       lastActive: ts,
     });
 
-    logger.info("sesión creada", { id: handle.id, cwd: workspace.cwd, isolated: workspace.isolated });
+    logger.info("sesión creada", {
+      id: handle.id,
+      cwd: workspace.cwd,
+      isolated: workspace.isolated,
+      owned,
+    });
     return handle;
+  }
+
+  /** Arma el workspace según el modo. Devuelve también si Omega es dueño del worktree. */
+  async #buildWorkspace(
+    sessionId: string,
+    opts: CreateSessionOpts,
+  ): Promise<{ workspace: Workspace; owned: boolean }> {
+    const { config } = this.#base;
+    const mode: SessionMode = opts.mode ?? (opts.worktree ? "create" : "shared");
+
+    if (mode === "attach") {
+      const cwd = opts.cwd ? resolve(opts.cwd) : "";
+      if (!cwd || !existsSync(cwd)) {
+        throw new Error(`attach: el directorio "${opts.cwd ?? ""}" no existe`);
+      }
+      const isolated = cwd !== resolve(this.#baseDir);
+      const branch = isolated ? await detectBranch(cwd) : undefined;
+      // owned=false: es TU worktree (tree.sh); Omega no lo crea ni lo borra.
+      return {
+        workspace: attachWorkspace({
+          baseDir: this.#baseDir,
+          cwd,
+          isolated,
+          branch,
+          owned: false,
+          config: config.worktree,
+        }),
+        owned: false,
+      };
+    }
+
+    if (mode === "create") {
+      const workspace = await createWorkspace({
+        baseDir: this.#baseDir,
+        sessionId,
+        isolate: true,
+        branch: opts.branch,
+        base: opts.base,
+        config: config.worktree,
+      });
+      // createWorkspace cae a compartido si baseDir no es repo git → owned solo si aisló.
+      return { workspace, owned: workspace.isolated };
+    }
+
+    // shared
+    const workspace = await createWorkspace({
+      baseDir: this.#baseDir,
+      sessionId,
+      isolate: false,
+      config: config.worktree,
+    });
+    return { workspace, owned: false };
   }
 
   /**
@@ -169,6 +232,7 @@ export class SessionManager {
       cwd,
       isolated,
       branch: isolated ? entry.branch : undefined,
+      owned: entry.owned,
       config: config.worktree,
     });
 
@@ -264,6 +328,7 @@ export class SessionManager {
       branch: h.workspace.branch,
       clients: h.frontend.clientCount,
       live: true,
+      status: h.frontend.status,
       lastActive: this.#index.get(h.id)?.lastActive,
     };
   }

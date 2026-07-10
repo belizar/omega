@@ -161,17 +161,34 @@ export function attachWorkspace(opts: {
   cwd: string;
   isolated: boolean;
   branch?: string;
+  /** ¿Omega es dueño del worktree? true = lo puede remover; false = prestado
+   *  (attach a un worktree tuyo, hecho con tree.sh) → NUNCA se borra. Default true. */
+  owned?: boolean;
   config: ResolvedWorktreeConfig;
 }): Workspace {
   if (!opts.isolated) {
     return { cwd: opts.cwd, isolated: false, dispose: NOOP_DISPOSE };
   }
+  const owned = opts.owned !== false;
   return {
     cwd: opts.cwd,
     isolated: true,
     branch: opts.branch,
-    dispose: makeWorktreeDispose(opts.baseDir, opts.cwd, opts.branch ?? "", "", opts.config),
+    dispose: owned
+      ? makeWorktreeDispose(opts.baseDir, opts.cwd, opts.branch ?? "", "", opts.config)
+      : NOOP_DISPOSE,
   };
+}
+
+/** Lee la branch de un dir git (undefined si no es repo o está detached). */
+export async function detectBranch(cwd: string): Promise<string | undefined> {
+  try {
+    const { stdout } = await execFileAsync("git", ["rev-parse", "--abbrev-ref", "HEAD"], { cwd });
+    const b = stdout.trim();
+    return b && b !== "HEAD" ? b : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Fabrica el dispose de un worktree (remove-command o git worktree remove). Idempotente. */

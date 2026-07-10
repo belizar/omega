@@ -75,8 +75,31 @@ describe("WebFrontend — hub", () => {
     f.handleEvent({ type: "text_stream", text: "la" } as RunnerEvent);
     f.handleEvent({ type: "text_stream_end" } as RunnerEvent);
     f.turnEnded();
-    const types = c.got.map((e) => e.type);
+    // Los eventos de `status` son ortogonales al mapeo runner→web; los ignoramos acá.
+    const types = c.got.map((e) => e.type).filter((t) => t !== "status");
     expect(types).toEqual(["ready", "turn_start", "delta", "delta", "assistant_end", "turn_end"]);
     expect(c.got.filter((e) => e.type === "delta").map((e) => e.text)).toEqual(["ho", "la"]);
+  });
+
+  it("estado: idle → running (turnStarted) → idle (turnEnded)", () => {
+    const f = make();
+    const c = client(f);
+    expect(f.status).toBe("idle");
+    f.turnStarted();
+    expect(f.status).toBe("running");
+    f.turnEnded();
+    expect(f.status).toBe("idle");
+    const statuses = c.got.filter((e) => e.type === "status").map((e) => e.status);
+    expect(statuses).toEqual(["running", "idle"]);
+  });
+
+  it("estado: waiting mientras askUser espera, running tras la respuesta", async () => {
+    const f = make();
+    f.turnStarted();
+    const ans = f.askUser("¿seguir?");
+    expect(f.status).toBe("waiting");
+    f.submitInput("dale");
+    await ans;
+    expect(f.status).toBe("running");
   });
 });

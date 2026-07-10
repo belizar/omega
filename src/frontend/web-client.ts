@@ -44,8 +44,13 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
   .sb-item.dormant { opacity:.62; }
   .sb-item.dormant .nm { color:var(--dim); }
   .sb-item.dormant .pdot { background:var(--faint); box-shadow:none; }
+  .sb-item.st-running .pdot { background:var(--ok); box-shadow:0 0 7px var(--ok); }
+  .sb-item.st-waiting .pdot { background:var(--warn); box-shadow:none; }
+  .sb-item.st-running .meta .s { color:var(--ok); }
+  .sb-item.st-waiting .meta .s { color:var(--warn); }
   .sb-item .meta { font-family:var(--mono); font-size:10px; color:var(--faint); padding-left:14px; }
   .sb-item .meta .iso { color:var(--warn); }
+  .sb-item .meta .s { color:var(--dim); }
   .sb-item .x { position:absolute; top:6px; right:6px; width:17px; height:17px; line-height:15px; text-align:center;
                 background:none; border:none; color:var(--faint); font-size:14px; cursor:pointer; border-radius:5px; opacity:0; }
   .sb-item:hover .x { opacity:1; } .sb-item .x:hover { color:var(--err); background:color-mix(in srgb,var(--err) 14%,transparent); }
@@ -139,6 +144,27 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
            font-family:var(--mono); font-weight:700; font-size:14px; cursor:pointer; }
   button:disabled { opacity:.4; cursor:default; }
   .hint { max-width:820px; margin:7px auto 0; font-family:var(--mono); font-size:11px; color:var(--faint); }
+
+  /* Modal de nueva sesión */
+  .modal-bg { position:fixed; inset:0; background:rgba(0,0,0,.55); display:none; align-items:center; justify-content:center; z-index:20; }
+  .modal-bg.on { display:flex; }
+  .modal { background:var(--surface); border:1px solid var(--border2); border-radius:14px; width:min(430px,92vw); padding:20px 20px 18px; box-shadow:0 24px 60px -20px rgba(0,0,0,.7); }
+  .modal h3 { font-family:var(--mono); font-size:12px; letter-spacing:.16em; text-transform:uppercase; color:var(--dim); margin:0 0 14px; }
+  .modes { display:flex; flex-direction:column; gap:7px; margin-bottom:13px; }
+  .mode { border:1px solid var(--border); border-radius:10px; padding:10px 12px; cursor:pointer; }
+  .mode:hover { border-color:var(--border2); }
+  .mode.sel { border-color:var(--tool); background:var(--surface2); }
+  .mode .mt { font-family:var(--mono); font-size:13px; color:var(--ink); }
+  .mode.sel .mt { color:var(--tool); }
+  .mode .md { font-size:11px; color:var(--faint); margin-top:2px; }
+  .fields { display:flex; flex-direction:column; gap:9px; margin-bottom:14px; }
+  .fields label { font-family:var(--mono); font-size:9.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--faint); display:block; margin-bottom:4px; }
+  .fields input { width:100%; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:9px 11px; color:var(--ink); font-family:var(--mono); font-size:13px; }
+  .fields input:focus { outline:none; border-color:var(--tool); box-shadow:0 0 0 3px rgba(52,205,216,.12); }
+  .modal .acts { display:flex; gap:8px; justify-content:flex-end; }
+  .modal .btn { font-family:var(--mono); font-size:12px; border-radius:8px; padding:8px 16px; cursor:pointer; border:1px solid var(--border2); background:var(--surface2); color:var(--dim); }
+  .modal .btn:hover { border-color:var(--tool); }
+  .modal .btn.primary { background:var(--tool); color:var(--bg); border-color:var(--tool); font-weight:700; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
@@ -154,8 +180,7 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
     <div class="sb-hd"><span class="t">sesiones</span><button class="sb-new" id="sbnew" title="nueva sesión">+ nueva</button></div>
     <div class="sb-list" id="sblist"></div>
     <div class="sb-foot">
-      <label><input type="checkbox" id="wt"> worktree aislado</label>
-      <div class="hint2">aislada = git worktree propio, no pisa el repo. compartida = mismo cwd del server.</div>
+      <div class="hint2">las dormidas se reviven al clickearlas · cerrar (×) no borra nada</div>
     </div>
   </aside>
   <div class="col">
@@ -174,6 +199,28 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
     </div>
     <div class="hint" id="hint">Ω omega · frontend web · localhost</div>
   </form>
+  </div>
+
+  <div class="modal-bg" id="modalbg">
+    <div class="modal">
+      <h3>nueva sesión</h3>
+      <div class="modes" id="modes">
+        <div class="mode sel" data-mode="shared"><div class="mt">Compartida</div><div class="md">sobre el cwd del server</div></div>
+        <div class="mode" data-mode="create"><div class="mt">Worktree nuevo</div><div class="md">Omega crea una branch aislada</div></div>
+        <div class="mode" data-mode="attach"><div class="mt">Attach</div><div class="md">a un worktree/dir que ya existe (tree.sh)</div></div>
+      </div>
+      <div class="fields" id="f-create" style="display:none">
+        <div><label>branch (opcional)</label><input type="text" id="i-branch" placeholder="feat/mi-tarea"></div>
+        <div><label>base (opcional)</label><input type="text" id="i-base" placeholder="main"></div>
+      </div>
+      <div class="fields" id="f-attach" style="display:none">
+        <div><label>ruta del worktree</label><input type="text" id="i-cwd" placeholder="/Users/vos/Workspace/…/MED-2050"></div>
+      </div>
+      <div class="acts">
+        <button class="btn" id="m-cancel" type="button">cancelar</button>
+        <button class="btn primary" id="m-create" type="button">crear</button>
+      </div>
+    </div>
   </div>
 
 <script>
@@ -343,6 +390,7 @@ function openES(){
   let ev; try { ev = JSON.parse(e.data); } catch { return; }
   switch(ev.type){
     case 'ready': $("stat").textContent = ev.model; loadSessions(); break;
+    case 'status': loadSessions(); break;
     case 'turn_start': $("thinking").classList.add('on'); curAsst=null; scroll(); break;
     case 'delta':
       if(!curAsst) curAsst = addMsg('omega','asst');
@@ -380,14 +428,15 @@ function selectSession(id, force){
   current = id;
   resetThread();
   openES();
-  loadSessions();
+  loadSessions(true); // fuerza el render para mover el highlight a la nueva
 }
 
 function renderSessions(list){
   const box = $("sblist"); box.innerHTML='';
   list.forEach(function(s){
     const it = document.createElement('div');
-    it.className = 'sb-item' + (s.id===current ? ' active' : '') + (s.live ? '' : ' dormant');
+    const stCls = (s.live && s.status) ? (' st-' + s.status) : '';
+    it.className = 'sb-item' + (s.id===current ? ' active' : '') + (s.live ? '' : ' dormant') + stCls;
     it.onclick = function(){ selectSession(s.id); };
 
     const nm = document.createElement('div'); nm.className='nm';
@@ -397,7 +446,10 @@ function renderSessions(list){
 
     const meta = document.createElement('div'); meta.className='meta';
     if(s.live){
-      meta.innerHTML = s.isolated ? '<span class="iso">⎇ aislada</span>' : '· compartida';
+      const word = s.status==='running' ? 'corriendo…'
+                 : s.status==='waiting' ? 'esperás vos'
+                 : (s.isolated ? '⎇ aislada' : '· compartida');
+      meta.innerHTML = '<span class="s">' + word + '</span>';
       if(s.clients) meta.innerHTML += ' · ' + s.clients + ' ◉';
     } else {
       meta.textContent = '⦿ dormida' + (s.branch ? ' · ' + s.branch : '');
@@ -413,22 +465,57 @@ function renderSessions(list){
   });
 }
 
-async function loadSessions(){
+let lastSig = '';
+async function loadSessions(force){
   try {
     const r = await fetch('/sessions'); const d = await r.json();
     if(!current) current = d.default;
-    renderSessions(d.sessions);
+    // Solo re-renderizamos si algo cambió (o si se fuerza) — así el poll no
+    // rompe el hover ni parpadea el sidebar cuando no pasó nada.
+    const sig = current + '|' + d.sessions.map(function(s){ return [s.id,s.live,s.status,s.clients,s.title].join(','); }).join(';');
+    if(force || sig!==lastSig){ lastSig = sig; renderSessions(d.sessions); }
   } catch(_){}
 }
+// Poll liviano: refresca estados de TODAS las sesiones (las que no estás mirando).
+setInterval(function(){ loadSessions(); }, 4000);
 
-async function newSession(){
-  const worktree = $("wt").checked;
+// ── Modal de nueva sesión (compartida / worktree nuevo / attach) ──
+let modalMode = 'shared';
+function syncModal(){
+  const modes = document.querySelectorAll('#modes .mode');
+  for(const el of modes) el.classList.toggle('sel', el.getAttribute('data-mode')===modalMode);
+  $("f-create").style.display = modalMode==='create' ? 'flex' : 'none';
+  $("f-attach").style.display = modalMode==='attach' ? 'flex' : 'none';
+}
+function openModal(){ modalMode='shared'; syncModal(); $("modalbg").classList.add('on'); }
+function closeModal(){ $("modalbg").classList.remove('on'); }
+
+for(const el of document.querySelectorAll('#modes .mode')){
+  el.onclick = function(){ modalMode = el.getAttribute('data-mode'); syncModal(); };
+}
+$("m-cancel").addEventListener('click', closeModal);
+$("modalbg").addEventListener('click', function(e){ if(e.target===$("modalbg")) closeModal(); });
+$("m-create").addEventListener('click', doCreateSession);
+
+async function doCreateSession(){
+  const payload = { mode: modalMode };
+  if(modalMode==='create'){
+    payload.branch = $("i-branch").value.trim() || undefined;
+    payload.base = $("i-base").value.trim() || undefined;
+  }
+  if(modalMode==='attach'){
+    const cwd = $("i-cwd").value.trim();
+    if(!cwd){ $("i-cwd").focus(); return; }
+    payload.cwd = cwd;
+  }
   try {
-    const r = await fetch('/sessions', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({worktree:worktree}) });
+    const r = await fetch('/sessions', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+    if(!r.ok){ const e = await r.json().catch(function(){return{};}); alert('No se pudo crear: ' + (e.error||('HTTP '+r.status))); return; }
     const s = await r.json();
+    closeModal();
     await loadSessions();
     selectSession(s.id, true);
-  } catch(_){}
+  } catch(_){ alert('Error de red creando la sesión'); }
 }
 
 async function closeSession(id){
@@ -438,7 +525,7 @@ async function closeSession(id){
   else { loadSessions(); }
 }
 
-$("sbnew").addEventListener('click', newSession);
+$("sbnew").addEventListener('click', openModal);
 
 // Boot: descubrí las sesiones, elegí la default, abrí su stream.
 (async function(){ await loadSessions(); openES(); })();
@@ -463,7 +550,7 @@ async function interrupt(){
   try { await fetch(q('/interrupt'), { method:'POST' }); } catch {}
 }
 $("stop").addEventListener('click', interrupt);
-window.addEventListener('keydown', (e)=>{ if(e.key==='Escape') interrupt(); });
+window.addEventListener('keydown', (e)=>{ if(e.key==='Escape'){ if($("modalbg").classList.contains('on')) closeModal(); else interrupt(); } });
 </script>
 </body>
 </html>`;

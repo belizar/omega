@@ -1,7 +1,7 @@
 import { createServer, IncomingMessage, ServerResponse } from "http";
 import { CoreServices } from "../core.js";
 import { logger } from "../logger.js";
-import { SessionManager } from "./session-manager.js";
+import { CreateSessionOpts, SessionManager, SessionMode } from "./session-manager.js";
 import { WEB_CLIENT_HTML } from "./web-client.js";
 import type { FrontendMode } from "./mode.js";
 
@@ -106,12 +106,19 @@ export class ServeMode implements FrontendMode {
     // ── Sesiones: crear ─────────────────────────────────────────────
     if (method === "POST" && path === "/sessions") {
       const body = await this.#readBody(req);
-      let opts: { title?: string; worktree?: boolean; branch?: string; base?: string } = {};
+      let opts: CreateSessionOpts = {};
       try {
         const b = JSON.parse(body || "{}");
+        const mode: SessionMode | undefined =
+          b.mode === "shared" || b.mode === "create" || b.mode === "attach"
+            ? b.mode
+            : b.worktree === true
+              ? "create"
+              : undefined;
         opts = {
           title: typeof b.title === "string" ? b.title : undefined,
-          worktree: b.worktree === true,
+          mode,
+          cwd: typeof b.cwd === "string" && b.cwd.trim() ? b.cwd.trim() : undefined,
           branch: typeof b.branch === "string" && b.branch.trim() ? b.branch.trim() : undefined,
           base: typeof b.base === "string" && b.base.trim() ? b.base.trim() : undefined,
         };

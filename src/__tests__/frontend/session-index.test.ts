@@ -13,6 +13,7 @@ function entry(over: Partial<IndexEntry> = {}): IndexEntry {
     sessionFile: "/repo/.omega/sessions/x.json",
     cwd: "/repo",
     isolated: false,
+    owned: false,
     createdAt: 1,
     lastActive: 1,
     ...over,

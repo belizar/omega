@@ -21,6 +21,9 @@ export interface IndexEntry {
   /** Branch del worktree (undefined si comparte cwd). */
   branch?: string;
   isolated: boolean;
+  /** ¿Omega creó el worktree (true) o solo se enganchó a uno tuyo (false, attach)?
+   *  Un worktree prestado nunca se borra. */
+  owned: boolean;
   createdAt: number;
   lastActive: number;
 }

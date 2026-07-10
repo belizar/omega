@@ -39,16 +39,32 @@ export type ClientSink = (data: string) => void;
  * El schema que emite es un contrato estable (capa anti-corrupción), no el
  * `RunnerEvent` crudo — así refactorizar el evento interno no rompe al browser.
  */
+/** Estado de una sesión, para el sidebar (paridad cmux). */
+export type SessionStatus = "idle" | "running" | "waiting";
+
 export class WebFrontend implements Frontend {
   #clients = new Set<ClientSink>();
   #queue = new InputQueue();
   #model: string;
   #sessionId: string;
   #abort: AbortController | null = null;
+  #status: SessionStatus = "idle";
 
   constructor(deps: { model: string; sessionId: string }) {
     this.#model = deps.model;
     this.#sessionId = deps.sessionId;
+  }
+
+  /** Estado actual: idle (esperando tarea) / running (turno en curso) / waiting
+   *  (el agente te preguntó algo y espera respuesta). Lo lee el SessionManager. */
+  get status(): SessionStatus {
+    return this.#status;
+  }
+
+  #setStatus(s: SessionStatus): void {
+    if (this.#status === s) return;
+    this.#status = s;
+    this.#broadcast({ type: "status", status: s });
   }
 
   // ── Hub: gestión de clientes e input ──────────────────────────────
@@ -103,6 +119,7 @@ export class WebFrontend implements Frontend {
   }
 
   turnStarted(): void {
+    this.#setStatus("running");
     this.#broadcast({ type: "turn_start" });
   }
 
@@ -132,13 +149,17 @@ export class WebFrontend implements Frontend {
   }
 
   turnEnded(): void {
+    this.#setStatus("idle");
     this.#broadcast({ type: "turn_end" });
   }
 
   async askUser(question: string): Promise<string> {
+    this.#setStatus("waiting");
     this.#broadcast({ type: "ask_user", question });
     // Misma cola: la próxima línea que mande cualquier cliente es la respuesta.
-    return this.#queue.next();
+    const answer = await this.#queue.next();
+    this.#setStatus("running"); // el turno sigue tras la respuesta
+    return answer;
   }
 
   notify(text: string): void {
