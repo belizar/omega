@@ -391,6 +391,18 @@ function openES(){
   switch(ev.type){
     case 'ready': $("stat").textContent = ev.model; loadSessions(); break;
     case 'status': loadSessions(); break;
+    case 'history': {
+      // Replay del transcript al conectar/cambiar de sesión: pinta cada ítem con
+      // las mismas funciones que los eventos vivos.
+      for(const it of (ev.items || [])){
+        if(it.kind==='user'){ addMsg('vos','user').textContent = it.text; }
+        else if(it.kind==='assistant'){ const b=addMsg('omega','asst'); b.dataset.raw=it.text; b.innerHTML=md(it.text); }
+        else if(it.kind==='tool_use'){ lastTool = addTool(it.name, it.input); }
+        else if(it.kind==='tool_result'){ addToolResult(lastTool, it.output, it.isError); lastTool=null; }
+      }
+      hydrate(); scroll();
+      break;
+    }
     case 'turn_start': $("thinking").classList.add('on'); curAsst=null; scroll(); break;
     case 'delta':
       if(!curAsst) curAsst = addMsg('omega','asst');

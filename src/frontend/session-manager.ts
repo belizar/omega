@@ -247,7 +247,11 @@ export class SessionManager {
     const { config } = this.#base;
     const { toolRegistry, agentConfig } = createAgentStack(workspace.cwd, this.#shared);
 
-    const frontend = new WebFrontend({ model: config.model, sessionId: session.id });
+    const frontend = new WebFrontend({
+      model: config.model,
+      sessionId: session.id,
+      getMessages: () => session.messages,
+    });
     const screen = new Screen(config.screenPadding);
     const ctx = new Context({
       session,

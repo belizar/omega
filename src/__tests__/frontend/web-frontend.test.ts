@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { WebFrontend } from "../../frontend/web-frontend.js";
+import { WebFrontend, historyFromMessages } from "../../frontend/web-frontend.js";
 import type { RunnerEvent } from "../../runner.js";
+import type { Message } from "../../message.js";
 
 function make() {
   return new WebFrontend({ model: "test-model", sessionId: "sess-1" });
@@ -101,5 +102,47 @@ describe("WebFrontend — hub", () => {
     f.submitInput("dale");
     await ans;
     expect(f.status).toBe("running");
+  });
+
+  it("historyFromMessages aplana texto, tool_use y tool_result en orden", () => {
+    const msgs: Message[] = [
+      { role: "user", content: "hola" },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "voy a leer" },
+          { type: "tool_use", id: "1", name: "read", input: { path: "a.ts" } },
+        ],
+      },
+      { role: "user", content: [{ type: "tool_result", tool_use_id: "1", content: "cuerpo", is_error: false }] },
+      { role: "assistant", content: "listo" },
+    ];
+    const items = historyFromMessages(msgs);
+    expect(items.map((i) => i.kind)).toEqual(["user", "assistant", "tool_use", "tool_result", "assistant"]);
+    expect(items[0]).toMatchObject({ text: "hola" });
+    expect(items[2]).toMatchObject({ name: "read", input: { path: "a.ts" } });
+    expect(items[3]).toMatchObject({ output: "cuerpo", isError: false });
+  });
+
+  it("addClient re-emite el historial (fix: cambiar de sesión no borra la conversación)", () => {
+    const msgs: Message[] = [
+      { role: "user", content: "acordate" },
+      { role: "assistant", content: "listo" },
+    ];
+    const f = new WebFrontend({ model: "m", sessionId: "s", getMessages: () => msgs });
+    const got: any[] = [];
+    f.addClient((d) => got.push(JSON.parse(d)));
+    const hist = got.find((e) => e.type === "history");
+    expect(hist).toBeTruthy();
+    expect(hist.items.map((i: any) => i.kind)).toEqual(["user", "assistant"]);
+    // ready antes que history
+    expect(got[0].type).toBe("ready");
+  });
+
+  it("sin historial (sesión nueva) no emite history", () => {
+    const f = new WebFrontend({ model: "m", sessionId: "s", getMessages: () => [] });
+    const got: any[] = [];
+    f.addClient((d) => got.push(JSON.parse(d)));
+    expect(got.find((e) => e.type === "history")).toBeUndefined();
   });
 });
