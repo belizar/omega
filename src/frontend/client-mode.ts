@@ -1,6 +1,8 @@
 import { basename } from "path";
 import { CoreServices } from "../core.js";
 import { logger } from "../logger.js";
+import { InputComponent } from "../tui/component.js";
+import { Key } from "../tui/decodeKey.js";
 import {
   DisplayAssistantText,
   DisplayToolCall,
@@ -23,6 +25,41 @@ type ListItem =
   | { kind: "session"; info: SessionInfo }
   | { kind: "new" }
   | { kind: "quit" };
+
+/** Sentinela: el chat devuelve esto cuando pedís volver a la lista (Esc). */
+const BACK = "\x00BACK";
+
+/**
+ * Editor del chat que además maneja Esc → volver a la lista. Envuelve el
+ * LineEditor (que ignora Esc): cuando el turno NO está en curso, Esc te saca a
+ * la lista en vez de no hacer nada. (El Esc de interrumpir un turno es otra cosa.)
+ */
+class ChatInput implements InputComponent<string> {
+  #editor: LineEditor;
+  #back = false;
+  constructor(editor: LineEditor) {
+    this.#editor = editor;
+  }
+  handleKey(key: Key): void {
+    if (key.type === "escape") {
+      this.#back = true;
+      return;
+    }
+    this.#editor.handleKey(key);
+  }
+  isDone(): boolean {
+    return this.#back || this.#editor.isDone();
+  }
+  getResult(): string {
+    return this.#back ? BACK : this.#editor.getResult();
+  }
+  render(): string {
+    return this.#editor.render();
+  }
+  getCursorPosition() {
+    return this.#editor.getCursorPosition();
+  }
+}
 
 /**
  * Modo cliente: la TUI como ventana del daemon (mission-control en la terminal).
@@ -99,15 +136,11 @@ export class ClientMode implements FrontendMode {
       { kind: "quit" as const },
     ];
 
-    let lastProj = "";
     const list = new SelectList<ListItem>(items, (item, _i, sel) => {
       const arrow = sel ? "❯ " : "  ";
       if (item.kind === "new") return arrow + "+ nueva sesión";
       if (item.kind === "quit") return arrow + "salir";
       const s = item.info;
-      const header =
-        s.project !== lastProj ? dim(`  ${basename(s.project) || "?"}\n`) : "";
-      lastProj = s.project;
       const glyph = !s.live ? "⦿" : s.status === "running" ? "●" : s.status === "waiting" ? "◍" : "○";
       const st = !s.live
         ? "dormida"
@@ -116,28 +149,56 @@ export class ClientMode implements FrontendMode {
           : s.status === "waiting"
             ? "esperás vos"
             : "idle";
-      const meta = dim(` · ${st}${s.branch ? " · " + s.branch : ""}`);
+      const proj = basename(s.project) || "?";
       const title = s.title || s.id.slice(0, 8);
-      return `${header}${arrow}${glyph} ${title}${meta}`;
+      return `${arrow}${glyph} ${title}${dim(`   ${proj} · ${st}`)}`;
     });
 
-    this.#screen.printAbove(dim("\n  Ω omega · sesiones   (↑↓ mover · ↵ entrar · esc salir)"));
+    // Vista full-screen: limpiamos para no apilar scrollback entre navegaciones.
+    this.#screen.clearScreen();
+    this.#screen.printAbove(dim("  Ω omega · sesiones   (↑↓ mover · ↵ entrar · esc salir)\n"));
     const result = await this.#screen.readLine(list);
     if (!result) return { kind: "quit" }; // esc
     return result;
   }
 
   async #newSession(client: DaemonClient): Promise<void> {
-    this.#screen.printAbove(dim("  nueva sesión — ruta a attachear (vacío = compartida):"));
-    const path = (await this.#screen.readLine(this.#editor)).trim();
-    this.#editor.reset();
-    const opts = path ? { mode: "attach", cwd: path } : { mode: "shared" };
+    // Elegir el modo con una lista (claro), no un prompt críptico.
+    type Mode = { key: "shared" | "attach" | "create"; label: string; desc: string };
+    const modes: Mode[] = [
+      { key: "shared", label: "Compartida", desc: "sobre el cwd del daemon" },
+      { key: "attach", label: "Attach", desc: "a un worktree/carpeta que ya existe" },
+      { key: "create", label: "Worktree nuevo", desc: "Omega crea una branch aislada" },
+    ];
+    const list = new SelectList<Mode>(modes, (m, _i, sel) => {
+      const arrow = sel ? "❯ " : "  ";
+      return `${arrow}${m.label}${dim(`  — ${m.desc}`)}`;
+    });
+    this.#screen.clearScreen();
+    this.#screen.printAbove(dim("  nueva sesión — elegí el modo   (↵ elegir · esc cancelar)\n"));
+    const mode = await this.#screen.readLine(list);
+    if (!mode) return; // esc → cancela
+
+    let opts: { mode: string; cwd?: string; branch?: string } = { mode: mode.key };
+    if (mode.key === "attach") {
+      this.#screen.printAbove(dim("\n  ruta del worktree/carpeta a attachear:"));
+      const cwd = (await this.#screen.readLine(this.#editor)).trim();
+      this.#editor.reset();
+      if (!cwd) return;
+      opts.cwd = cwd;
+    } else if (mode.key === "create") {
+      this.#screen.printAbove(dim("\n  nombre de la branch (vacío = omega/<id>):"));
+      const branch = (await this.#screen.readLine(this.#editor)).trim();
+      this.#editor.reset();
+      if (branch) opts.branch = branch;
+    }
+
     const res = await client.create(opts);
     if (res.error) {
       this.#screen.printAbove(`  ✗ ${res.error}`);
+      await new Promise((r) => setTimeout(r, 1200));
       return;
     }
-    // Entrar directo a la sesión recién creada.
     const { sessions } = await client.sessions();
     const info = sessions.find((s) => s.id === res.id);
     if (info) await this.#chat(client, info);
@@ -146,10 +207,12 @@ export class ClientMode implements FrontendMode {
   // ── Chat de una sesión (stremeado del daemon) ─────────────────────
 
   async #chat(client: DaemonClient, info: SessionInfo): Promise<boolean> {
+    // Entrar a una sesión = pantalla limpia (el chat es scrollback desde acá).
+    this.#screen.clearScreen();
     this.#screen.printAbove(
-      dim(`\n  ── ${info.title}${info.branch ? " · " + info.branch : ""} · ${info.cwd}`),
+      dim(`  ── ${info.title}${info.branch ? " · " + info.branch : ""} · ${info.cwd}`),
     );
-    this.#screen.printAbove(dim("  (/back a la lista · /exit para salir de omega)\n"));
+    this.#screen.printAbove(dim("  (esc o /back a la lista · /exit para salir)\n"));
 
     // ── Estado del turno + settle ──
     let busy = false;
@@ -171,17 +234,21 @@ export class ClientMode implements FrontendMode {
     });
 
     const unsub = client.events(info.id, onEvent);
+    // Dale un momento al daemon para mandar ready + history y que se rendericen
+    // ANTES del primer prompt (si no, el historial aparecería tarde o perdido).
+    await new Promise((r) => setTimeout(r, 250));
+
     let quit = false;
     try {
       for (;;) {
         // Si hay un turno en curso (ej. entraste a una sesión corriendo), esperá.
         while (busy && !needsInput) await settle();
 
-        const input = await this.#screen.readLine(this.#editor);
+        const input = await this.#screen.readLine(new ChatInput(this.#editor));
         needsInput = false;
         const typed = input.trim();
+        if (typed === BACK || typed === "/back" || typed === "/list") { this.#editor.reset(); break; }
         if (typed === "") { this.#editor.reset(); continue; }
-        if (typed === "/back" || typed === "/list") { this.#editor.reset(); break; }
         if (typed === "/exit" || typed === "/quit" || typed === "exit") {
           this.#editor.reset();
           quit = true;
@@ -262,8 +329,10 @@ export class ClientMode implements FrontendMode {
         this.#screen.printAbove(dim(`  ~ ${dur}s · ${ev.toolCalls} tools · ${cost}`));
         break;
       }
-      case "history":
-        for (const it of (ev.items as any[]) ?? []) {
+      case "history": {
+        const items = (ev.items as any[]) ?? [];
+        logger.info("client: render history", { count: items.length });
+        for (const it of items) {
           if (it.kind === "user") {
             this.#screen.printAbove(dim(`\n  › ${it.text}`));
           } else if (it.kind === "assistant") {
@@ -277,6 +346,7 @@ export class ClientMode implements FrontendMode {
           }
         }
         break;
+      }
       // ready / status / bye: no aportan al render del chat.
     }
   }
