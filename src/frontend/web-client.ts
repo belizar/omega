@@ -33,6 +33,9 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
             border-radius:7px; height:26px; padding:0 9px; font-family:var(--mono); font-size:12px; font-weight:700; cursor:pointer; }
   .sb-new:hover { border-color:var(--tool); }
   .sb-list { flex:1; overflow-y:auto; padding:8px; display:flex; flex-direction:column; gap:4px; }
+  .sb-grp { font-family:var(--mono); font-size:9.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); display:flex; align-items:center; gap:8px; padding:12px 8px 4px; }
+  .sb-grp:first-child { padding-top:2px; }
+  .sb-grp .ln { flex:1; height:1px; background:var(--border); }
   .sb-item { position:relative; border:1px solid transparent; border-radius:9px; padding:8px 10px; cursor:pointer;
              display:flex; flex-direction:column; gap:2px; }
   .sb-item:hover { background:var(--surface2); }
@@ -57,7 +60,9 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
   .sb-foot { padding:10px 13px; border-top:1px solid var(--border); }
   .sb-foot label { display:flex; align-items:center; gap:7px; font-family:var(--mono); font-size:11px; color:var(--dim); cursor:pointer; }
   .sb-foot input { accent-color:var(--tool); }
-  .sb-foot .hint2 { margin-top:5px; font-family:var(--mono); font-size:9.5px; color:var(--faint); line-height:1.4; }
+  .sb-foot .sb-rescan { font-family:var(--mono); font-size:10.5px; color:var(--dim); background:none; border:1px solid var(--border); border-radius:6px; padding:4px 9px; cursor:pointer; }
+  .sb-foot .sb-rescan:hover { border-color:var(--tool); color:var(--tool); }
+  .sb-foot .hint2 { margin-top:7px; font-family:var(--mono); font-size:9.5px; color:var(--faint); line-height:1.4; }
   @media (max-width:640px) { .sidebar { display:none; } }
   header { display:flex; align-items:center; gap:11px; padding:12px 18px; border-bottom:1px solid var(--border);
            background:var(--surface); position:sticky; top:0; z-index:2; }
@@ -182,6 +187,7 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
     <div class="sb-hd"><span class="t">sesiones</span><button class="sb-new" id="sbnew" title="nueva sesión">+ nueva</button></div>
     <div class="sb-list" id="sblist"></div>
     <div class="sb-foot">
+      <button class="sb-rescan" id="rescan" title="re-importar sesiones del disco al índice">⟳ rescan</button>
       <div class="hint2">las dormidas se reviven al clickearlas · cerrar (×) no borra nada</div>
     </div>
   </aside>
@@ -445,37 +451,54 @@ function selectSession(id, force){
   loadSessions(true); // fuerza el render para mover el highlight a la nueva
 }
 
+function projName(p){ const a = String(p||'').split('/'); return a[a.length-1] || p || '(sin proyecto)'; }
+
+function renderRow(s){
+  const it = document.createElement('div');
+  const stCls = (s.live && s.status) ? (' st-' + s.status) : '';
+  it.className = 'sb-item' + (s.id===current ? ' active' : '') + (s.live ? '' : ' dormant') + stCls;
+  it.onclick = function(){ selectSession(s.id); };
+
+  const nm = document.createElement('div'); nm.className='nm';
+  const dot = document.createElement('span'); dot.className='pdot';
+  const tt = document.createElement('span'); tt.className='tt'; tt.textContent = s.title;
+  nm.appendChild(dot); nm.appendChild(tt);
+
+  const meta = document.createElement('div'); meta.className='meta';
+  if(s.live){
+    const word = s.status==='running' ? 'corriendo…'
+               : s.status==='waiting' ? 'esperás vos'
+               : (s.isolated ? '⎇ aislada' : '· compartida');
+    meta.innerHTML = '<span class="s">' + word + '</span>';
+    if(s.clients) meta.innerHTML += ' · ' + s.clients + ' ◉';
+  } else {
+    meta.textContent = '⦿ dormida' + (s.branch ? ' · ' + s.branch : '');
+  }
+  it.appendChild(nm); it.appendChild(meta);
+
+  // × duerme la sesión (no la borra).
+  const x = document.createElement('button'); x.className='x'; x.textContent='×'; x.title='dormir sesión';
+  x.onclick = function(e){ e.stopPropagation(); closeSession(s.id); };
+  it.appendChild(x);
+  return it;
+}
+
 function renderSessions(list){
   const box = $("sblist"); box.innerHTML='';
+  // Agrupar por proyecto preservando el orden (vivas primero ya viene del server).
+  const order = []; const byProj = {};
   list.forEach(function(s){
-    const it = document.createElement('div');
-    const stCls = (s.live && s.status) ? (' st-' + s.status) : '';
-    it.className = 'sb-item' + (s.id===current ? ' active' : '') + (s.live ? '' : ' dormant') + stCls;
-    it.onclick = function(){ selectSession(s.id); };
-
-    const nm = document.createElement('div'); nm.className='nm';
-    const dot = document.createElement('span'); dot.className='pdot';
-    const tt = document.createElement('span'); tt.className='tt'; tt.textContent = s.title;
-    nm.appendChild(dot); nm.appendChild(tt);
-
-    const meta = document.createElement('div'); meta.className='meta';
-    if(s.live){
-      const word = s.status==='running' ? 'corriendo…'
-                 : s.status==='waiting' ? 'esperás vos'
-                 : (s.isolated ? '⎇ aislada' : '· compartida');
-      meta.innerHTML = '<span class="s">' + word + '</span>';
-      if(s.clients) meta.innerHTML += ' · ' + s.clients + ' ◉';
-    } else {
-      meta.textContent = '⦿ dormida' + (s.branch ? ' · ' + s.branch : '');
-    }
-    it.appendChild(nm); it.appendChild(meta);
-
-    // × duerme la sesión (no la borra). El default siempre queda.
-    const x = document.createElement('button'); x.className='x'; x.textContent='×'; x.title='dormir sesión';
-    x.onclick = function(e){ e.stopPropagation(); closeSession(s.id); };
-    it.appendChild(x);
-
-    box.appendChild(it);
+    const key = s.project || '(sin proyecto)';
+    if(!byProj[key]){ byProj[key] = []; order.push(key); }
+    byProj[key].push(s);
+  });
+  order.forEach(function(key){
+    const hd = document.createElement('div'); hd.className='sb-grp';
+    const nm = document.createElement('span'); nm.textContent = projName(key);
+    const ln = document.createElement('span'); ln.className='ln';
+    hd.appendChild(nm); hd.appendChild(ln);
+    box.appendChild(hd);
+    byProj[key].forEach(function(s){ box.appendChild(renderRow(s)); });
   });
 }
 
@@ -554,6 +577,7 @@ async function closeSession(id){
 
 $("sbnew").addEventListener('click', openModal);
 $("reveal").addEventListener('click', function(){ if(current) fetch(q('/reveal'), { method:'POST' }).catch(function(){}); });
+$("rescan").addEventListener('click', async function(){ try{ await fetch('/rescan', { method:'POST' }); await loadSessions(true); } catch(_){} });
 
 // Boot: descubrí las sesiones, elegí la default, abrí su stream.
 (async function(){ await loadSessions(); openES(); })();

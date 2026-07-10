@@ -174,4 +174,34 @@ describe("SessionManager", () => {
       mgr.create({ mode: "attach", cwd: join(baseDir, "no-existe") }),
     ).rejects.toThrow();
   });
+
+  it("asigna project (raíz del repo) y lo expone en listAll", async () => {
+    const h = await mgr.create();
+    expect(h.project).toBe(baseDir); // detectProject de un repo = su raíz
+    expect(mgr.listAll()[0].project).toBe(baseDir);
+  });
+
+  it("rescan recupera transcripts huérfanos si el índice se pierde", async () => {
+    const h = await mgr.create({ title: "recuperame" });
+    h.session.addUserMessage("mensaje importante");
+    await mgr.disposeAll();
+
+    // Índice NUEVO (se perdió el viejo) pero mismo store de transcripts.
+    const freshIndex = new SessionIndex(join(baseDir, "fresh-index.json"));
+    const mgr2 = new SessionManager(fakeBase(), { baseDir, sessionsDir, index: freshIndex });
+    expect(mgr2.listAll()).toHaveLength(0); // el índice nuevo no sabe nada
+
+    const n = await mgr2.rescan();
+    expect(n).toBe(1);
+    const list = mgr2.listAll();
+    expect(list).toHaveLength(1);
+    expect(list[0].id).toBe(h.id);
+    // Título derivado del transcript (primer mensaje del usuario)
+    expect(list[0].title).toContain("mensaje importante");
+
+    // Y se puede revivir con su historia
+    const revived = await mgr2.revive(h.id);
+    expect(JSON.stringify(revived!.session.messages)).toContain("mensaje importante");
+    await mgr2.disposeAll();
+  });
 });

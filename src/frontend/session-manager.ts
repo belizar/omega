@@ -1,5 +1,7 @@
-import { existsSync } from "fs";
-import { resolve } from "path";
+import { randomUUID } from "crypto";
+import { existsSync, readdirSync, readFileSync } from "fs";
+import { homedir } from "os";
+import { join, resolve } from "path";
 import { Context } from "../app-context.js";
 import { CoreServices, createAgentStack, SharedAgentDeps } from "../core.js";
 import { logger } from "../logger.js";
@@ -7,7 +9,13 @@ import { Session } from "../session.js";
 import { ToolRegistry } from "../tools/tool-registry.js";
 import { TurnRunner } from "../turn-runner.js";
 import { Screen } from "../tui/screen.js";
-import { attachWorkspace, createWorkspace, detectBranch, Workspace } from "../workspace.js";
+import {
+  attachWorkspace,
+  createWorkspace,
+  detectBranch,
+  detectProject,
+  Workspace,
+} from "../workspace.js";
 import { SessionIndex } from "./session-index.js";
 import { SessionStatus, WebFrontend } from "./web-frontend.js";
 
@@ -15,6 +23,8 @@ import { SessionStatus, WebFrontend } from "./web-frontend.js";
 export interface SessionHandle {
   readonly id: string;
   title: string;
+  /** Dir del proyecto (repo) al que pertenece, para agrupar en el sidebar. */
+  readonly project: string;
   readonly frontend: WebFrontend;
   readonly workspace: Workspace;
   readonly session: Session;
@@ -26,6 +36,8 @@ export interface SessionInfo {
   id: string;
   title: string;
   cwd: string;
+  /** Dir del proyecto (repo) — el sidebar agrupa por esto. */
+  project: string;
   isolated: boolean;
   branch?: string;
   clients: number;
@@ -87,7 +99,10 @@ export class SessionManager {
   ) {
     this.#base = base;
     this.#baseDir = opts.baseDir;
-    this.#sessionsDir = opts.sessionsDir ?? ".omega/sessions";
+    // Store GLOBAL (daemon): los transcripts viven en ~/.omega/sessions,
+    // independientes del proyecto → revivir cross-project es trivial. Inyectable
+    // para tests. El `project` es solo para agrupar, no dónde se guarda.
+    this.#sessionsDir = opts.sessionsDir ?? join(homedir(), ".omega", "sessions");
     this.#index = opts.index ?? new SessionIndex();
     this.#shared = {
       config: base.config,
@@ -101,29 +116,33 @@ export class SessionManager {
 
   /** Path absoluto del transcript de una sesión (para el índice). */
   #sessionFile(id: string): string {
-    return resolve(this.#baseDir, this.#sessionsDir, `${id}.json`);
+    return resolve(this.#sessionsDir, `${id}.json`);
   }
 
   /** Crea una sesión nueva, la registra en el índice y arranca su loop. */
   async create(opts: CreateSessionOpts = {}): Promise<SessionHandle> {
     const { config } = this.#base;
 
+    // id primero: el workspace lo necesita, y el project sale del cwd del workspace.
+    const id = randomUUID();
+    const { workspace, owned } = await this.#buildWorkspace(id, opts);
+    const project = await detectProject(workspace.cwd);
+
     const session = new Session({
+      id,
       dir: this.#sessionsDir,
       maxContextTokens: config.maxContextTokens,
       model: config.model,
     });
 
-    const { workspace, owned } = await this.#buildWorkspace(session.id, opts);
-
-    const title = opts.title?.trim() || workspace.branch || session.id.slice(0, 8);
-    const handle = this.#spawn(session, workspace, title);
+    const title = opts.title?.trim() || workspace.branch || id.slice(0, 8);
+    const handle = this.#spawn(session, workspace, title, project);
 
     const ts = now();
     this.#index.upsert({
       id: handle.id,
       title,
-      project: this.#baseDir,
+      project,
       sessionFile: this.#sessionFile(handle.id),
       cwd: workspace.cwd,
       branch: workspace.branch,
@@ -236,14 +255,14 @@ export class SessionManager {
       config: config.worktree,
     });
 
-    const handle = this.#spawn(session, workspace, entry.title);
+    const handle = this.#spawn(session, workspace, entry.title, entry.project);
     this.#index.touch(id, now());
     logger.info("sesión revivida", { id, cwd: workspace.cwd });
     return handle;
   }
 
   /** Arma el stack (tools/frontend/runner), el handle y arranca el loop. */
-  #spawn(session: Session, workspace: Workspace, title: string): SessionHandle {
+  #spawn(session: Session, workspace: Workspace, title: string, project: string): SessionHandle {
     const { config } = this.#base;
     const { toolRegistry, agentConfig } = createAgentStack(workspace.cwd, this.#shared);
 
@@ -269,6 +288,7 @@ export class SessionManager {
     const handle: SessionHandle = {
       id: session.id,
       title,
+      project,
       frontend,
       workspace,
       session,
@@ -299,21 +319,72 @@ export class SessionManager {
     return this.#sessions.get(id)?.workspace.cwd ?? this.#index.get(id)?.cwd;
   }
 
+  /**
+   * Reconciliación: escanea el store de transcripts y re-importa al índice los que
+   * no estén (recupera si el índice se pierde/corrompe — el filesystem es la
+   * verdad). El workspace original no se recupera (no está en el transcript): el
+   * huérfano vuelve como compartido bajo el proyecto actual. Devuelve cuántos importó.
+   */
+  async rescan(): Promise<number> {
+    let files: string[];
+    try {
+      files = readdirSync(this.#sessionsDir).filter((f) => f.endsWith(".json"));
+    } catch {
+      return 0;
+    }
+    const project = await detectProject(this.#baseDir);
+    let imported = 0;
+    for (const f of files) {
+      const id = f.replace(/\.json$/, "");
+      if (this.#sessions.has(id) || this.#index.get(id)) continue;
+      let title = id.slice(0, 8);
+      try {
+        const data = JSON.parse(readFileSync(join(this.#sessionsDir, f), "utf-8"));
+        if (typeof data.name === "string" && data.name.trim()) {
+          title = data.name.trim();
+        } else {
+          const firstUser = (data.messages ?? []).find((m: { role?: string }) => m.role === "user");
+          const c = firstUser?.content;
+          if (typeof c === "string" && c.trim()) title = c.trim().slice(0, 40);
+        }
+      } catch {
+        continue; // .json ilegible: lo salteamos
+      }
+      const ts = now();
+      this.#index.upsert({
+        id,
+        title,
+        project,
+        sessionFile: this.#sessionFile(id),
+        cwd: this.#baseDir,
+        isolated: false,
+        owned: false,
+        createdAt: ts,
+        lastActive: ts,
+      });
+      imported++;
+    }
+    if (imported > 0) logger.info("rescan importó sesiones huérfanas", { imported });
+    return imported;
+  }
+
   /** Solo las vivas (para usos internos). */
   liveList(): SessionInfo[] {
     return [...this.#sessions.values()].map((h) => this.#liveInfo(h));
   }
 
-  /** Vivas + dormidas del proyecto, más recientes primero. Es lo que ve el sidebar. */
+  /** Vivas + dormidas de TODOS los proyectos, más recientes primero. Es lo que ve
+   *  el sidebar del daemon global. */
   listAll(): SessionInfo[] {
     const live = new Map(this.#sessions.entries());
     const infos: SessionInfo[] = [...live.values()].map((h) => this.#liveInfo(h));
-    for (const e of this.#index.forProject(this.#baseDir)) {
+    for (const e of this.#index.all()) {
       if (live.has(e.id)) continue; // ya la contamos como viva
       infos.push({
         id: e.id,
         title: e.title,
         cwd: e.cwd,
+        project: e.project,
         isolated: e.isolated,
         branch: e.branch,
         clients: 0,
@@ -333,6 +404,7 @@ export class SessionManager {
       id: h.id,
       title: h.title,
       cwd: h.workspace.cwd,
+      project: h.project,
       isolated: h.workspace.isolated,
       branch: h.workspace.branch,
       clients: h.frontend.clientCount,

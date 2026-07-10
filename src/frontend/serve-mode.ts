@@ -165,6 +165,13 @@ export class ServeMode implements FrontendMode {
       return;
     }
 
+    // ── Rescan: re-importar transcripts huérfanos al índice ─────────
+    if (method === "POST" && path === "/rescan") {
+      const imported = await manager.rescan();
+      this.#json(res, 200, { imported });
+      return;
+    }
+
     // ── Revelar el cwd de la sesión en el explorador (Finder/etc) ───
     // Usa cwdOf (no revive): funciona para vivas y dormidas. Solo abre el cwd
     // conocido de una sesión — nunca un path arbitrario del cliente.

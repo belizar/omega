@@ -1,6 +1,6 @@
 import { execFile } from "child_process";
 import { cp, mkdir, stat } from "fs/promises";
-import { dirname, join } from "path";
+import { dirname, join, resolve } from "path";
 import { promisify } from "util";
 import { ResolvedWorktreeConfig } from "./config.js";
 import { logger } from "./logger.js";
@@ -178,6 +178,23 @@ export function attachWorkspace(opts: {
       ? makeWorktreeDispose(opts.baseDir, opts.cwd, opts.branch ?? "", "", opts.config)
       : NOOP_DISPOSE,
   };
+}
+
+/**
+ * Identidad del proyecto de un cwd, para agrupar sesiones en el sidebar. Usa el
+ * `git-common-dir` —que es el MISMO para todos los worktrees de un repo—, así los
+ * N worktrees de medra-functions caen bajo un solo grupo. Devuelve el dir que
+ * contiene el repo (padre del common-dir), o el cwd si no es git.
+ */
+export async function detectProject(cwd: string): Promise<string> {
+  try {
+    const { stdout } = await execFileAsync("git", ["rev-parse", "--git-common-dir"], { cwd });
+    // common: <repo>/.git (no-bare) o <parent>/<name>.git (bare). Su dirname es
+    // el "dir del proyecto" — estable entre worktrees.
+    return dirname(resolve(cwd, stdout.trim()));
+  } catch {
+    return cwd;
+  }
 }
 
 /** Lee la branch de un dir git (undefined si no es repo o está detached). */
