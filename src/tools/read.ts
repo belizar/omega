@@ -1,5 +1,5 @@
 import { readFile } from "fs/promises";
-import { extname } from "path";
+import { extname, resolve } from "path";
 import { Tool } from "./tool.js";
 import { logger } from "../logger.js";
 import { isEnvFile, ENV_BLOCK_MESSAGE } from "./env-guard.js";
@@ -16,8 +16,11 @@ const TS_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"]);
 
 export class ReadTool extends Tool<ReadInput, string> {
   #outlineThreshold: number;
+  /** cwd contra el que se resuelven paths relativos. Por defecto el del proceso
+   *  (TUI/headless); en el server multi-sesión, el workspace de la sesión. */
+  #cwd: string;
 
-  constructor(outlineThreshold: number) {
+  constructor(outlineThreshold: number, cwd: string = process.cwd()) {
     super({
       name: "read",
       description: "Devuelve el contenido de un archivo",
@@ -43,6 +46,7 @@ export class ReadTool extends Tool<ReadInput, string> {
       },
     });
     this.#outlineThreshold = outlineThreshold;
+    this.#cwd = cwd;
   }
 
   async execute(input: unknown): Promise<string> {
@@ -63,7 +67,8 @@ export class ReadTool extends Tool<ReadInput, string> {
       }
 
       logger.info("Reading file", { path, offset, limit, full });
-      const content = await readFile(path, "utf-8");
+      const filePath = resolve(this.#cwd, path);
+      const content = await readFile(filePath, "utf-8");
       const totalLines = content.split("\n").length;
       const ext = extname(path);
 

@@ -52,7 +52,9 @@ export type User = { id: number };`,
 
   it("debe devolver outline de un directorio", async () => {
     const result = await outlineTool.execute({ path: testDir });
-    expect(result).toContain(testDir);
+    // outline resuelve el path contra su cwd → el header muestra el path absoluto.
+    // Chequeamos el basename, presente tanto en relativo como en absoluto.
+    expect(result).toContain("test-outline-dir");
     expect(result).toContain("2 archivos");
     expect(result).toContain("test.ts");
     expect(result).toContain("otro.ts");

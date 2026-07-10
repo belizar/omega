@@ -1,4 +1,5 @@
 import { statSync, readFileSync } from "fs";
+import { resolve } from "path";
 import { Tool } from "./tool.js";
 import { logger } from "../logger.js";
 import { isEnvFile, ENV_BLOCK_MESSAGE } from "./env-guard.js";
@@ -7,7 +8,10 @@ import { outlineFile, outlineDir } from "../tools/outline-extract.js";
 type OutlineInput = { path: string };
 
 export class OutlineTool extends Tool<OutlineInput, string> {
-  constructor() {
+  /** cwd contra el que se resuelven paths relativos (default: el del proceso). */
+  #cwd: string;
+
+  constructor(cwd: string = process.cwd()) {
     super({
       name: "outline",
       description:
@@ -23,6 +27,7 @@ export class OutlineTool extends Tool<OutlineInput, string> {
         required: ["path"],
       },
     });
+    this.#cwd = cwd;
   }
 
   async execute(input: unknown): Promise<string> {
@@ -42,14 +47,15 @@ export class OutlineTool extends Tool<OutlineInput, string> {
         return ENV_BLOCK_MESSAGE;
       }
 
-      const s = statSync(path);
+      const target = resolve(this.#cwd, path);
+      const s = statSync(target);
       if (s.isDirectory()) {
-        return outlineDir(path);
+        return outlineDir(target);
       }
       if (s.isFile()) {
         logger.info("Outlining file", { path });
-        const content = readFileSync(path, "utf-8");
-        return outlineFile(path, content);
+        const content = readFileSync(target, "utf-8");
+        return outlineFile(target, content);
       }
 
       return `Error: ${path} no es ni archivo ni directorio`;

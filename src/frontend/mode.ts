@@ -1,4 +1,5 @@
 import { CliArgs } from "../cli-args.js";
+import { ClientMode } from "./client-mode.js";
 import { CoreServices } from "../core.js";
 import { HeadlessMode } from "./headless-mode.js";
 import { ServeMode } from "./serve-mode.js";
@@ -20,5 +21,6 @@ export interface FrontendMode {
 export function createMode(cli: CliArgs, core: CoreServices): FrontendMode {
   if (cli.headless) return new HeadlessMode(core, cli);
   if (cli.serve) return new ServeMode(core, cli.port);
+  if (cli.mc) return new ClientMode(core, cli.port);
   return new TuiMode(core);
 }

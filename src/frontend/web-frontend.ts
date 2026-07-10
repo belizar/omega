@@ -1,5 +1,37 @@
+import { Message, ToolMessage, ToolUseMessage } from "../message.js";
 import { RunnerEvent } from "../runner.js";
 import { Frontend, FrontendInput, TurnMetrics } from "./frontend.js";
+
+/** Un ítem del historial re-emitido al cliente que se conecta (mismo vocabulario
+ *  que los eventos vivos, así el cliente lo pinta con las mismas funciones). */
+export type HistoryFrame =
+  | { kind: "user"; text: string }
+  | { kind: "assistant"; text: string }
+  | { kind: "tool_use"; name: string; input: unknown }
+  | { kind: "tool_result"; output: string; isError: boolean };
+
+/** Aplana el transcript (Message[]) a frames para el cliente. Salta imágenes. */
+export function historyFromMessages(messages: readonly Message[]): HistoryFrame[] {
+  const frames: HistoryFrame[] = [];
+  for (const m of messages) {
+    const blocks = Array.isArray(m.content) ? m.content : [m.content];
+    for (const b of blocks) {
+      if (typeof b === "string") {
+        if (b.trim()) frames.push({ kind: m.role === "user" ? "user" : "assistant", text: b });
+      } else if (b.type === "text") {
+        if (b.text.trim()) frames.push({ kind: m.role === "user" ? "user" : "assistant", text: b.text });
+      } else if (b.type === "tool_use") {
+        const t = b as ToolUseMessage;
+        frames.push({ kind: "tool_use", name: t.name, input: t.input });
+      } else if (b.type === "tool_result") {
+        const t = b as ToolMessage;
+        const output = typeof t.content === "string" ? t.content : JSON.stringify(t.content);
+        frames.push({ kind: "tool_result", output, isError: t.is_error });
+      }
+    }
+  }
+  return frames;
+}
 
 /**
  * Cola async de un solo consumidor: `push` deposita, `next` entrega (o espera).
@@ -39,16 +71,39 @@ export type ClientSink = (data: string) => void;
  * El schema que emite es un contrato estable (capa anti-corrupción), no el
  * `RunnerEvent` crudo — así refactorizar el evento interno no rompe al browser.
  */
+/** Estado de una sesión, para el sidebar (paridad cmux). */
+export type SessionStatus = "idle" | "running" | "waiting";
+
 export class WebFrontend implements Frontend {
   #clients = new Set<ClientSink>();
   #queue = new InputQueue();
   #model: string;
   #sessionId: string;
   #abort: AbortController | null = null;
+  #status: SessionStatus = "idle";
+  #getMessages?: () => readonly Message[];
 
-  constructor(deps: { model: string; sessionId: string }) {
+  constructor(deps: {
+    model: string;
+    sessionId: string;
+    /** Provee el transcript actual para re-emitirlo a cada cliente que conecta. */
+    getMessages?: () => readonly Message[];
+  }) {
     this.#model = deps.model;
     this.#sessionId = deps.sessionId;
+    this.#getMessages = deps.getMessages;
+  }
+
+  /** Estado actual: idle (esperando tarea) / running (turno en curso) / waiting
+   *  (el agente te preguntó algo y espera respuesta). Lo lee el SessionManager. */
+  get status(): SessionStatus {
+    return this.#status;
+  }
+
+  #setStatus(s: SessionStatus): void {
+    if (this.#status === s) return;
+    this.#status = s;
+    this.#broadcast({ type: "status", status: s });
   }
 
   // ── Hub: gestión de clientes e input ──────────────────────────────
@@ -58,6 +113,12 @@ export class WebFrontend implements Frontend {
   addClient(sink: ClientSink): () => void {
     this.#clients.add(sink);
     sink(this.#frame({ type: "ready", session: this.#sessionId, model: this.#model }));
+    // Replay del historial SOLO a este cliente: así al cambiar de sesión (o abrir
+    // el browser fresco) ves la conversación entera, no una pantalla en blanco.
+    const msgs = this.#getMessages?.();
+    if (msgs && msgs.length > 0) {
+      sink(this.#frame({ type: "history", items: historyFromMessages(msgs), status: this.#status }));
+    }
     return () => this.#clients.delete(sink);
   }
 
@@ -103,6 +164,7 @@ export class WebFrontend implements Frontend {
   }
 
   turnStarted(): void {
+    this.#setStatus("running");
     this.#broadcast({ type: "turn_start" });
   }
 
@@ -132,13 +194,17 @@ export class WebFrontend implements Frontend {
   }
 
   turnEnded(): void {
+    this.#setStatus("idle");
     this.#broadcast({ type: "turn_end" });
   }
 
   async askUser(question: string): Promise<string> {
+    this.#setStatus("waiting");
     this.#broadcast({ type: "ask_user", question });
     // Misma cola: la próxima línea que mande cualquier cliente es la respuesta.
-    return this.#queue.next();
+    const answer = await this.#queue.next();
+    this.#setStatus("running"); // el turno sigue tras la respuesta
+    return answer;
   }
 
   notify(text: string): void {

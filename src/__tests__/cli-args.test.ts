@@ -10,6 +10,7 @@ describe("parseCliArgs", () => {
       model: null,
       temp: null,
       serve: false,
+      mc: false,
       port: 4477,
     });
   });
@@ -22,8 +23,14 @@ describe("parseCliArgs", () => {
       model: null,
       temp: null,
       serve: false,
+      mc: false,
       port: 4477,
     });
+  });
+
+  it("`mc` activa el mission-control cliente", () => {
+    expect(parseCliArgs(["mc"])).toMatchObject({ mc: true, serve: false, headless: false });
+    expect(parseCliArgs(["mc", "--port", "5000"]).port).toBe(5000);
   });
 
   it("--temp parsea un número (incluido 0)", () => {

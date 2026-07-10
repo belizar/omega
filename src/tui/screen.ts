@@ -246,6 +246,19 @@ class Screen {
     this.#unlock();
   }
 
+  /** Limpia TODA la pantalla y resetea el tracking de la región viva. Para
+   *  vistas full-screen que no deben apilar scrollback (ej. la lista de sesiones
+   *  del mission-control). Después de esto, el próximo render arranca limpio. */
+  clearScreen(): void {
+    this.#lock();
+    stdout.write("\x1b[2J\x1b[H"); // limpiar pantalla + cursor al home
+    this.#prevRows = 0;
+    this.#prevCursorRow = 0;
+    this.#ephemeral = null;
+    this.#status = null;
+    this.#unlock();
+  }
+
   /** Setea (o limpia con null) la línea de estado encima del editor. */
   setStatus(text: string | null): void {
     this.#status = text;

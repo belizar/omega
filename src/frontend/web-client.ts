@@ -21,12 +21,56 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
   * { box-sizing:border-box; }
   html,body { height:100%; margin:0; }
   body { background:var(--bg); color:var(--ink); font-family:var(--sans); font-size:15px; line-height:1.6;
-         display:flex; flex-direction:column; }
+         display:flex; }
+  .col { flex:1; display:flex; flex-direction:column; min-width:0; height:100%; }
+
+  /* Sidebar de sesiones (multi-sesión) */
+  .sidebar { width:236px; flex-shrink:0; background:var(--surface); border-right:1px solid var(--border);
+             display:flex; flex-direction:column; height:100%; }
+  .sb-hd { display:flex; align-items:center; gap:8px; padding:13px 13px 11px; border-bottom:1px solid var(--border); }
+  .sb-hd .t { font-family:var(--mono); letter-spacing:0.2em; text-transform:uppercase; font-size:10.5px; color:var(--dim); }
+  .sb-new { margin-left:auto; background:var(--surface2); color:var(--tool); border:1px solid var(--border);
+            border-radius:7px; height:26px; padding:0 9px; font-family:var(--mono); font-size:12px; font-weight:700; cursor:pointer; }
+  .sb-new:hover { border-color:var(--tool); }
+  .sb-list { flex:1; overflow-y:auto; padding:8px; display:flex; flex-direction:column; gap:4px; }
+  .sb-grp { font-family:var(--mono); font-size:9.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); display:flex; align-items:center; gap:8px; padding:12px 8px 4px; }
+  .sb-grp:first-child { padding-top:2px; }
+  .sb-grp .ln { flex:1; height:1px; background:var(--border); }
+  .sb-item { position:relative; border:1px solid transparent; border-radius:9px; padding:8px 10px; cursor:pointer;
+             display:flex; flex-direction:column; gap:2px; }
+  .sb-item:hover { background:var(--surface2); }
+  .sb-item.active { background:var(--surface2); border-color:var(--border); }
+  .sb-item.active::before { content:""; position:absolute; left:0; top:8px; bottom:8px; width:2px; border-radius:2px; background:var(--tool); }
+  .sb-item .nm { font-family:var(--mono); font-size:13px; color:var(--ink); display:flex; align-items:center; gap:7px; padding-right:14px; }
+  .sb-item .nm .tt { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .sb-item .pdot { width:7px; height:7px; border-radius:50%; background:var(--tool); box-shadow:0 0 6px var(--tool); flex:none; }
+  .sb-item.dormant { opacity:.62; }
+  .sb-item.dormant .nm { color:var(--dim); }
+  .sb-item.dormant .pdot { background:var(--faint); box-shadow:none; }
+  .sb-item.st-running .pdot { background:var(--ok); box-shadow:0 0 7px var(--ok); }
+  .sb-item.st-waiting .pdot { background:var(--warn); box-shadow:none; }
+  .sb-item.st-running .meta .s { color:var(--ok); }
+  .sb-item.st-waiting .meta .s { color:var(--warn); }
+  .sb-item .meta { font-family:var(--mono); font-size:10px; color:var(--faint); padding-left:14px; }
+  .sb-item .meta .iso { color:var(--warn); }
+  .sb-item .meta .s { color:var(--dim); }
+  .sb-item .x { position:absolute; top:6px; right:6px; width:17px; height:17px; line-height:15px; text-align:center;
+                background:none; border:none; color:var(--faint); font-size:14px; cursor:pointer; border-radius:5px; opacity:0; }
+  .sb-item:hover .x { opacity:1; } .sb-item .x:hover { color:var(--err); background:color-mix(in srgb,var(--err) 14%,transparent); }
+  .sb-foot { padding:10px 13px; border-top:1px solid var(--border); }
+  .sb-foot label { display:flex; align-items:center; gap:7px; font-family:var(--mono); font-size:11px; color:var(--dim); cursor:pointer; }
+  .sb-foot input { accent-color:var(--tool); }
+  .sb-foot .sb-rescan { font-family:var(--mono); font-size:10.5px; color:var(--dim); background:none; border:1px solid var(--border); border-radius:6px; padding:4px 9px; cursor:pointer; }
+  .sb-foot .sb-rescan:hover { border-color:var(--tool); color:var(--tool); }
+  .sb-foot .hint2 { margin-top:7px; font-family:var(--mono); font-size:9.5px; color:var(--faint); line-height:1.4; }
+  @media (max-width:640px) { .sidebar { display:none; } }
   header { display:flex; align-items:center; gap:11px; padding:12px 18px; border-bottom:1px solid var(--border);
            background:var(--surface); position:sticky; top:0; z-index:2; }
   header .om { font-family:var(--mono); font-weight:700; font-size:22px; color:var(--tool); line-height:1; }
   header .nm { font-family:var(--mono); letter-spacing:0.3em; text-transform:uppercase; font-size:12px; color:var(--ink); }
   header .st { margin-left:auto; font-family:var(--mono); font-size:11.5px; color:var(--faint); display:flex; gap:8px; align-items:center; }
+  header .hbtn { font-family:var(--mono); font-size:11px; color:var(--dim); background:var(--surface2); border:1px solid var(--border); border-radius:7px; padding:3px 9px; cursor:pointer; }
+  header .hbtn:hover { border-color:var(--tool); color:var(--tool); }
   header .dotc { width:7px; height:7px; border-radius:50%; background:var(--faint); }
   header .dotc.on { background:var(--ok); box-shadow:0 0 8px var(--ok); }
 
@@ -107,6 +151,27 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
            font-family:var(--mono); font-weight:700; font-size:14px; cursor:pointer; }
   button:disabled { opacity:.4; cursor:default; }
   .hint { max-width:820px; margin:7px auto 0; font-family:var(--mono); font-size:11px; color:var(--faint); }
+
+  /* Modal de nueva sesión */
+  .modal-bg { position:fixed; inset:0; background:rgba(0,0,0,.55); display:none; align-items:center; justify-content:center; z-index:20; }
+  .modal-bg.on { display:flex; }
+  .modal { background:var(--surface); border:1px solid var(--border2); border-radius:14px; width:min(430px,92vw); padding:20px 20px 18px; box-shadow:0 24px 60px -20px rgba(0,0,0,.7); }
+  .modal h3 { font-family:var(--mono); font-size:12px; letter-spacing:.16em; text-transform:uppercase; color:var(--dim); margin:0 0 14px; }
+  .modes { display:flex; flex-direction:column; gap:7px; margin-bottom:13px; }
+  .mode { border:1px solid var(--border); border-radius:10px; padding:10px 12px; cursor:pointer; }
+  .mode:hover { border-color:var(--border2); }
+  .mode.sel { border-color:var(--tool); background:var(--surface2); }
+  .mode .mt { font-family:var(--mono); font-size:13px; color:var(--ink); }
+  .mode.sel .mt { color:var(--tool); }
+  .mode .md { font-size:11px; color:var(--faint); margin-top:2px; }
+  .fields { display:flex; flex-direction:column; gap:9px; margin-bottom:14px; }
+  .fields label { font-family:var(--mono); font-size:9.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--faint); display:block; margin-bottom:4px; }
+  .fields input { width:100%; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:9px 11px; color:var(--ink); font-family:var(--mono); font-size:13px; }
+  .fields input:focus { outline:none; border-color:var(--tool); box-shadow:0 0 0 3px rgba(52,205,216,.12); }
+  .modal .acts { display:flex; gap:8px; justify-content:flex-end; }
+  .modal .btn { font-family:var(--mono); font-size:12px; border-radius:8px; padding:8px 16px; cursor:pointer; border:1px solid var(--border2); background:var(--surface2); color:var(--dim); }
+  .modal .btn:hover { border-color:var(--tool); }
+  .modal .btn.primary { background:var(--tool); color:var(--bg); border-color:var(--tool); font-weight:700; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
@@ -118,9 +183,18 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
 </script>
 </head>
 <body>
+  <aside class="sidebar">
+    <div class="sb-hd"><span class="t">sesiones</span><button class="sb-new" id="sbnew" title="nueva sesión">+ nueva</button></div>
+    <div class="sb-list" id="sblist"></div>
+    <div class="sb-foot">
+      <button class="sb-rescan" id="rescan" title="re-importar sesiones del disco al índice">⟳ rescan</button>
+      <div class="hint2">las dormidas se reviven al clickearlas · cerrar (×) no borra nada</div>
+    </div>
+  </aside>
+  <div class="col">
   <header>
     <span class="om">Ω</span><span class="nm">omega</span>
-    <span class="st"><span class="dotc" id="dot"></span><span id="stat">conectando…</span></span>
+    <span class="st"><button class="hbtn" id="reveal" title="abrir la carpeta de la sesión en el explorador">carpeta ↗</button><span class="dotc" id="dot"></span><span id="stat">conectando…</span></span>
   </header>
   <main id="main">
     <div class="thread" id="thread"></div>
@@ -133,6 +207,29 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
     </div>
     <div class="hint" id="hint">Ω omega · frontend web · localhost</div>
   </form>
+  </div>
+
+  <div class="modal-bg" id="modalbg">
+    <div class="modal">
+      <h3>nueva sesión</h3>
+      <div class="modes" id="modes">
+        <div class="mode sel" data-mode="shared"><div class="mt">Compartida</div><div class="md">sobre el cwd del server</div></div>
+        <div class="mode" data-mode="create"><div class="mt">Worktree nuevo</div><div class="md">Omega crea una branch aislada</div></div>
+        <div class="mode" data-mode="attach"><div class="mt">Attach</div><div class="md">a un worktree/dir que ya existe (tree.sh)</div></div>
+      </div>
+      <div class="fields" id="f-create" style="display:none">
+        <div><label>branch (opcional)</label><input type="text" id="i-branch" placeholder="feat/mi-tarea"></div>
+        <div><label>base (opcional)</label><input type="text" id="i-base" placeholder="main"></div>
+      </div>
+      <div class="fields" id="f-attach" style="display:none">
+        <div><label>ruta del worktree</label><input type="text" id="i-cwd" list="wtlist" placeholder="/Users/vos/Workspace/…/MED-2050" autocomplete="off"><datalist id="wtlist"></datalist></div>
+      </div>
+      <div class="acts">
+        <button class="btn" id="m-cancel" type="button">cancelar</button>
+        <button class="btn primary" id="m-create" type="button">crear</button>
+      </div>
+    </div>
+  </div>
 
 <script>
 const GLYPH = { read:"»", outline:"≡", write:"+", edit:"✎", bash:"$", grep:"⌕", tool_search:"⌕", web_fetch:"↗", vision_ask:"◧", ask_user:"?", skill:"◆" };
@@ -284,15 +381,36 @@ function hydrateCode(){
 }
 function hydrate(){ hydrateMermaid(); hydrateCode(); }
 
-// ── SSE ──────────────────────────────────────────────────────────
+// ── SSE + sesiones ────────────────────────────────────────────────
 let lastTool = null;
-const es = new EventSource('/events');
-es.onopen = ()=>{ $("dot").classList.add('on'); $("stat").textContent='conectado'; };
-es.onerror = ()=>{ $("dot").classList.remove('on'); $("stat").textContent='reconectando…'; };
-es.onmessage = (e)=>{
+let current = null;   // id de la sesión activa
+let es = null;        // EventSource de la sesión activa
+
+// Agrega ?session=<id> a una ruta (cada request va contra la sesión activa).
+function q(p){ return p + (p.indexOf('?')>=0?'&':'?') + 'session=' + encodeURIComponent(current); }
+
+function openES(){
+  if(es) es.close();
+  es = new EventSource(q('/events'));
+  es.onopen = ()=>{ $("dot").classList.add('on'); $("stat").textContent='conectado'; };
+  es.onerror = ()=>{ $("dot").classList.remove('on'); $("stat").textContent='reconectando…'; };
+  es.onmessage = (e)=>{
   let ev; try { ev = JSON.parse(e.data); } catch { return; }
   switch(ev.type){
-    case 'ready': $("stat").textContent = ev.model; break;
+    case 'ready': $("stat").textContent = ev.model; loadSessions(); break;
+    case 'status': loadSessions(); break;
+    case 'history': {
+      // Replay del transcript al conectar/cambiar de sesión: pinta cada ítem con
+      // las mismas funciones que los eventos vivos.
+      for(const it of (ev.items || [])){
+        if(it.kind==='user'){ addMsg('vos','user').textContent = it.text; }
+        else if(it.kind==='assistant'){ const b=addMsg('omega','asst'); b.dataset.raw=it.text; b.innerHTML=md(it.text); }
+        else if(it.kind==='tool_use'){ lastTool = addTool(it.name, it.input); }
+        else if(it.kind==='tool_result'){ addToolResult(lastTool, it.output, it.isError); lastTool=null; }
+      }
+      hydrate(); scroll();
+      break;
+    }
     case 'turn_start': $("thinking").classList.add('on'); curAsst=null; scroll(); break;
     case 'delta':
       if(!curAsst) curAsst = addMsg('omega','asst');
@@ -318,7 +436,151 @@ es.onmessage = (e)=>{
     }
     case 'notify': { const n=document.createElement('div'); n.className='sys'; n.textContent=ev.text; thread.appendChild(n); if(atBottom()) scroll(); break; }
   }
-};
+  };
+}
+
+// Limpia el hilo al cambiar de sesión (los eventos pasados no se re-emiten: el
+// hub no bufferea historial; ves la sesión desde el próximo evento).
+function resetThread(){ thread.innerHTML=''; curAsst=null; lastTool=null; $("thinking").classList.remove('on'); }
+
+function selectSession(id, force){
+  if(!force && id===current && es) return;
+  current = id;
+  resetThread();
+  openES();
+  loadSessions(true); // fuerza el render para mover el highlight a la nueva
+}
+
+function projName(p){ const a = String(p||'').split('/'); return a[a.length-1] || p || '(sin proyecto)'; }
+
+function renderRow(s){
+  const it = document.createElement('div');
+  const stCls = (s.live && s.status) ? (' st-' + s.status) : '';
+  it.className = 'sb-item' + (s.id===current ? ' active' : '') + (s.live ? '' : ' dormant') + stCls;
+  it.onclick = function(){ selectSession(s.id); };
+
+  const nm = document.createElement('div'); nm.className='nm';
+  const dot = document.createElement('span'); dot.className='pdot';
+  const tt = document.createElement('span'); tt.className='tt'; tt.textContent = s.title;
+  nm.appendChild(dot); nm.appendChild(tt);
+
+  const meta = document.createElement('div'); meta.className='meta';
+  if(s.live){
+    const word = s.status==='running' ? 'corriendo…'
+               : s.status==='waiting' ? 'esperás vos'
+               : (s.isolated ? '⎇ aislada' : '· compartida');
+    meta.innerHTML = '<span class="s">' + word + '</span>';
+    if(s.clients) meta.innerHTML += ' · ' + s.clients + ' ◉';
+  } else {
+    meta.textContent = '⦿ dormida' + (s.branch ? ' · ' + s.branch : '');
+  }
+  it.appendChild(nm); it.appendChild(meta);
+
+  // × duerme la sesión (no la borra).
+  const x = document.createElement('button'); x.className='x'; x.textContent='×'; x.title='dormir sesión';
+  x.onclick = function(e){ e.stopPropagation(); closeSession(s.id); };
+  it.appendChild(x);
+  return it;
+}
+
+function renderSessions(list){
+  const box = $("sblist"); box.innerHTML='';
+  // Agrupar por proyecto preservando el orden (vivas primero ya viene del server).
+  const order = []; const byProj = {};
+  list.forEach(function(s){
+    const key = s.project || '(sin proyecto)';
+    if(!byProj[key]){ byProj[key] = []; order.push(key); }
+    byProj[key].push(s);
+  });
+  order.forEach(function(key){
+    const hd = document.createElement('div'); hd.className='sb-grp';
+    const nm = document.createElement('span'); nm.textContent = projName(key);
+    const ln = document.createElement('span'); ln.className='ln';
+    hd.appendChild(nm); hd.appendChild(ln);
+    box.appendChild(hd);
+    byProj[key].forEach(function(s){ box.appendChild(renderRow(s)); });
+  });
+}
+
+let lastSig = '';
+async function loadSessions(force){
+  try {
+    const r = await fetch('/sessions'); const d = await r.json();
+    if(!current) current = d.default;
+    // Solo re-renderizamos si algo cambió (o si se fuerza) — así el poll no
+    // rompe el hover ni parpadea el sidebar cuando no pasó nada.
+    const sig = current + '|' + d.sessions.map(function(s){ return [s.id,s.live,s.status,s.clients,s.title].join(','); }).join(';');
+    if(force || sig!==lastSig){ lastSig = sig; renderSessions(d.sessions); }
+  } catch(_){}
+}
+// Poll liviano: refresca estados de TODAS las sesiones (las que no estás mirando).
+setInterval(function(){ loadSessions(); }, 4000);
+
+// ── Modal de nueva sesión (compartida / worktree nuevo / attach) ──
+let modalMode = 'shared';
+function syncModal(){
+  const modes = document.querySelectorAll('#modes .mode');
+  for(const el of modes) el.classList.toggle('sel', el.getAttribute('data-mode')===modalMode);
+  $("f-create").style.display = modalMode==='create' ? 'flex' : 'none';
+  $("f-attach").style.display = modalMode==='attach' ? 'flex' : 'none';
+}
+function openModal(){ modalMode='shared'; syncModal(); loadWorktrees(); $("modalbg").classList.add('on'); }
+function closeModal(){ $("modalbg").classList.remove('on'); }
+
+// Sugerencias para el modo attach: tus worktrees reales del repo.
+async function loadWorktrees(){
+  try {
+    const r = await fetch('/worktrees'); const d = await r.json();
+    const dl = $("wtlist"); dl.innerHTML='';
+    (d.worktrees||[]).forEach(function(w){
+      const o = document.createElement('option'); o.value = w.path;
+      if(w.branch) o.label = w.branch;
+      dl.appendChild(o);
+    });
+  } catch(_){}
+}
+
+for(const el of document.querySelectorAll('#modes .mode')){
+  el.onclick = function(){ modalMode = el.getAttribute('data-mode'); syncModal(); };
+}
+$("m-cancel").addEventListener('click', closeModal);
+$("modalbg").addEventListener('click', function(e){ if(e.target===$("modalbg")) closeModal(); });
+$("m-create").addEventListener('click', doCreateSession);
+
+async function doCreateSession(){
+  const payload = { mode: modalMode };
+  if(modalMode==='create'){
+    payload.branch = $("i-branch").value.trim() || undefined;
+    payload.base = $("i-base").value.trim() || undefined;
+  }
+  if(modalMode==='attach'){
+    const cwd = $("i-cwd").value.trim();
+    if(!cwd){ $("i-cwd").focus(); return; }
+    payload.cwd = cwd;
+  }
+  try {
+    const r = await fetch('/sessions', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+    if(!r.ok){ const e = await r.json().catch(function(){return{};}); alert('No se pudo crear: ' + (e.error||('HTTP '+r.status))); return; }
+    const s = await r.json();
+    closeModal();
+    await loadSessions();
+    selectSession(s.id, true);
+  } catch(_){ alert('Error de red creando la sesión'); }
+}
+
+async function closeSession(id){
+  const wasCurrent = (id === current);
+  try { await fetch('/sessions?session=' + encodeURIComponent(id), { method:'DELETE' }); } catch(_){}
+  if(wasCurrent){ current = null; await loadSessions(); selectSession(current, true); }
+  else { loadSessions(); }
+}
+
+$("sbnew").addEventListener('click', openModal);
+$("reveal").addEventListener('click', function(){ if(current) fetch(q('/reveal'), { method:'POST' }).catch(function(){}); });
+$("rescan").addEventListener('click', async function(){ try{ await fetch('/rescan', { method:'POST' }); await loadSessions(true); } catch(_){} });
+
+// Boot: descubrí las sesiones, elegí la default, abrí su stream.
+(async function(){ await loadSessions(); openES(); })();
 
 // ── Input ────────────────────────────────────────────────────────
 const input = $("input");
@@ -329,7 +591,7 @@ $("form").addEventListener('submit', async (e)=>{
   const text = input.value.trim(); if(!text) return;
   addMsg('vos','user').textContent = text;
   input.value=''; input.style.height='auto'; $("hint").textContent='Ω omega · frontend web · localhost'; scroll();
-  await fetch('/input', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({text}) });
+  await fetch(q('/input'), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({text}) });
 });
 input.focus();
 
@@ -337,10 +599,10 @@ input.focus();
 async function interrupt(){
   if(!$("thinking").classList.contains('on')) return;
   $("thinking").classList.remove('on');
-  try { await fetch('/interrupt', { method:'POST' }); } catch {}
+  try { await fetch(q('/interrupt'), { method:'POST' }); } catch {}
 }
 $("stop").addEventListener('click', interrupt);
-window.addEventListener('keydown', (e)=>{ if(e.key==='Escape') interrupt(); });
+window.addEventListener('keydown', (e)=>{ if(e.key==='Escape'){ if($("modalbg").classList.contains('on')) closeModal(); else interrupt(); } });
 </script>
 </body>
 </html>`;

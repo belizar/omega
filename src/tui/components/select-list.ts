@@ -35,6 +35,15 @@ class SelectList<T> implements InputComponent<T | null> {
     return this.#items.length === 0;
   }
 
+  /** Reemplaza los items en vivo (para refrescar estados sin perder la selección).
+   *  Clampa el índice si la lista se achicó. */
+  setItems(items: T[]): void {
+    this.#items = items;
+    if (this.#selectedIndex >= items.length) {
+      this.#selectedIndex = Math.max(0, items.length - 1);
+    }
+  }
+
   /** Inicio de la ventana visible (la que sigue al seleccionado). */
   #windowStart(): number {
     const total = this.#items.length;

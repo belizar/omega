@@ -1,5 +1,5 @@
 import { writeFile, mkdir, readFile } from "fs/promises";
-import { dirname } from "path";
+import { dirname, resolve } from "path";
 import { Tool } from "./tool.js";
 import { logger } from "../logger.js";
 import { isEnvFile, ENV_BLOCK_MESSAGE } from "./env-guard.js";
@@ -35,7 +35,10 @@ function lineSimilarity(a: string, b: string): number {
 }
 
 export class WriteTool extends Tool<WriteInput, string> {
-  constructor() {
+  /** cwd contra el que se resuelven paths relativos (default: el del proceso). */
+  #cwd: string;
+
+  constructor(cwd: string = process.cwd()) {
     super({
       name: "write",
       description:
@@ -57,6 +60,7 @@ export class WriteTool extends Tool<WriteInput, string> {
         required: ["path", "content"],
       },
     });
+    this.#cwd = cwd;
   }
 
   async execute(input: unknown): Promise<string> {
@@ -80,15 +84,17 @@ export class WriteTool extends Tool<WriteInput, string> {
         return ENV_BLOCK_MESSAGE;
       }
 
+      const filePath = resolve(this.#cwd, path);
+
       // ¿El archivo ya existe?
       let oldContent: string | null = null;
       try {
-        oldContent = await readFile(path, "utf-8");
+        oldContent = await readFile(filePath, "utf-8");
       } catch {
         // No existe → archivo nuevo, write normal
         logger.info("Writing new file", { path, size: content.length });
-        await mkdir(dirname(path), { recursive: true });
-        await writeFile(path, content, "utf-8");
+        await mkdir(dirname(filePath), { recursive: true });
+        await writeFile(filePath, content, "utf-8");
         logger.info("File written successfully", { path });
         return `Escrito ${path} correctamente.`;
       }
@@ -96,8 +102,8 @@ export class WriteTool extends Tool<WriteInput, string> {
       // El archivo existe — chequeo de similitud
       if (overwrite === true) {
         logger.info("Overwriting file (overwrite flag)", { path, size: content.length });
-        await mkdir(dirname(path), { recursive: true });
-        await writeFile(path, content, "utf-8");
+        await mkdir(dirname(filePath), { recursive: true });
+        await writeFile(filePath, content, "utf-8");
         logger.info("File overwritten successfully", { path });
         return `Sobrescrito ${path} correctamente (overwrite: true).`;
       }
@@ -117,8 +123,8 @@ export class WriteTool extends Tool<WriteInput, string> {
 
       // Poca similitud → es un archivo realmente distinto, permitir
       logger.info("Overwriting file (low similarity)", { path, similarity: (similarity * 100).toFixed(0) });
-      await mkdir(dirname(path), { recursive: true });
-      await writeFile(path, content, "utf-8");
+      await mkdir(dirname(filePath), { recursive: true });
+      await writeFile(filePath, content, "utf-8");
       logger.info("File overwritten successfully", { path });
       return `Sobrescrito ${path} correctamente (baja similitud con el anterior).`;
     } catch (err: unknown) {
