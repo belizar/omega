@@ -139,22 +139,23 @@ export class ClientMode implements FrontendMode {
 
   // ── Lista de sesiones ─────────────────────────────────────────────
 
-  async #pickSession(client: DaemonClient): Promise<ListItem> {
-    const { sessions } = await client.sessions();
-    // Agrupar por proyecto (encuentro), vivas antes que dormidas.
+  /** Orden ESTABLE: por proyecto, después por id. No depende del estado, así al
+   *  refrescar (una sesión pasa de corriendo→idle) las filas NO saltan. */
+  #buildItems(sessions: SessionInfo[]): ListItem[] {
     const sorted = [...sessions].sort((a, b) => {
       if (a.project !== b.project) return a.project < b.project ? -1 : 1;
-      if (a.live !== b.live) return a.live ? -1 : 1;
-      return (b.lastActive ?? 0) - (a.lastActive ?? 0);
+      return a.id < b.id ? -1 : 1;
     });
-
-    const items: ListItem[] = [
+    return [
       ...sorted.map((info) => ({ kind: "session" as const, info })),
       { kind: "new" as const },
       { kind: "quit" as const },
     ];
+  }
 
-    const list = new SelectList<ListItem>(items, (item, _i, sel) => {
+  async #pickSession(client: DaemonClient): Promise<ListItem> {
+    const first = await client.sessions();
+    const list = new SelectList<ListItem>(this.#buildItems(first.sessions), (item, _i, sel) => {
       const arrow = sel ? "❯ " : "  ";
       if (item.kind === "new") return arrow + "+ nueva sesión";
       if (item.kind === "quit") return arrow + "salir";
@@ -175,9 +176,26 @@ export class ClientMode implements FrontendMode {
     // Vista full-screen: limpiamos para no apilar scrollback entre navegaciones.
     this.#screen.clearScreen();
     this.#screen.printAbove(dim("\n\n  Ω omega · sesiones   (↑↓ mover · ↵ entrar · esc salir)\n"));
-    const result = await this.#pickFrom(list);
-    if (!result) return { kind: "quit" }; // esc
-    return result;
+
+    // Poll: refresca los estados en vivo mientras mirás la lista (así "corriendo…"
+    // pasa a "idle" cuando el turno termina, sin salir y volver a entrar).
+    const poll = setInterval(async () => {
+      try {
+        const { sessions } = await client.sessions();
+        list.setItems(this.#buildItems(sessions));
+        this.#screen.redrawLive();
+      } catch {
+        /* el daemon puede estar ocupado; reintenta el próximo tick */
+      }
+    }, 2000);
+
+    try {
+      const result = await this.#pickFrom(list);
+      if (!result) return { kind: "quit" }; // esc
+      return result;
+    } finally {
+      clearInterval(poll);
+    }
   }
 
   async #newSession(client: DaemonClient): Promise<void> {
@@ -240,6 +258,10 @@ export class ClientMode implements FrontendMode {
     // ANTES del primer prompt (si no, el historial aparecería tarde o perdido).
     await new Promise((r) => setTimeout(r, 250));
 
+    // Si entrás a una sesión que YA está corriendo, arrancá el spinner al toque
+    // (te perdiste el turn_start, y no llega un `status` porque no hubo cambio).
+    if (info.status === "running") this.#spinner.start();
+
     let quit = false;
     try {
       // NO bloqueamos esperando el turno: el input queda vivo mientras el agente
@@ -300,6 +322,9 @@ export class ClientMode implements FrontendMode {
         break;
       case "assistant":
         this.#spinner.stop();
+        // Flush de un stream colgado (ej. te uniste a mitad, o se interrumpió sin
+        // assistant_end): si no, el mensaje —incluido "⏹ Interrumpido"— no se ve.
+        this.#assistant.endStream();
         this.#assistant.display(String(ev.text ?? ""));
         break;
       case "tool_use":
@@ -317,8 +342,15 @@ export class ClientMode implements FrontendMode {
         break;
       }
       case "turn_end":
+        this.#assistant.endStream(); // cerrar cualquier stream colgado
         this.#spinner.stop();
         this.#screen.redrawLive();
+        break;
+      case "status":
+        // Reflejar el estado del turno del daemon aunque te hayas unido a mitad
+        // (te perdiste el turn_start): running → mostrás "Pensando" al toque.
+        if (ev.status === "running") this.#spinner.start();
+        else this.#spinner.stop();
         break;
       case "ask_user":
         this.#spinner.stop();
