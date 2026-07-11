@@ -6,6 +6,7 @@ import { join } from "path";
 import { promisify } from "util";
 import { SessionManager } from "../../frontend/session-manager.js";
 import { SessionIndex } from "../../frontend/session-index.js";
+import { NotificationHub, AttentionEvent } from "../../frontend/notification-hub.js";
 import type { CoreServices } from "../../core.js";
 
 const execFileAsync = promisify(execFile);
@@ -250,6 +251,50 @@ describe("SessionManager", () => {
 
   it("setArchived de un id desconocido devuelve false", () => {
     expect(mgr.setArchived("no-existe", true)).toBe(false);
+  });
+
+  it("una sesión que termina el turno / pide input emite atención al hub global", async () => {
+    const hub = new NotificationHub();
+    const got: AttentionEvent[] = [];
+    hub.add((line) => got.push(JSON.parse(line)));
+    const mgr2 = new SessionManager(fakeBase(), {
+      baseDir,
+      sessionsDir,
+      index: new SessionIndex(join(baseDir, "idx-notif.json")),
+      notifHub: hub,
+    });
+    const h = await mgr2.create({ title: "notifica" });
+
+    // turn-end → evento de atención "turn_end" enriquecido con título/id.
+    h.frontend.turnEnded();
+    expect(got).toHaveLength(1);
+    expect(got[0]).toMatchObject({ type: "attention", kind: "turn_end", sessionId: h.id, title: "notifica" });
+
+    // ask-user → "ask_user" con la pregunta (onLifecycle dispara sincrónico, antes del await).
+    void h.frontend.askUser("¿qué leads?");
+    expect(got).toHaveLength(2);
+    expect(got[1]).toMatchObject({ kind: "ask_user", question: "¿qué leads?", sessionId: h.id });
+
+    await mgr2.disposeAll();
+  });
+
+  it("addNotificationClient devuelve una baja que corta el flujo", async () => {
+    const hub = new NotificationHub();
+    const got: string[] = [];
+    const mgr2 = new SessionManager(fakeBase(), {
+      baseDir,
+      sessionsDir,
+      index: new SessionIndex(join(baseDir, "idx-unsub.json")),
+      notifHub: hub,
+    });
+    const off = mgr2.addNotificationClient((line) => got.push(line));
+    const h = await mgr2.create({ title: "x" });
+    h.frontend.turnEnded();
+    expect(got).toHaveLength(1);
+    off(); // baja
+    h.frontend.turnEnded();
+    expect(got).toHaveLength(1); // ya no recibe
+    await mgr2.disposeAll();
   });
 
   it("rescan recupera transcripts huérfanos si el índice se pierde", async () => {

@@ -209,6 +209,17 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
   .sb-foot .arch-tgl input { accent-color:var(--tool); }
   .sb-foot .arch-tgl .n { color:var(--faint); }
 
+  /* Toasts de atención (in-app, cero permisos) — arriba a la derecha */
+  .toasts { position:fixed; top:14px; right:14px; z-index:60; display:flex; flex-direction:column; gap:8px; width:min(320px,80vw); }
+  .toast { background:var(--surface); border:1px solid var(--border); border-left:3px solid var(--warn); border-radius:10px;
+           padding:9px 11px; box-shadow:0 12px 34px -12px rgba(0,0,0,.6); cursor:pointer; animation:toastin .18s ease; }
+  .toast.done { border-left-color:var(--ok); }
+  .toast .tt { font-family:var(--mono); font-size:12px; color:var(--ink); display:flex; justify-content:space-between; gap:10px; align-items:baseline; }
+  .toast .tt .xx { color:var(--faint); font-size:13px; } .toast .tt .xx:hover { color:var(--err); }
+  .toast .tb { font-size:12px; color:var(--dim); margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  @keyframes toastin { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:none} }
+  @media (prefers-reduced-motion: reduce){ .toast{ animation:none; } }
+
   /* Buscar dentro de la conversación (Ctrl-F): barra flotante sobre el hilo */
   .findbar { display:none; position:sticky; top:0; z-index:3; align-items:center; gap:9px;
              background:var(--surface2); border-bottom:1px solid var(--border); padding:8px 18px; }
@@ -247,7 +258,7 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
   <div class="col">
   <header>
     <span class="om">Ω</span><span class="nm">omega</span>
-    <span class="st"><button class="hbtn" id="reveal" title="abrir la carpeta de la sesión en el explorador">carpeta ↗</button><span class="dotc" id="dot"></span><span id="stat">conectando…</span></span>
+    <span class="st"><button class="hbtn" id="bell" title="activar notificaciones">🔕</button><button class="hbtn" id="reveal" title="abrir la carpeta de la sesión en el explorador">carpeta ↗</button><span class="dotc" id="dot"></span><span id="stat">conectando…</span></span>
   </header>
   <main id="main">
     <div class="findbar" id="findbar">
@@ -268,6 +279,8 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
     <div class="hint" id="hint">Ω omega · frontend web · localhost</div>
   </form>
   </div>
+
+  <div class="toasts" id="toasts"></div>
 
   <div class="modal-bg" id="modalbg">
     <div class="modal">
@@ -446,6 +459,9 @@ let lastTool = null;
 let current = null;   // id de la sesión activa
 let es = null;        // EventSource de la sesión activa
 let findMatches = [], findIdx = -1; // estado del buscador in-convo (declarado acá para evitar TDZ desde resetThread)
+let ges = null;       // EventSource GLOBAL (/events/all): atención de todas las sesiones
+let notifsEnabled = localStorage.getItem('omega.notifs') === '1';
+const attention = new Set(); // ids de sesiones que te reclaman (badge + resalte)
 
 // Agrega ?session=<id> a una ruta (cada request va contra la sesión activa).
 function q(p){ return p + (p.indexOf('?')>=0?'&':'?') + 'session=' + encodeURIComponent(current); }
@@ -507,10 +523,67 @@ function resetThread(){ thread.innerHTML=''; curAsst=null; lastTool=null; $("thi
 function selectSession(id, force){
   if(!force && id===current && es) return;
   current = id;
+  clearAttention(id); // entrar a una sesión = ya la viste, sacala del badge
   resetThread();
   openES();
   loadSessions(true); // fuerza el render para mover el highlight a la nueva
 }
+
+// ── Notificaciones globales (SSE /events/all: atención de TODAS las sesiones) ──
+function updateBadge(){ document.title = (attention.size ? '(' + attention.size + ') ' : '') + 'Ω omega'; }
+function clearAttention(id){ if(attention.delete(id)) updateBadge(); }
+function updateBellUi(){
+  $("bell").textContent = notifsEnabled ? '🔔' : '🔕';
+  $("bell").title = notifsEnabled ? 'notificaciones activadas (click para silenciar)' : 'activar notificaciones del browser';
+}
+function onAttention(ev){
+  // No molestar si estás mirando ESA sesión con la pestaña enfocada: ya la ves.
+  if(ev.sessionId === current && document.hasFocus()) return;
+  attention.add(ev.sessionId); updateBadge();
+  loadSessions(true); // refresca el dot del sidebar (waiting/idle)
+  showToast(ev);      // toast in-app: SIEMPRE (cero permisos, la base confiable)
+  // Notificación de escritorio: bonus, solo si activaste 🔔 y el permiso está dado.
+  if(notifsEnabled && window.Notification && Notification.permission === 'granted'){
+    const needsInput = ev.kind === 'ask_user';
+    const title = (ev.title || 'omega') + ' — ' + (needsInput ? 'necesita input' : 'listo');
+    const body = needsInput ? (ev.question || 'El agente te hizo una pregunta') : 'Terminó el turno';
+    try {
+      const n = new Notification(title, { body: String(body).slice(0,160), tag: ev.sessionId });
+      n.onclick = function(){ window.focus(); selectSession(ev.sessionId, true); n.close(); };
+    } catch(_){}
+  }
+}
+
+// Toast in-app: cartelito arriba a la derecha. No necesita permiso del browser ni
+// del SO — funciona siempre que tengas la pestaña abierta. Click → salta a la sesión.
+function showToast(ev){
+  const needsInput = ev.kind === 'ask_user';
+  const t = document.createElement('div'); t.className = 'toast' + (needsInput ? '' : ' done');
+  const head = document.createElement('div'); head.className = 'tt';
+  const label = document.createElement('span');
+  label.textContent = (ev.title || 'omega') + ' · ' + (needsInput ? 'necesita input' : 'listo');
+  const close = document.createElement('span'); close.className = 'xx'; close.textContent = '✕';
+  head.appendChild(label); head.appendChild(close);
+  const body = document.createElement('div'); body.className = 'tb';
+  body.textContent = needsInput ? (ev.question || 'te hizo una pregunta') : 'terminó el turno';
+  t.appendChild(head); t.appendChild(body);
+  const dismiss = function(){ t.remove(); };
+  t.onclick = function(){ selectSession(ev.sessionId, true); window.focus(); dismiss(); };
+  close.onclick = function(e){ e.stopPropagation(); dismiss(); };
+  $("toasts").appendChild(t);
+  setTimeout(dismiss, 6000); // auto-dismiss
+}
+function openGlobalES(){
+  if(ges) ges.close();
+  ges = new EventSource('/events/all');
+  ges.onmessage = function(e){
+    let ev; try { ev = JSON.parse(e.data); } catch { return; }
+    if(ev.type === 'attention') onAttention(ev);
+  };
+  // EventSource reconecta solo; nada que hacer en onerror.
+}
+// Si volvés a la pestaña mirando una sesión que reclamaba, limpiá su marca.
+window.addEventListener('focus', function(){ if(current) clearAttention(current); });
 
 function projName(p){ const a = String(p||'').split('/'); return a[a.length-1] || p || '(sin proyecto)'; }
 
@@ -747,8 +820,34 @@ $("sbnew").addEventListener('click', openModal);
 $("reveal").addEventListener('click', function(){ if(current) fetch(q('/reveal'), { method:'POST' }).catch(function(){}); });
 $("rescan").addEventListener('click', async function(){ try{ await fetch('/rescan', { method:'POST' }); await loadSessions(true); } catch(_){} });
 
-// Boot: descubrí las sesiones, elegí la default, abrí su stream.
-(async function(){ await loadSessions(); openES(); })();
+// Toggle de notificaciones. El prompt del browser SOLO aparece si el permiso está
+// en "default"; si ya está "denied" no muestra nada → damos instrucciones claras.
+$("bell").addEventListener('click', async function(){
+  if(notifsEnabled){ // ya activas → silenciar
+    notifsEnabled = false; localStorage.setItem('omega.notifs','0'); updateBellUi(); return;
+  }
+  if(!window.Notification){ alert('Este browser no soporta la Notification API.'); return; }
+  let perm = Notification.permission;
+  if(perm === 'default') perm = await Notification.requestPermission(); // acá aparece el prompt
+  if(perm !== 'granted'){
+    alert(
+      'Notificaciones bloqueadas (permiso actual: "' + perm + '").\n\n' +
+      'No aparece prompt porque el browser ya lo tiene decidido. Para habilitarlas:\n\n' +
+      '• Arc: clic en el escudo/candado a la izquierda de la URL → Notificaciones → Permitir.\n' +
+      '• macOS: Ajustes del Sistema → Notificaciones → Arc → activado.\n\n' +
+      'Después reintentá el 🔔.'
+    );
+    return;
+  }
+  notifsEnabled = true; localStorage.setItem('omega.notifs','1'); updateBellUi();
+  // Confirmación VISIBLE: si ves esta notificación, todo el pipeline anda.
+  try { new Notification('Ω omega', { body: 'Notificaciones activadas ✓', tag: 'omega-test' }); }
+  catch(_){ alert('Permiso concedido, pero el SO no mostró la notificación de prueba. Revisá Ajustes → Notificaciones → Arc en macOS.'); }
+});
+updateBellUi();
+
+// Boot: descubrí las sesiones, elegí la default, abrí su stream + el SSE global.
+(async function(){ await loadSessions(); openES(); openGlobalES(); })();
 
 // ── Input ────────────────────────────────────────────────────────
 const input = $("input");

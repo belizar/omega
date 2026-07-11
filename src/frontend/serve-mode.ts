@@ -7,6 +7,7 @@ import { CreateSessionOpts, SessionHandle, SessionManager, SessionMode } from ".
 import { DaemonClient } from "./daemon-client.js";
 import { writeDaemonInfo, clearDaemonInfo } from "./daemon-info.js";
 import { WEB_CLIENT_HTML } from "./web-client.js";
+import { HookRunner } from "../hooks.js";
 import type { FrontendMode } from "./mode.js";
 
 const execFileAsync = promisify(execFile);
@@ -69,7 +70,11 @@ export class ServeMode implements FrontendMode {
       return;
     }
 
-    const manager = new SessionManager(this.#core, { baseDir: this.#baseDir });
+    // Hooks del usuario (~/.omega/hooks.json): notificaciones de atención,
+    // formateo post-tool, etc. Vacío si no hay archivo. Fire-and-forget.
+    const hooks = HookRunner.load();
+    if (!hooks.isEmpty) logger.info("hooks cargados de ~/.omega/hooks.json");
+    const manager = new SessionManager(this.#core, { baseDir: this.#baseDir, hooks });
     this.#manager = manager;
     this.#routes = this.#buildRoutes(manager);
 
@@ -184,6 +189,7 @@ export class ServeMode implements FrontendMode {
           this.#openInExplorer(cwd);
           res.writeHead(204).end();
         } },
+      { method: "GET", path: "/events/all", handler: (c) => this.#globalEvents(c) },
       { method: "GET", path: "/events", revive: true, handler: (c) => this.#events(c) },
       { method: "POST", path: "/interrupt", revive: true, handler: ({ res, handle }) => {
           handle!.frontend.interrupt();
@@ -269,6 +275,24 @@ export class ServeMode implements FrontendMode {
     });
     res.write(": connected\n\n");
     const unsub = handle!.frontend.addClient((data) => res.write(`data: ${data}\n\n`));
+    const ping = setInterval(() => res.write(": ping\n\n"), 25_000);
+    req.on("close", () => {
+      clearInterval(ping);
+      unsub();
+    });
+  }
+
+  /** SSE GLOBAL: los eventos de atención de TODAS las sesiones, en una conexión.
+   *  Es lo que le permite al browser notificar por un workspace que no estás
+   *  mirando (a diferencia de `/events`, que es de la sesión activa). */
+  #globalEvents({ req, res }: RouteCtx): void {
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    });
+    res.write(": connected\n\n");
+    const unsub = this.#manager.addNotificationClient((data) => res.write(`data: ${data}\n\n`));
     const ping = setInterval(() => res.write(": ping\n\n"), 25_000);
     req.on("close", () => {
       clearInterval(ping);

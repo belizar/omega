@@ -17,7 +17,9 @@ import {
   Workspace,
 } from "../workspace.js";
 import { SessionIndex } from "./session-index.js";
-import { SessionStatus, WebFrontend } from "./web-frontend.js";
+import { LifecycleEvent, SessionStatus, WebFrontend } from "./web-frontend.js";
+import { NotificationHub, NotifSink } from "./notification-hub.js";
+import { HookRunner } from "../hooks.js";
 
 /** Una sesión viva hospedada por el server: su hub, su workspace y su loop. */
 export interface SessionHandle {
@@ -94,10 +96,20 @@ export class SessionManager {
   #sessionsDir: string;
   #index: SessionIndex;
   #shared: SharedAgentDeps;
+  /** Hub GLOBAL de atención (todas las sesiones → una SSE). */
+  #notifHub: NotificationHub;
+  /** Hooks de shell del usuario (fire-and-forget). Vacío por default (tests). */
+  #hooks: HookRunner;
 
   constructor(
     base: CoreServices,
-    opts: { baseDir: string; sessionsDir?: string; index?: SessionIndex },
+    opts: {
+      baseDir: string;
+      sessionsDir?: string;
+      index?: SessionIndex;
+      notifHub?: NotificationHub;
+      hooks?: HookRunner;
+    },
   ) {
     this.#base = base;
     this.#baseDir = opts.baseDir;
@@ -106,6 +118,10 @@ export class SessionManager {
     // para tests. El `project` es solo para agrupar, no dónde se guarda.
     this.#sessionsDir = opts.sessionsDir ?? join(homedir(), ".omega", "sessions");
     this.#index = opts.index ?? new SessionIndex();
+    this.#notifHub = opts.notifHub ?? new NotificationHub();
+    // HookRunner vacío por default (no lee disco): serve-mode inyecta el cargado
+    // de ~/.omega/hooks.json. Así los tests quedan herméticos.
+    this.#hooks = opts.hooks ?? new HookRunner();
     this.#shared = {
       config: base.config,
       classifier: base.classifier,
@@ -275,6 +291,7 @@ export class SessionManager {
       model: config.model,
       sessionId: session.id,
       getMessages: () => session.messages,
+      onLifecycle: (ev) => this.#dispatchLifecycle(session.id, ev),
     });
     const screen = new Screen(config.screenPadding);
     const ctx = new Context({
@@ -507,6 +524,49 @@ export class SessionManager {
       lastActive: this.#index.get(h.id)?.lastActive,
       archived: !!this.#index.get(h.id)?.archived,
     };
+  }
+
+  // ── Notificaciones + hooks ────────────────────────────────────────
+
+  /** Suscribe un cliente al hub GLOBAL de atención (SSE `/events/all`). */
+  addNotificationClient(sink: NotifSink): () => void {
+    return this.#notifHub.add(sink);
+  }
+
+  /**
+   * Un evento de ciclo de vida de UNA sesión llegó (desde su WebFrontend). Lo
+   * enriquecemos con la metadata del workspace (título/proyecto/cwd — que el
+   * frontend no conoce) y lo despachamos a los DOS consumidores:
+   *  - el hub de notificaciones (para el browser: solo atención = ask/turn-end).
+   *  - los hooks de shell del usuario (todos los eventos; ellos filtran).
+   */
+  #dispatchLifecycle(sessionId: string, ev: LifecycleEvent): void {
+    const h = this.#sessions.get(sessionId);
+    const entry = this.#index.get(sessionId);
+    const title = h?.title ?? entry?.title ?? sessionId.slice(0, 8);
+    const cwd = h?.workspace.cwd ?? entry?.cwd ?? "";
+    const project = h?.project ?? entry?.project ?? "";
+
+    // Notificaciones al browser: solo los eventos de ATENCIÓN.
+    if (ev.kind === "ask-user" || ev.kind === "turn-end") {
+      this.#notifHub.emit({
+        type: "attention",
+        sessionId,
+        kind: ev.kind === "ask-user" ? "ask_user" : "turn_end",
+        title,
+        project,
+        cwd,
+        question: ev.kind === "ask-user" ? ev.question : undefined,
+        ts: now(),
+      });
+    }
+
+    // Hooks de shell: todos los eventos (si no hay hooks.json, es un no-op barato).
+    if (!this.#hooks.isEmpty) {
+      const payload: Record<string, unknown> = { sessionId, cwd, project, title };
+      if (ev.kind === "ask-user") payload.question = ev.question;
+      this.#hooks.fire(ev.kind, payload);
+    }
   }
 
   /**
