@@ -203,6 +203,55 @@ describe("SessionManager", () => {
     expect(await mgr.importExisting([baseDir])).toBe(0);
   });
 
+  it("rename cambia el título de una sesión VIVA (handle + listAll)", async () => {
+    const h = await mgr.create({ title: "viejo" });
+    const applied = mgr.rename(h.id, "  nombre nuevo  ");
+    expect(applied).toBe("nombre nuevo"); // trim
+    expect(mgr.listAll().find((s) => s.id === h.id)!.title).toBe("nombre nuevo");
+    expect(h.session.name).toBe("nombre nuevo"); // persistido al transcript
+  });
+
+  it("rename de una sesión DORMIDA toca el índice y parchea el .json", async () => {
+    const h = await mgr.create({ title: "dormila", worktree: true });
+    const id = h.id;
+    h.session.addUserMessage("algo"); // persiste el .json (una dormida real tiene transcript)
+    await mgr.detach(id);
+
+    expect(mgr.rename(id, "renombrada dormida")).toBe("renombrada dormida");
+    expect(mgr.listAll().find((s) => s.id === id)!.title).toBe("renombrada dormida");
+
+    // Al revivir, el nombre parcheado en el .json sobrevive (no lo revierte).
+    const revived = await mgr.revive(id);
+    expect(revived!.session.name).toBe("renombrada dormida");
+  });
+
+  it("rename con título vacío no hace nada (null)", async () => {
+    const h = await mgr.create({ title: "intacto" });
+    expect(mgr.rename(h.id, "   ")).toBeNull();
+    expect(mgr.listAll()[0].title).toBe("intacto");
+  });
+
+  it("rename de un id desconocido devuelve null", () => {
+    expect(mgr.rename("no-existe", "x")).toBeNull();
+  });
+
+  it("setArchived esconde/muestra en el flag de listAll (no borra)", async () => {
+    const h = await mgr.create({ title: "archivame" });
+    expect(mgr.listAll().find((s) => s.id === h.id)!.archived).toBe(false);
+
+    expect(mgr.setArchived(h.id, true)).toBe(true);
+    const s = mgr.listAll().find((x) => x.id === h.id);
+    expect(s).toBeTruthy(); // sigue en la lista (el cliente la esconde)
+    expect(s!.archived).toBe(true);
+
+    expect(mgr.setArchived(h.id, false)).toBe(true);
+    expect(mgr.listAll().find((x) => x.id === h.id)!.archived).toBe(false);
+  });
+
+  it("setArchived de un id desconocido devuelve false", () => {
+    expect(mgr.setArchived("no-existe", true)).toBe(false);
+  });
+
   it("rescan recupera transcripts huérfanos si el índice se pierde", async () => {
     const h = await mgr.create({ title: "recuperame" });
     h.session.addUserMessage("mensaje importante");

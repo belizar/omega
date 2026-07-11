@@ -89,6 +89,15 @@ export class DaemonClient {
     await this.#req("DELETE", `/sessions?session=${encodeURIComponent(id)}`);
   }
 
+  async rename(id: string, title: string): Promise<string | null> {
+    const { json } = await this.#req("PATCH", `/sessions?session=${encodeURIComponent(id)}`, { title });
+    return json?.title ?? null;
+  }
+
+  async setArchived(id: string, archived: boolean): Promise<void> {
+    await this.#req("POST", `/archive?session=${encodeURIComponent(id)}`, { archived });
+  }
+
   async input(id: string, text: string): Promise<void> {
     await this.#req("POST", `/input?session=${encodeURIComponent(id)}`, { text });
   }

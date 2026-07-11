@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { existsSync, readdirSync, readFileSync, statSync } from "fs";
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "fs";
 import { homedir } from "os";
 import { dirname, join, resolve } from "path";
 import { Context } from "../app-context.js";
@@ -46,6 +46,8 @@ export interface SessionInfo {
   /** Estado si está viva: idle / running / waiting. */
   status?: SessionStatus;
   lastActive?: number;
+  /** Archivada: escondida del sidebar por default (no borrada). */
+  archived: boolean;
 }
 
 export type SessionMode = "shared" | "create" | "attach";
@@ -481,6 +483,7 @@ export class SessionManager {
         clients: 0,
         live: false,
         lastActive: e.lastActive,
+        archived: !!e.archived,
       });
     }
     // vivas primero, después dormidas por lastActive desc
@@ -502,7 +505,53 @@ export class SessionManager {
       live: true,
       status: h.frontend.status,
       lastActive: this.#index.get(h.id)?.lastActive,
+      archived: !!this.#index.get(h.id)?.archived,
     };
+  }
+
+  /**
+   * Renombra una sesión (viva o dormida). Si está viva, actualiza el handle y
+   * persiste el nombre en el transcript (`session.rename`). Si está dormida, toca
+   * el índice y —para que un rescan futuro no revierta el nombre— parchea el campo
+   * `name` del `.json` en disco. Devuelve el título final, o null si no existe.
+   */
+  rename(id: string, rawTitle: string): string | null {
+    const title = rawTitle.trim().slice(0, 80);
+    if (!title) return null;
+
+    const live = this.#sessions.get(id);
+    if (live) {
+      live.title = title;
+      live.session.rename(title); // persiste al .json + índice vía touch abajo
+      this.#index.rename(id, title);
+      return title;
+    }
+
+    const entry = this.#index.get(id);
+    if (!entry) return null;
+    this.#index.rename(id, title);
+    // El transcript es la verdad para el título en rescans: parcheamos su `name`.
+    this.#patchSessionName(entry.sessionFile, title);
+    return title;
+  }
+
+  /** Archiva/desarchiva una sesión (viva o dormida): solo toca el índice. */
+  setArchived(id: string, archived: boolean): boolean {
+    if (!this.#index.get(id)) return false;
+    this.#index.setArchived(id, archived);
+    return true;
+  }
+
+  /** Read-modify-write acotado del `name` en un transcript dormido. Sin loop
+   *  corriendo (dormida) no hay escritor concurrente, así que es seguro. */
+  #patchSessionName(sessionFile: string, name: string): void {
+    try {
+      const data = JSON.parse(readFileSync(sessionFile, "utf-8"));
+      data.name = name;
+      writeFileSync(sessionFile, JSON.stringify(data, null, 2), "utf-8");
+    } catch {
+      /* .json ilegible o ausente: el índice ya quedó actualizado igual */
+    }
   }
 
   /** El loop de un agente: input de la red → turno. Uno por sesión. */

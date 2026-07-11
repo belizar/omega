@@ -152,6 +152,23 @@ export class ServeMode implements FrontendMode {
           await m.detach(sessionId);
           res.writeHead(204).end();
         } },
+      { method: "PATCH", path: "/sessions", handler: async ({ req, res, sessionId }) => {
+          // Renombrar (viva o dormida). No revive: opera sobre el índice / el handle.
+          const body = await this.#readBody(req);
+          let title = "";
+          try { title = String(JSON.parse(body || "{}").title ?? ""); } catch { return void res.writeHead(400).end(); }
+          const applied = m.rename(sessionId, title);
+          if (applied === null) return this.#json(res, 400, { error: "título vacío o sesión desconocida" });
+          this.#json(res, 200, { id: sessionId, title: applied });
+        } },
+      { method: "POST", path: "/archive", handler: async ({ req, res, sessionId }) => {
+          // Archivar/desarchivar: escondida del sidebar, NO borrada. Body {archived}.
+          const body = await this.#readBody(req);
+          let archived = true;
+          try { archived = JSON.parse(body || "{}").archived !== false; } catch { /* default archivar */ }
+          if (!m.setArchived(sessionId, archived)) return this.#json(res, 404, { error: `sesión ${sessionId} desconocida` });
+          res.writeHead(204).end();
+        } },
       { method: "GET", path: "/worktrees", handler: async ({ res }) =>
           this.#json(res, 200, { worktrees: await this.#listWorktrees() }) },
       { method: "POST", path: "/rescan", handler: async ({ res }) => {
