@@ -74,14 +74,24 @@ Estilo:
 function loadProjectContext(): string {
   const parts: string[] = [];
 
-  // Git info: rama y nombre del proyecto
+  // Git info: rama y nombre del proyecto. stderr a /dev/null: si el cwd no es un
+  // repo (ej. el daemon arrancado desde un padre bare+worktree), git escupe
+  // "fatal: not a git repository" que si no ensucia la terminal.
   try {
-    const branch = execSync("git branch --show-current", { encoding: "utf-8", timeout: 2000 }).trim();
+    const branch = execSync("git branch --show-current", {
+      encoding: "utf-8",
+      timeout: 2000,
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
     if (branch) parts.push(`Rama: ${branch}`);
   } catch { /* no es repo git */ }
 
   try {
-    const remote = execSync("git remote get-url origin", { encoding: "utf-8", timeout: 2000 }).trim();
+    const remote = execSync("git remote get-url origin", {
+      encoding: "utf-8",
+      timeout: 2000,
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
     // Extraer nombre del repo: git@github.com:user/repo.git → user/repo, https://github.com/user/repo → user/repo
     const match = remote.match(/[:/]([^/]+\/[^/]+?)(?:\.git)?$/);
     if (match) parts.push(`Repo: ${match[1]}`);

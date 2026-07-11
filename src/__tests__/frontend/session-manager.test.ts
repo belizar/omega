@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { execFile } from "child_process";
-import { mkdtemp, rm, writeFile, stat, realpath } from "fs/promises";
+import { mkdtemp, mkdir, rm, writeFile, stat, realpath } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { promisify } from "util";
@@ -179,6 +179,28 @@ describe("SessionManager", () => {
     const h = await mgr.create();
     expect(h.project).toBe(baseDir); // detectProject de un repo = su raíz
     expect(mgr.listAll()[0].project).toBe(baseDir);
+  });
+
+  it("importExisting descubre sesiones de worktrees y las importa (con su cwd)", async () => {
+    // Simulamos tu flujo: un worktree con una sesión de la TUI in-process.
+    const wt = join(baseDir, "MED-1234");
+    const sdir = join(wt, ".omega", "sessions");
+    await mkdir(sdir, { recursive: true });
+    await writeFile(
+      join(sdir, "sess-abc.json"),
+      JSON.stringify({ name: "", messages: [{ role: "user", content: "arreglá el bug" }] }),
+      "utf-8",
+    );
+
+    const n = await mgr.importExisting([baseDir]);
+    expect(n).toBe(1);
+    const s = mgr.listAll().find((x) => x.id === "sess-abc");
+    expect(s).toBeTruthy();
+    expect(s!.cwd).toBe(wt); // apunta al worktree, no al store global
+    expect(s!.live).toBe(false); // dormida, revivible
+
+    // Idempotente: no re-importa lo ya indexado.
+    expect(await mgr.importExisting([baseDir])).toBe(0);
   });
 
   it("rescan recupera transcripts huérfanos si el índice se pierde", async () => {
