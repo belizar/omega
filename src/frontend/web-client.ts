@@ -313,6 +313,13 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
   #guidedetail .gd .gf { font-family:var(--mono); font-size:12px; color:var(--tool); padding:3px 0; cursor:pointer; }
   #guidedetail .gd .gf:hover { text-decoration:underline; }
   .guideempty { color:var(--faint); font-family:var(--mono); font-size:12px; padding:26px; text-align:center; line-height:1.7; }
+  /* Bloques de diff inline dentro de cada paso de la guía */
+  #guidedetail .gfblock { border:1px solid var(--border); border-radius:9px; margin-bottom:12px; overflow:hidden; }
+  #guidedetail .gfhdr { display:flex; align-items:center; gap:9px; padding:8px 11px; background:var(--surface); font-family:var(--mono); font-size:12px; border-bottom:1px solid var(--border); }
+  #guidedetail .gfhdr .pth { flex:1; min-width:0; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #guidedetail .gfhdr .cnt { flex:none; font-size:11px; } #guidedetail .gfhdr .cnt .ad{ color:var(--ok); } #guidedetail .gfhdr .cnt .de{ color:var(--err); }
+  #guidedetail .gfblock pre { overflow-x:auto; padding:0; background:var(--bg); }
+  #guidedetail .gfnote { padding:9px 11px; color:var(--faint); font-family:var(--mono); font-size:11px; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
@@ -578,6 +585,7 @@ let current = null;   // id de la sesión activa
 let es = null;        // EventSource de la sesión activa
 let findMatches = [], findIdx = -1; // estado del buscador in-convo (declarado acá para evitar TDZ desde resetThread)
 let guideData = null, guideReviewed = null, guideStepSel = 0; // estado de la Guide (reset en resetThread)
+let guideDiffMap = {}; // path → archivo del diff (para mostrar el parche inline en cada paso)
 let ges = null;       // EventSource GLOBAL (/events/all): atención de todas las sesiones
 let notifsEnabled = localStorage.getItem('omega.notifs') === '1';
 const attention = new Set(); // ids de sesiones que te reclaman (badge + resalte)
@@ -814,12 +822,19 @@ function showGuideEmpty(){
 }
 async function genGuide(){
   const base = $("guidebase").value.trim();
+  const bq = base ? '&base=' + encodeURIComponent(base) : '';
   $("guidesteps").innerHTML = '<div class="guideempty">generando… el agente está leyendo el diff (unos segundos)</div>';
   $("guidedetail").innerHTML = ''; $("guideprog").textContent = '';
   try {
-    const r = await fetch(q('/review') + (base ? '&base=' + encodeURIComponent(base) : ''), { method:'POST' });
-    if(!r.ok){ $("guidesteps").innerHTML = '<div class="guideempty">no se pudo generar (HTTP ' + r.status + ')</div>'; return; }
-    const g = await r.json();
+    // En paralelo: la guía (LLM) + el diff (para mostrar los parches inline).
+    const [gr, dr] = await Promise.all([
+      fetch(q('/review') + bq, { method:'POST' }),
+      fetch(q('/diff') + bq),
+    ]);
+    if(!gr.ok){ $("guidesteps").innerHTML = '<div class="guideempty">no se pudo generar (HTTP ' + gr.status + ')</div>'; return; }
+    const g = await gr.json();
+    guideDiffMap = {};
+    if(dr.ok){ const d = await dr.json(); (d.files||[]).forEach(function(f){ guideDiffMap[f.path] = f; }); }
     if(!g.steps || !g.steps.length){
       $("guidesteps").innerHTML = '<div class="guideempty">' + (g.base ? 'sin cambios vs ' + esc(g.base) : 'no hay cambios sin commitear para revisar') + '</div>';
       return;
@@ -853,28 +868,25 @@ function renderStep(i){
   const h = document.createElement('h4'); h.textContent = (i+1) + '. ' + s.title;
   const rat = document.createElement('div'); rat.className='rat'; rat.textContent = s.rationale;
   gd.appendChild(h); gd.appendChild(rat);
-  if(s.files && s.files.length){
-    const fl = document.createElement('div'); fl.className='flabel'; fl.textContent = 'archivos'; gd.appendChild(fl);
-    s.files.forEach(function(p){
-      const f = document.createElement('div'); f.className='gf'; f.textContent = p;
-      f.onclick = function(){ jumpToDiffFile(p); };
-      gd.appendChild(f);
-    });
-  }
-  v.appendChild(gd); v.scrollTop = 0;
-}
-// Click en un archivo de un paso → saltar al Diff (misma fuente) y seleccionarlo.
-function jumpToDiffFile(path){
-  $("diffbase").value = $("guidebase").value;
-  setTab('diff');
-  const trySelect = function(tries){
-    if(diffData && diffData.files.length){
-      const idx = diffData.files.findIndex(function(f){ return f.path === path; });
-      if(idx >= 0){ selectFile(idx); return; }
+  // Los cambios del paso, INLINE: por archivo, su parche coloreado (del diff).
+  (s.files || []).forEach(function(p){
+    const f = guideDiffMap[p];
+    const block = document.createElement('div'); block.className = 'gfblock';
+    const hdr = document.createElement('div'); hdr.className = 'gfhdr';
+    hdr.innerHTML = '<span class="pth">' + esc(p) + '</span>'
+      + (f ? '<span class="cnt"><span class="ad">+' + f.additions + '</span> <span class="de">−' + f.deletions + '</span></span>' : '');
+    block.appendChild(hdr);
+    if(f && f.binary){
+      const pre = document.createElement('pre'); const l = document.createElement('span'); l.className = 'ln ctx'; l.textContent = '  (binario)'; pre.appendChild(l); block.appendChild(pre);
+    } else if(f && f.patch){
+      const pre = document.createElement('pre'); pre.appendChild(renderPatch(f.patch)); block.appendChild(pre);
+    } else {
+      const note = document.createElement('div'); note.className = 'gfnote'; note.textContent = '(sin diff — el archivo no está en el diff actual)';
+      block.appendChild(note);
     }
-    if(tries > 0) setTimeout(function(){ trySelect(tries - 1); }, 250);
-  };
-  trySelect(12);
+    gd.appendChild(block);
+  });
+  v.appendChild(gd); v.scrollTop = 0;
 }
 
 // ── Notificaciones globales (SSE /events/all: atención de TODAS las sesiones) ──

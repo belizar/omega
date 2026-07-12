@@ -210,14 +210,15 @@ export class ServeMode implements FrontendMode {
             this.#json(res, 500, { error: err instanceof Error ? err.message : String(err) });
           }
         } },
-      { method: "POST", path: "/review", handler: async ({ res, sessionId, q }) => {
+      { method: "POST", path: "/review", revive: true, handler: async ({ res, q, handle }) => {
           // Review guiado: computa el diff y le pide al LLM la guía estructurada.
           // Una llamada enfocada (sin tools, sin loop). Puede tardar unos segundos.
-          const cwd = m.cwdOf(sessionId);
-          if (!cwd) return this.#json(res, 404, { error: `sesión ${sessionId} desconocida` });
+          // revive:true → tenemos el frontend vivo para marcar la sesión "ocupada"
+          // (el sidebar la muestra corriendo, y avisa al terminar).
           const base = q.get("base")?.trim() || undefined;
+          handle!.frontend.beginBackgroundTask();
           try {
-            const diff = await computeDiff(cwd, base);
+            const diff = await computeDiff(handle!.workspace.cwd, base);
             const guide = await generateReview(diff, this.#core.llmProvider, {
               model: this.#core.config.model,
               maxTokens: this.#core.config.maxTokens,
@@ -225,6 +226,8 @@ export class ServeMode implements FrontendMode {
             this.#json(res, 200, guide);
           } catch (err) {
             this.#json(res, 500, { error: err instanceof Error ? err.message : String(err) });
+          } finally {
+            handle!.frontend.endBackgroundTask();
           }
         } },
       { method: "GET", path: "/files", handler: ({ res, sessionId, q }) => {

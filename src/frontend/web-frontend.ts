@@ -211,6 +211,21 @@ export class WebFrontend implements Frontend {
     this.#onLifecycle?.({ kind: "turn-end" });
   }
 
+  /**
+   * Marca la sesión como ocupada por una TAREA DE FONDO (ej. generar el review
+   * guiado) — no un turno del agente. El sidebar la muestra "corriendo" (mismo
+   * status/dot), y al terminar dispara la notificación de atención (toast/badge)
+   * como cualquier turno. Reusa la maquinaria de status sin ensuciar el chat.
+   */
+  beginBackgroundTask(): void {
+    this.#setStatus("running");
+  }
+
+  endBackgroundTask(): void {
+    if (this.#status === "running") this.#setStatus("idle");
+    this.#onLifecycle?.({ kind: "turn-end" }); // atención: terminó → toast/badge
+  }
+
   async askUser(question: string): Promise<string> {
     this.#setStatus("waiting");
     this.#broadcast({ type: "ask_user", question });
