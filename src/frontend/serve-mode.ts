@@ -9,6 +9,7 @@ import { writeDaemonInfo, clearDaemonInfo } from "./daemon-info.js";
 import { WEB_CLIENT_HTML } from "./web-client.js";
 import { HookRunner } from "../hooks.js";
 import { computeDiff } from "./diff.js";
+import { listDir, readFileContent } from "./files.js";
 import type { FrontendMode } from "./mode.js";
 
 const execFileAsync = promisify(execFile);
@@ -206,6 +207,28 @@ export class ServeMode implements FrontendMode {
             this.#json(res, 200, await computeDiff(cwd, base));
           } catch (err) {
             this.#json(res, 500, { error: err instanceof Error ? err.message : String(err) });
+          }
+        } },
+      { method: "GET", path: "/files", handler: ({ res, sessionId, q }) => {
+          // Listar un directorio del workspace. `?path=` relativo al cwd (safe).
+          const cwd = m.cwdOf(sessionId);
+          if (!cwd) return this.#json(res, 404, { error: `sesión ${sessionId} desconocida` });
+          try {
+            this.#json(res, 200, listDir(cwd, q.get("path") ?? ""));
+          } catch (err) {
+            this.#json(res, 400, { error: err instanceof Error ? err.message : String(err) });
+          }
+        } },
+      { method: "GET", path: "/file", handler: ({ res, sessionId, q }) => {
+          // Leer un archivo del workspace. `?path=` relativo al cwd (safe).
+          const cwd = m.cwdOf(sessionId);
+          if (!cwd) return this.#json(res, 404, { error: `sesión ${sessionId} desconocida` });
+          const path = q.get("path");
+          if (!path) return this.#json(res, 400, { error: "falta ?path=" });
+          try {
+            this.#json(res, 200, readFileContent(cwd, path));
+          } catch (err) {
+            this.#json(res, 400, { error: err instanceof Error ? err.message : String(err) });
           }
         } },
       { method: "POST", path: "/reveal", handler: ({ res, sessionId }) => {
