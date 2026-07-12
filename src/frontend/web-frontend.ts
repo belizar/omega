@@ -74,6 +74,13 @@ export type ClientSink = (data: string) => void;
 /** Estado de una sesión, para el sidebar (paridad cmux). */
 export type SessionStatus = "idle" | "running" | "waiting";
 
+/** Evento de ciclo de vida del agente, para hooks + notificaciones. El frontend
+ *  no conoce proyecto/cwd — solo avisa QUÉ pasó; el SessionManager lo enriquece. */
+export type LifecycleEvent =
+  | { kind: "turn-start" }
+  | { kind: "turn-end" }
+  | { kind: "ask-user"; question: string };
+
 export class WebFrontend implements Frontend {
   #clients = new Set<ClientSink>();
   #queue = new InputQueue();
@@ -82,16 +89,20 @@ export class WebFrontend implements Frontend {
   #abort: AbortController | null = null;
   #status: SessionStatus = "idle";
   #getMessages?: () => readonly Message[];
+  #onLifecycle?: (ev: LifecycleEvent) => void;
 
   constructor(deps: {
     model: string;
     sessionId: string;
     /** Provee el transcript actual para re-emitirlo a cada cliente que conecta. */
     getMessages?: () => readonly Message[];
+    /** Observador de ciclo de vida (hooks + notificaciones de atención). */
+    onLifecycle?: (ev: LifecycleEvent) => void;
   }) {
     this.#model = deps.model;
     this.#sessionId = deps.sessionId;
     this.#getMessages = deps.getMessages;
+    this.#onLifecycle = deps.onLifecycle;
   }
 
   /** Estado actual: idle (esperando tarea) / running (turno en curso) / waiting
@@ -166,6 +177,7 @@ export class WebFrontend implements Frontend {
   turnStarted(): void {
     this.#setStatus("running");
     this.#broadcast({ type: "turn_start" });
+    this.#onLifecycle?.({ kind: "turn-start" });
   }
 
   handleEvent(event: RunnerEvent): void {
@@ -196,11 +208,13 @@ export class WebFrontend implements Frontend {
   turnEnded(): void {
     this.#setStatus("idle");
     this.#broadcast({ type: "turn_end" });
+    this.#onLifecycle?.({ kind: "turn-end" });
   }
 
   async askUser(question: string): Promise<string> {
     this.#setStatus("waiting");
     this.#broadcast({ type: "ask_user", question });
+    this.#onLifecycle?.({ kind: "ask-user", question });
     // Misma cola: la próxima línea que mande cualquier cliente es la respuesta.
     const answer = await this.#queue.next();
     this.#setStatus("running"); // el turno sigue tras la respuesta

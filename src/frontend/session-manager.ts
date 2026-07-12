@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { existsSync, readdirSync, readFileSync, statSync } from "fs";
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "fs";
 import { homedir } from "os";
 import { dirname, join, resolve } from "path";
 import { Context } from "../app-context.js";
@@ -17,7 +17,9 @@ import {
   Workspace,
 } from "../workspace.js";
 import { SessionIndex } from "./session-index.js";
-import { SessionStatus, WebFrontend } from "./web-frontend.js";
+import { LifecycleEvent, SessionStatus, WebFrontend } from "./web-frontend.js";
+import { NotificationHub, NotifSink } from "./notification-hub.js";
+import { HookRunner } from "../hooks.js";
 
 /** Una sesión viva hospedada por el server: su hub, su workspace y su loop. */
 export interface SessionHandle {
@@ -46,6 +48,8 @@ export interface SessionInfo {
   /** Estado si está viva: idle / running / waiting. */
   status?: SessionStatus;
   lastActive?: number;
+  /** Archivada: escondida del sidebar por default (no borrada). */
+  archived: boolean;
 }
 
 export type SessionMode = "shared" | "create" | "attach";
@@ -92,10 +96,20 @@ export class SessionManager {
   #sessionsDir: string;
   #index: SessionIndex;
   #shared: SharedAgentDeps;
+  /** Hub GLOBAL de atención (todas las sesiones → una SSE). */
+  #notifHub: NotificationHub;
+  /** Hooks de shell del usuario (fire-and-forget). Vacío por default (tests). */
+  #hooks: HookRunner;
 
   constructor(
     base: CoreServices,
-    opts: { baseDir: string; sessionsDir?: string; index?: SessionIndex },
+    opts: {
+      baseDir: string;
+      sessionsDir?: string;
+      index?: SessionIndex;
+      notifHub?: NotificationHub;
+      hooks?: HookRunner;
+    },
   ) {
     this.#base = base;
     this.#baseDir = opts.baseDir;
@@ -104,6 +118,10 @@ export class SessionManager {
     // para tests. El `project` es solo para agrupar, no dónde se guarda.
     this.#sessionsDir = opts.sessionsDir ?? join(homedir(), ".omega", "sessions");
     this.#index = opts.index ?? new SessionIndex();
+    this.#notifHub = opts.notifHub ?? new NotificationHub();
+    // HookRunner vacío por default (no lee disco): serve-mode inyecta el cargado
+    // de ~/.omega/hooks.json. Así los tests quedan herméticos.
+    this.#hooks = opts.hooks ?? new HookRunner();
     this.#shared = {
       config: base.config,
       classifier: base.classifier,
@@ -273,6 +291,7 @@ export class SessionManager {
       model: config.model,
       sessionId: session.id,
       getMessages: () => session.messages,
+      onLifecycle: (ev) => this.#dispatchLifecycle(session.id, ev),
     });
     const screen = new Screen(config.screenPadding);
     const ctx = new Context({
@@ -481,6 +500,7 @@ export class SessionManager {
         clients: 0,
         live: false,
         lastActive: e.lastActive,
+        archived: !!e.archived,
       });
     }
     // vivas primero, después dormidas por lastActive desc
@@ -502,7 +522,96 @@ export class SessionManager {
       live: true,
       status: h.frontend.status,
       lastActive: this.#index.get(h.id)?.lastActive,
+      archived: !!this.#index.get(h.id)?.archived,
     };
+  }
+
+  // ── Notificaciones + hooks ────────────────────────────────────────
+
+  /** Suscribe un cliente al hub GLOBAL de atención (SSE `/events/all`). */
+  addNotificationClient(sink: NotifSink): () => void {
+    return this.#notifHub.add(sink);
+  }
+
+  /**
+   * Un evento de ciclo de vida de UNA sesión llegó (desde su WebFrontend). Lo
+   * enriquecemos con la metadata del workspace (título/proyecto/cwd — que el
+   * frontend no conoce) y lo despachamos a los DOS consumidores:
+   *  - el hub de notificaciones (para el browser: solo atención = ask/turn-end).
+   *  - los hooks de shell del usuario (todos los eventos; ellos filtran).
+   */
+  #dispatchLifecycle(sessionId: string, ev: LifecycleEvent): void {
+    const h = this.#sessions.get(sessionId);
+    const entry = this.#index.get(sessionId);
+    const title = h?.title ?? entry?.title ?? sessionId.slice(0, 8);
+    const cwd = h?.workspace.cwd ?? entry?.cwd ?? "";
+    const project = h?.project ?? entry?.project ?? "";
+
+    // Notificaciones al browser: solo los eventos de ATENCIÓN.
+    if (ev.kind === "ask-user" || ev.kind === "turn-end") {
+      this.#notifHub.emit({
+        type: "attention",
+        sessionId,
+        kind: ev.kind === "ask-user" ? "ask_user" : "turn_end",
+        title,
+        project,
+        cwd,
+        question: ev.kind === "ask-user" ? ev.question : undefined,
+        ts: now(),
+      });
+    }
+
+    // Hooks de shell: todos los eventos (si no hay hooks.json, es un no-op barato).
+    if (!this.#hooks.isEmpty) {
+      const payload: Record<string, unknown> = { sessionId, cwd, project, title };
+      if (ev.kind === "ask-user") payload.question = ev.question;
+      this.#hooks.fire(ev.kind, payload);
+    }
+  }
+
+  /**
+   * Renombra una sesión (viva o dormida). Si está viva, actualiza el handle y
+   * persiste el nombre en el transcript (`session.rename`). Si está dormida, toca
+   * el índice y —para que un rescan futuro no revierta el nombre— parchea el campo
+   * `name` del `.json` en disco. Devuelve el título final, o null si no existe.
+   */
+  rename(id: string, rawTitle: string): string | null {
+    const title = rawTitle.trim().slice(0, 80);
+    if (!title) return null;
+
+    const live = this.#sessions.get(id);
+    if (live) {
+      live.title = title;
+      live.session.rename(title); // persiste al .json + índice vía touch abajo
+      this.#index.rename(id, title);
+      return title;
+    }
+
+    const entry = this.#index.get(id);
+    if (!entry) return null;
+    this.#index.rename(id, title);
+    // El transcript es la verdad para el título en rescans: parcheamos su `name`.
+    this.#patchSessionName(entry.sessionFile, title);
+    return title;
+  }
+
+  /** Archiva/desarchiva una sesión (viva o dormida): solo toca el índice. */
+  setArchived(id: string, archived: boolean): boolean {
+    if (!this.#index.get(id)) return false;
+    this.#index.setArchived(id, archived);
+    return true;
+  }
+
+  /** Read-modify-write acotado del `name` en un transcript dormido. Sin loop
+   *  corriendo (dormida) no hay escritor concurrente, así que es seguro. */
+  #patchSessionName(sessionFile: string, name: string): void {
+    try {
+      const data = JSON.parse(readFileSync(sessionFile, "utf-8"));
+      data.name = name;
+      writeFileSync(sessionFile, JSON.stringify(data, null, 2), "utf-8");
+    } catch {
+      /* .json ilegible o ausente: el índice ya quedó actualizado igual */
+    }
   }
 
   /** El loop de un agente: input de la red → turno. Uno por sesión. */

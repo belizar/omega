@@ -24,10 +24,21 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
          display:flex; }
   .col { flex:1; display:flex; flex-direction:column; min-width:0; height:100%; }
 
-  /* Sidebar de sesiones (multi-sesión) */
-  .sidebar { width:236px; flex-shrink:0; background:var(--surface); border-right:1px solid var(--border);
-             display:flex; flex-direction:column; height:100%; }
+  /* Sidebar de sesiones (multi-sesión) — ancho arrastrable (var --sbw, persistido) */
+  .sidebar { width:var(--sbw,236px); flex-shrink:0; background:var(--surface); border-right:1px solid var(--border);
+             display:flex; flex-direction:column; height:100%; min-width:0; }
+  /* Divisor de resize: barra fina entre sidebar y chat. */
+  .resizer { flex:0 0 5px; cursor:col-resize; background:transparent; position:relative; z-index:5; }
+  .resizer::after { content:""; position:absolute; inset:0 2px; background:var(--border); opacity:0; transition:opacity .12s; }
+  .resizer:hover::after, .resizer.drag::after { opacity:1; background:var(--tool); }
+  body.resizing { cursor:col-resize; user-select:none; }
   .sb-hd { display:flex; align-items:center; gap:8px; padding:13px 13px 11px; border-bottom:1px solid var(--border); }
+  /* Buscador de workspaces (filtra la lista por título/proyecto/branch) */
+  .sb-search { padding:8px 10px 0; }
+  .sb-search input { width:100%; background:var(--bg); border:1px solid var(--border); border-radius:8px;
+                     padding:6px 9px; color:var(--ink); font-family:var(--mono); font-size:11.5px; }
+  .sb-search input:focus { outline:none; border-color:var(--tool); box-shadow:0 0 0 3px rgba(52,205,216,.12); }
+  .sb-search input::placeholder { color:var(--faint); }
   .sb-hd .t { font-family:var(--mono); letter-spacing:0.2em; text-transform:uppercase; font-size:10.5px; color:var(--dim); }
   .sb-new { margin-left:auto; background:var(--surface2); color:var(--tool); border:1px solid var(--border);
             border-radius:7px; height:26px; padding:0 9px; font-family:var(--mono); font-size:12px; font-weight:700; cursor:pointer; }
@@ -54,9 +65,6 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
   .sb-item .meta { font-family:var(--mono); font-size:10px; color:var(--faint); padding-left:14px; }
   .sb-item .meta .iso { color:var(--warn); }
   .sb-item .meta .s { color:var(--dim); }
-  .sb-item .x { position:absolute; top:6px; right:6px; width:17px; height:17px; line-height:15px; text-align:center;
-                background:none; border:none; color:var(--faint); font-size:14px; cursor:pointer; border-radius:5px; opacity:0; }
-  .sb-item:hover .x { opacity:1; } .sb-item .x:hover { color:var(--err); background:color-mix(in srgb,var(--err) 14%,transparent); }
   .sb-foot { padding:10px 13px; border-top:1px solid var(--border); }
   .sb-foot label { display:flex; align-items:center; gap:7px; font-family:var(--mono); font-size:11px; color:var(--dim); cursor:pointer; }
   .sb-foot input { accent-color:var(--tool); }
@@ -172,6 +180,59 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
   .modal .btn { font-family:var(--mono); font-size:12px; border-radius:8px; padding:8px 16px; cursor:pointer; border:1px solid var(--border2); background:var(--surface2); color:var(--dim); }
   .modal .btn:hover { border-color:var(--tool); }
   .modal .btn.primary { background:var(--tool); color:var(--bg); border-color:var(--tool); font-weight:700; }
+
+  /* Rename inline: el título del item se vuelve un input al doble-click */
+  .sb-item .nm input { flex:1; min-width:0; background:var(--bg); border:1px solid var(--tool); border-radius:5px;
+                       color:var(--ink); font-family:var(--mono); font-size:13px; padding:1px 5px; }
+  .sb-item .nm input:focus { outline:none; }
+  /* Acción del item: un kebab (⋯) que abre el menú contextual. Aparece al hover. */
+  .sb-item .acts { position:absolute; top:5px; right:6px; display:flex; gap:4px; opacity:0; }
+  .sb-item:hover .acts, .sb-item.active .acts { opacity:1; }
+  .sb-item .acts button { width:24px; height:24px; line-height:22px; text-align:center; background:var(--surface);
+                          border:1px solid var(--border); color:var(--dim); font-size:15px; cursor:pointer; border-radius:6px; padding:0; }
+  .sb-item .acts .kebab:hover { color:var(--tool); border-color:var(--tool); background:color-mix(in srgb,var(--tool) 14%,transparent); }
+  .sb-item.archived { opacity:.5; }
+
+  /* Menú contextual (click derecho o kebab) — acciones del workspace, estilo cmux */
+  .ctxmenu { position:fixed; z-index:50; min-width:212px; background:var(--surface); border:1px solid var(--border);
+             border-radius:11px; padding:5px; box-shadow:0 18px 48px -14px rgba(0,0,0,.72); font-family:var(--sans); }
+  .ctxmenu .ci { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:7px 11px; border-radius:7px;
+                 font-size:13px; color:var(--ink); cursor:pointer; white-space:nowrap; }
+  .ctxmenu .ci:hover { background:var(--surface2); }
+  .ctxmenu .ci.danger { color:var(--err); }
+  .ctxmenu .ci.danger:hover { background:color-mix(in srgb,var(--err) 15%,transparent); }
+  .ctxmenu .ci .k { font-family:var(--mono); font-size:10.5px; color:var(--faint); letter-spacing:.04em; }
+  .ctxmenu .cihd { font-family:var(--mono); font-size:9.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--faint);
+                   padding:6px 11px 4px; overflow:hidden; text-overflow:ellipsis; }
+  .ctxmenu .cisep { height:1px; background:var(--border); margin:5px 7px; }
+  .sb-foot .arch-tgl { display:flex; align-items:center; gap:7px; font-family:var(--mono); font-size:10.5px; color:var(--dim); cursor:pointer; margin-bottom:8px; }
+  .sb-foot .arch-tgl input { accent-color:var(--tool); }
+  .sb-foot .arch-tgl .n { color:var(--faint); }
+
+  /* Toasts de atención (in-app, cero permisos) — arriba a la derecha */
+  .toasts { position:fixed; top:14px; right:14px; z-index:60; display:flex; flex-direction:column; gap:8px; width:min(320px,80vw); }
+  .toast { background:var(--surface); border:1px solid var(--border); border-left:3px solid var(--warn); border-radius:10px;
+           padding:9px 11px; box-shadow:0 12px 34px -12px rgba(0,0,0,.6); cursor:pointer; animation:toastin .18s ease; }
+  .toast.done { border-left-color:var(--ok); }
+  .toast .tt { font-family:var(--mono); font-size:12px; color:var(--ink); display:flex; justify-content:space-between; gap:10px; align-items:baseline; }
+  .toast .tt .xx { color:var(--faint); font-size:13px; } .toast .tt .xx:hover { color:var(--err); }
+  .toast .tb { font-size:12px; color:var(--dim); margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  @keyframes toastin { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:none} }
+  @media (prefers-reduced-motion: reduce){ .toast{ animation:none; } }
+
+  /* Buscar dentro de la conversación (Ctrl-F): barra flotante sobre el hilo */
+  .findbar { display:none; position:sticky; top:0; z-index:3; align-items:center; gap:9px;
+             background:var(--surface2); border-bottom:1px solid var(--border); padding:8px 18px; }
+  .findbar.on { display:flex; }
+  .findbar input { flex:1; max-width:340px; background:var(--bg); border:1px solid var(--border); border-radius:8px;
+                   padding:6px 10px; color:var(--ink); font-family:var(--mono); font-size:13px; }
+  .findbar input:focus { outline:none; border-color:var(--tool); box-shadow:0 0 0 3px rgba(52,205,216,.12); }
+  .findbar .fcount { font-family:var(--mono); font-size:11.5px; color:var(--dim); min-width:56px; }
+  .findbar .fbtn { font-family:var(--mono); font-size:12px; color:var(--dim); background:var(--surface); border:1px solid var(--border);
+                   border-radius:6px; width:28px; height:26px; cursor:pointer; }
+  .findbar .fbtn:hover { border-color:var(--tool); color:var(--tool); }
+  mark.find { background:color-mix(in srgb,var(--warn) 32%,transparent); color:inherit; border-radius:2px; }
+  mark.find.cur { background:var(--warn); color:#1a1300; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
@@ -185,18 +246,28 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
 <body>
   <aside class="sidebar">
     <div class="sb-hd"><span class="t">sesiones</span><button class="sb-new" id="sbnew" title="nueva sesión">+ nueva</button></div>
+    <div class="sb-search"><input type="text" id="sbfilter" placeholder="buscar workspace…  (título · proyecto · branch)" autocomplete="off"></div>
     <div class="sb-list" id="sblist"></div>
     <div class="sb-foot">
+      <label class="arch-tgl" title="mostrar las sesiones archivadas"><input type="checkbox" id="archtgl"><span>ver archivadas</span><span class="n" id="archn"></span></label>
       <button class="sb-rescan" id="rescan" title="re-importar sesiones del disco al índice">⟳ rescan</button>
-      <div class="hint2">las dormidas se reviven al clickearlas · cerrar (×) no borra nada</div>
+      <div class="hint2">click derecho (o ⋯) para acciones · doble-click en un título para renombrar</div>
     </div>
   </aside>
+  <div class="resizer" id="resizer" title="arrastrá para redimensionar"></div>
   <div class="col">
   <header>
     <span class="om">Ω</span><span class="nm">omega</span>
-    <span class="st"><button class="hbtn" id="reveal" title="abrir la carpeta de la sesión en el explorador">carpeta ↗</button><span class="dotc" id="dot"></span><span id="stat">conectando…</span></span>
+    <span class="st"><button class="hbtn" id="bell" title="activar notificaciones">🔕</button><button class="hbtn" id="reveal" title="abrir la carpeta de la sesión en el explorador">carpeta ↗</button><span class="dotc" id="dot"></span><span id="stat">conectando…</span></span>
   </header>
   <main id="main">
+    <div class="findbar" id="findbar">
+      <input type="text" id="findq" placeholder="buscar en la conversación…" autocomplete="off">
+      <span class="fcount" id="fcount">0 / 0</span>
+      <button class="fbtn" id="fprev" type="button" title="anterior (⇧⏎)">↑</button>
+      <button class="fbtn" id="fnext" type="button" title="siguiente (⏎)">↓</button>
+      <button class="fbtn" id="fclose" type="button" title="cerrar (Esc)">✕</button>
+    </div>
     <div class="thread" id="thread"></div>
     <div class="thinking" id="thinking"><span class="sp"></span><span id="thinkLbl">Pensando…</span><button type="button" class="stopbtn" id="stop">■ detener · Esc</button></div>
   </main>
@@ -208,6 +279,8 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
     <div class="hint" id="hint">Ω omega · frontend web · localhost</div>
   </form>
   </div>
+
+  <div class="toasts" id="toasts"></div>
 
   <div class="modal-bg" id="modalbg">
     <div class="modal">
@@ -385,6 +458,10 @@ function hydrate(){ hydrateMermaid(); hydrateCode(); }
 let lastTool = null;
 let current = null;   // id de la sesión activa
 let es = null;        // EventSource de la sesión activa
+let findMatches = [], findIdx = -1; // estado del buscador in-convo (declarado acá para evitar TDZ desde resetThread)
+let ges = null;       // EventSource GLOBAL (/events/all): atención de todas las sesiones
+let notifsEnabled = localStorage.getItem('omega.notifs') === '1';
+const attention = new Set(); // ids de sesiones que te reclaman (badge + resalte)
 
 // Agrega ?session=<id> a una ruta (cada request va contra la sesión activa).
 function q(p){ return p + (p.indexOf('?')>=0?'&':'?') + 'session=' + encodeURIComponent(current); }
@@ -441,27 +518,89 @@ function openES(){
 
 // Limpia el hilo al cambiar de sesión (los eventos pasados no se re-emiten: el
 // hub no bufferea historial; ves la sesión desde el próximo evento).
-function resetThread(){ thread.innerHTML=''; curAsst=null; lastTool=null; $("thinking").classList.remove('on'); }
+function resetThread(){ thread.innerHTML=''; curAsst=null; lastTool=null; $("thinking").classList.remove('on'); findMatches=[]; findIdx=-1; if($("findbar").classList.contains('on')) $("fcount").textContent='0 / 0'; }
 
 function selectSession(id, force){
   if(!force && id===current && es) return;
   current = id;
+  clearAttention(id); // entrar a una sesión = ya la viste, sacala del badge
   resetThread();
   openES();
   loadSessions(true); // fuerza el render para mover el highlight a la nueva
 }
+
+// ── Notificaciones globales (SSE /events/all: atención de TODAS las sesiones) ──
+function updateBadge(){ document.title = (attention.size ? '(' + attention.size + ') ' : '') + 'Ω omega'; }
+function clearAttention(id){ if(attention.delete(id)) updateBadge(); }
+function updateBellUi(){
+  $("bell").textContent = notifsEnabled ? '🔔' : '🔕';
+  $("bell").title = notifsEnabled ? 'notificaciones activadas (click para silenciar)' : 'activar notificaciones del browser';
+}
+function onAttention(ev){
+  // No molestar si estás mirando ESA sesión con la pestaña enfocada: ya la ves.
+  if(ev.sessionId === current && document.hasFocus()) return;
+  attention.add(ev.sessionId); updateBadge();
+  loadSessions(true); // refresca el dot del sidebar (waiting/idle)
+  showToast(ev);      // toast in-app: SIEMPRE (cero permisos, la base confiable)
+  // Notificación de escritorio: bonus, solo si activaste 🔔 y el permiso está dado.
+  if(notifsEnabled && window.Notification && Notification.permission === 'granted'){
+    const needsInput = ev.kind === 'ask_user';
+    const title = (ev.title || 'omega') + ' — ' + (needsInput ? 'necesita input' : 'listo');
+    const body = needsInput ? (ev.question || 'El agente te hizo una pregunta') : 'Terminó el turno';
+    try {
+      const n = new Notification(title, { body: String(body).slice(0,160), tag: ev.sessionId });
+      n.onclick = function(){ window.focus(); selectSession(ev.sessionId, true); n.close(); };
+    } catch(_){}
+  }
+}
+
+// Toast in-app: cartelito arriba a la derecha. No necesita permiso del browser ni
+// del SO — funciona siempre que tengas la pestaña abierta. Click → salta a la sesión.
+function showToast(ev){
+  const needsInput = ev.kind === 'ask_user';
+  const t = document.createElement('div'); t.className = 'toast' + (needsInput ? '' : ' done');
+  const head = document.createElement('div'); head.className = 'tt';
+  const label = document.createElement('span');
+  label.textContent = (ev.title || 'omega') + ' · ' + (needsInput ? 'necesita input' : 'listo');
+  const close = document.createElement('span'); close.className = 'xx'; close.textContent = '✕';
+  head.appendChild(label); head.appendChild(close);
+  const body = document.createElement('div'); body.className = 'tb';
+  body.textContent = needsInput ? (ev.question || 'te hizo una pregunta') : 'terminó el turno';
+  t.appendChild(head); t.appendChild(body);
+  const dismiss = function(){ t.remove(); };
+  t.onclick = function(){ selectSession(ev.sessionId, true); window.focus(); dismiss(); };
+  close.onclick = function(e){ e.stopPropagation(); dismiss(); };
+  $("toasts").appendChild(t);
+  setTimeout(dismiss, 6000); // auto-dismiss
+}
+function openGlobalES(){
+  if(ges) ges.close();
+  ges = new EventSource('/events/all');
+  ges.onmessage = function(e){
+    let ev; try { ev = JSON.parse(e.data); } catch { return; }
+    if(ev.type === 'attention') onAttention(ev);
+  };
+  // EventSource reconecta solo; nada que hacer en onerror.
+}
+// Si volvés a la pestaña mirando una sesión que reclamaba, limpiá su marca.
+window.addEventListener('focus', function(){ if(current) clearAttention(current); });
 
 function projName(p){ const a = String(p||'').split('/'); return a[a.length-1] || p || '(sin proyecto)'; }
 
 function renderRow(s){
   const it = document.createElement('div');
   const stCls = (s.live && s.status) ? (' st-' + s.status) : '';
-  it.className = 'sb-item' + (s.id===current ? ' active' : '') + (s.live ? '' : ' dormant') + stCls;
+  it.className = 'sb-item' + (s.id===current ? ' active' : '') + (s.live ? '' : ' dormant') + (s.archived ? ' archived' : '') + stCls;
+  it.dataset.sid = s.id;
   it.onclick = function(){ selectSession(s.id); };
+  // Click derecho → menú contextual de acciones del workspace (estilo cmux).
+  it.oncontextmenu = function(e){ e.preventDefault(); e.stopPropagation(); openCtxMenu(e.clientX, e.clientY, s); };
 
   const nm = document.createElement('div'); nm.className='nm';
   const dot = document.createElement('span'); dot.className='pdot';
   const tt = document.createElement('span'); tt.className='tt'; tt.textContent = s.title;
+  tt.title = 'doble-click para renombrar · click derecho para más';
+  tt.ondblclick = function(e){ e.stopPropagation(); startRename(it, nm, tt, s); };
   nm.appendChild(dot); nm.appendChild(tt);
 
   const meta = document.createElement('div'); meta.className='meta';
@@ -476,18 +615,114 @@ function renderRow(s){
   }
   it.appendChild(nm); it.appendChild(meta);
 
-  // × duerme la sesión (no la borra).
-  const x = document.createElement('button'); x.className='x'; x.textContent='×'; x.title='dormir sesión';
-  x.onclick = function(e){ e.stopPropagation(); closeSession(s.id); };
-  it.appendChild(x);
+  // Kebab (⋯): mismo menú que el click derecho, para quien no piensa en click-derecho.
+  const acts = document.createElement('div'); acts.className='acts';
+  const kb = document.createElement('button'); kb.className='kebab'; kb.textContent='⋯'; kb.title='acciones';
+  kb.onclick = function(e){ e.stopPropagation(); const r = kb.getBoundingClientRect(); openCtxMenu(r.right, r.bottom + 4, s, true); };
+  acts.appendChild(kb);
+  it.appendChild(acts);
   return it;
 }
 
+// Rename inline: el <span.tt> se reemplaza por un input; Enter confirma (PATCH),
+// Esc/blur cancela. Local e instantáneo, sin recargar toda la lista.
+function startRename(it, nm, tt, s){
+  const inp = document.createElement('input'); inp.type='text'; inp.value = s.title;
+  tt.replaceWith(inp); inp.focus(); inp.select();
+  let done = false;
+  const cancel = function(){ if(done) return; done=true; inp.replaceWith(tt); };
+  const commit = async function(){
+    if(done) return; const val = inp.value.trim();
+    if(!val || val===s.title){ cancel(); return; }
+    done = true;
+    try {
+      const r = await fetch('/sessions?session=' + encodeURIComponent(s.id), { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({title:val}) });
+      if(r.ok){ const d = await r.json(); tt.textContent = d.title; s.title = d.title; }
+    } catch(_){}
+    inp.replaceWith(tt); loadSessions(true);
+  };
+  inp.onclick = function(e){ e.stopPropagation(); };
+  inp.onkeydown = function(e){ e.stopPropagation();
+    if(e.key==='Enter'){ e.preventDefault(); commit(); }
+    else if(e.key==='Escape'){ e.preventDefault(); cancel(); } };
+  inp.onblur = commit;
+}
+
+async function archiveSession(id, archived){
+  try { await fetch('/archive?session=' + encodeURIComponent(id), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({archived}) }); } catch(_){}
+  loadSessions(true);
+}
+
+// ── Menú contextual del workspace (click derecho o kebab ⋯) ──
+function closeCtxMenu(){ const m = $("ctxmenu"); if(m) m.remove(); }
+function openCtxMenu(x, y, s, alignRight){
+  closeCtxMenu();
+  const menu = document.createElement('div'); menu.className='ctxmenu'; menu.id='ctxmenu';
+  const hd = document.createElement('div'); hd.className='cihd'; hd.textContent = s.title; menu.appendChild(hd);
+  const item = function(label, hint, fn, danger){
+    const el = document.createElement('div'); el.className = 'ci' + (danger?' danger':'');
+    el.innerHTML = '<span>' + esc(label) + '</span>' + (hint ? '<span class="k">'+hint+'</span>' : '');
+    el.onclick = function(e){ e.stopPropagation(); closeCtxMenu(); fn(); };
+    menu.appendChild(el);
+  };
+  const sep = function(){ const d = document.createElement('div'); d.className='cisep'; menu.appendChild(d); };
+
+  item('Renombrar…', '', function(){ renameFromMenu(s); });
+  item(s.archived ? 'Desarchivar' : 'Archivar', '', function(){ archiveSession(s.id, !s.archived); });
+  if(s.live) item('Dormir', '', function(){ closeSession(s.id); });
+  else       item('Revivir', '', function(){ selectSession(s.id); });
+  sep();
+  item('Abrir carpeta', '', function(){ fetch('/reveal?session=' + encodeURIComponent(s.id), { method:'POST' }).catch(function(){}); });
+  item('Copiar ID', '', function(){ if(navigator.clipboard) navigator.clipboard.writeText(s.id).catch(function(){}); });
+
+  document.body.appendChild(menu);
+  // Clamp al viewport. Desde el kebab (alignRight) anclamos por la derecha del botón.
+  const r = menu.getBoundingClientRect();
+  let px = alignRight ? x - r.width : x;
+  px = Math.max(8, Math.min(px, window.innerWidth - r.width - 8));
+  let py = Math.max(8, Math.min(y, window.innerHeight - r.height - 8));
+  menu.style.left = px + 'px'; menu.style.top = py + 'px';
+}
+// El rename inline necesita el <span.tt> de la fila: lo ubicamos por data-sid.
+function renameFromMenu(s){
+  const it = document.querySelector('.sb-item[data-sid="' + s.id + '"]');
+  if(!it) return;
+  const nm = it.querySelector('.nm'), tt = nm && nm.querySelector('.tt');
+  if(nm && tt) startRename(it, nm, tt, s);
+}
+// Cerrar el menú: click en cualquier lado, scroll de la lista, resize.
+window.addEventListener('click', closeCtxMenu);
+window.addEventListener('resize', closeCtxMenu);
+$("sblist").addEventListener('scroll', closeCtxMenu);
+
+let sbFilter = '';       // texto del buscador de workspaces
+let showArchived = false; // toggle "ver archivadas"
+let lastList = [];        // última lista del server (para re-filtrar sin fetch)
+
+// ¿La sesión matchea el buscador? (título · proyecto · branch, case-insensitive)
+function matchFilter(s){
+  if(!sbFilter) return true;
+  const hay = (s.title + ' ' + projName(s.project) + ' ' + (s.branch||'')).toLowerCase();
+  return sbFilter.split(/\s+/).every(function(t){ return hay.indexOf(t) >= 0; });
+}
+
 function renderSessions(list){
+  lastList = list;
+  const archivedCount = list.filter(function(s){ return s.archived; }).length;
+  $("archn").textContent = archivedCount ? '(' + archivedCount + ')' : '';
+
+  // Filtro: archivadas fuera salvo toggle; después el texto del buscador.
+  const shown = list.filter(function(s){ return (showArchived || !s.archived) && matchFilter(s); });
+
   const box = $("sblist"); box.innerHTML='';
+  if(!shown.length){
+    const empty = document.createElement('div'); empty.className='hint2'; empty.style.padding='14px 10px';
+    empty.textContent = sbFilter ? 'sin workspaces que matcheen «' + sbFilter + '»' : 'no hay sesiones';
+    box.appendChild(empty); return;
+  }
   // Agrupar por proyecto preservando el orden (vivas primero ya viene del server).
   const order = []; const byProj = {};
-  list.forEach(function(s){
+  shown.forEach(function(s){
     const key = s.project || '(sin proyecto)';
     if(!byProj[key]){ byProj[key] = []; order.push(key); }
     byProj[key].push(s);
@@ -509,7 +744,7 @@ async function loadSessions(force){
     if(!current) current = d.default;
     // Solo re-renderizamos si algo cambió (o si se fuerza) — así el poll no
     // rompe el hover ni parpadea el sidebar cuando no pasó nada.
-    const sig = current + '|' + d.sessions.map(function(s){ return [s.id,s.live,s.status,s.clients,s.title].join(','); }).join(';');
+    const sig = current + '|' + showArchived + '|' + sbFilter + '|' + d.sessions.map(function(s){ return [s.id,s.live,s.status,s.clients,s.title,s.archived].join(','); }).join(';');
     if(force || sig!==lastSig){ lastSig = sig; renderSessions(d.sessions); }
   } catch(_){}
 }
@@ -575,12 +810,44 @@ async function closeSession(id){
   else { loadSessions(); }
 }
 
+// Buscar workspaces: filtra la lista en vivo (client-side, ya la tenemos).
+$("sbfilter").addEventListener('input', function(){ sbFilter = $("sbfilter").value.trim().toLowerCase(); renderSessions(lastList); });
+$("sbfilter").addEventListener('keydown', function(e){ e.stopPropagation();
+  if(e.key==='Escape'){ $("sbfilter").value=''; sbFilter=''; renderSessions(lastList); $("sbfilter").blur(); } });
+$("archtgl").addEventListener('change', function(){ showArchived = $("archtgl").checked; renderSessions(lastList); });
+
 $("sbnew").addEventListener('click', openModal);
 $("reveal").addEventListener('click', function(){ if(current) fetch(q('/reveal'), { method:'POST' }).catch(function(){}); });
 $("rescan").addEventListener('click', async function(){ try{ await fetch('/rescan', { method:'POST' }); await loadSessions(true); } catch(_){} });
 
-// Boot: descubrí las sesiones, elegí la default, abrí su stream.
-(async function(){ await loadSessions(); openES(); })();
+// Toggle de notificaciones. El prompt del browser SOLO aparece si el permiso está
+// en "default"; si ya está "denied" no muestra nada → damos instrucciones claras.
+$("bell").addEventListener('click', async function(){
+  if(notifsEnabled){ // ya activas → silenciar
+    notifsEnabled = false; localStorage.setItem('omega.notifs','0'); updateBellUi(); return;
+  }
+  if(!window.Notification){ alert('Este browser no soporta la Notification API.'); return; }
+  let perm = Notification.permission;
+  if(perm === 'default') perm = await Notification.requestPermission(); // acá aparece el prompt
+  if(perm !== 'granted'){
+    alert(
+      'Notificaciones bloqueadas (permiso actual: "' + perm + '").\n\n' +
+      'No aparece prompt porque el browser ya lo tiene decidido. Para habilitarlas:\n\n' +
+      '• Arc: clic en el escudo/candado a la izquierda de la URL → Notificaciones → Permitir.\n' +
+      '• macOS: Ajustes del Sistema → Notificaciones → Arc → activado.\n\n' +
+      'Después reintentá el 🔔.'
+    );
+    return;
+  }
+  notifsEnabled = true; localStorage.setItem('omega.notifs','1'); updateBellUi();
+  // Confirmación VISIBLE: si ves esta notificación, todo el pipeline anda.
+  try { new Notification('Ω omega', { body: 'Notificaciones activadas ✓', tag: 'omega-test' }); }
+  catch(_){ alert('Permiso concedido, pero el SO no mostró la notificación de prueba. Revisá Ajustes → Notificaciones → Arc en macOS.'); }
+});
+updateBellUi();
+
+// Boot: descubrí las sesiones, elegí la default, abrí su stream + el SSE global.
+(async function(){ await loadSessions(); openES(); openGlobalES(); })();
 
 // ── Input ────────────────────────────────────────────────────────
 const input = $("input");
@@ -602,7 +869,80 @@ async function interrupt(){
   try { await fetch(q('/interrupt'), { method:'POST' }); } catch {}
 }
 $("stop").addEventListener('click', interrupt);
-window.addEventListener('keydown', (e)=>{ if(e.key==='Escape'){ if($("modalbg").classList.contains('on')) closeModal(); else interrupt(); } });
+
+// ── Resize del sidebar (arrastrable · persistido en localStorage) ──
+(function(){
+  const KEY='omega.sbw';
+  const saved = parseInt(localStorage.getItem(KEY)||'', 10);
+  if(saved>=160 && saved<=560) document.documentElement.style.setProperty('--sbw', saved+'px');
+  const rz = $("resizer"); let dragging=false;
+  rz.addEventListener('pointerdown', function(e){ dragging=true; rz.classList.add('drag'); document.body.classList.add('resizing'); rz.setPointerCapture(e.pointerId); });
+  rz.addEventListener('pointermove', function(e){
+    if(!dragging) return;
+    const w = Math.max(160, Math.min(560, e.clientX)); // clientX = ancho deseado (sidebar arranca en x=0)
+    document.documentElement.style.setProperty('--sbw', w+'px');
+  });
+  const end = function(){ if(!dragging) return; dragging=false; rz.classList.remove('drag'); document.body.classList.remove('resizing');
+    const w = parseInt(getComputedStyle(document.querySelector('.sidebar')).width, 10); if(w) localStorage.setItem(KEY, String(w)); };
+  rz.addEventListener('pointerup', end); rz.addEventListener('pointercancel', end);
+})();
+
+// ── Buscar dentro de la conversación (Ctrl-F / ⌘-F) ──
+// Client-side: el hilo ya está en el DOM. Envuelve los matches en <mark>, navega
+// con ⏎/⇧⏎, resalta el actual. Al cerrar, desenvuelve y restaura el texto.
+// (findMatches/findIdx se declaran arriba, con el resto del estado.)
+function clearFind(){
+  for(const m of thread.querySelectorAll('mark.find')) m.replaceWith(document.createTextNode(m.textContent));
+  thread.normalize();
+  findMatches = []; findIdx = -1; $("fcount").textContent='0 / 0';
+}
+function focusMatch(){
+  findMatches.forEach(function(m,i){ m.classList.toggle('cur', i===findIdx); });
+  const m = findMatches[findIdx];
+  if(m){ m.scrollIntoView({block:'center', behavior:'smooth'}); $("fcount").textContent=(findIdx+1)+' / '+findMatches.length; }
+}
+function runFind(q){
+  clearFind();
+  if(!q){ return; }
+  const needle = q.toLowerCase();
+  const walker = document.createTreeWalker(thread, NodeFilter.SHOW_TEXT, null);
+  const nodes = []; let n; while((n = walker.nextNode())) nodes.push(n);
+  for(const node of nodes){
+    const text = node.nodeValue, low = text.toLowerCase();
+    let idx = low.indexOf(needle); if(idx<0) continue;
+    const frag = document.createDocumentFragment(); let pos = 0;
+    while(idx>=0){
+      if(idx>pos) frag.appendChild(document.createTextNode(text.slice(pos, idx)));
+      const mk = document.createElement('mark'); mk.className='find'; mk.textContent = text.slice(idx, idx+q.length);
+      frag.appendChild(mk); findMatches.push(mk);
+      pos = idx + q.length; idx = low.indexOf(needle, pos);
+    }
+    if(pos<text.length) frag.appendChild(document.createTextNode(text.slice(pos)));
+    node.replaceWith(frag);
+  }
+  if(findMatches.length){ findIdx=0; focusMatch(); } else $("fcount").textContent='0 / 0';
+}
+function stepFind(d){ if(!findMatches.length) return; findIdx=(findIdx+d+findMatches.length)%findMatches.length; focusMatch(); }
+function openFind(){ $("findbar").classList.add('on'); const q=$("findq"); q.focus(); q.select(); if(q.value) runFind(q.value); }
+function closeFind(){ $("findbar").classList.remove('on'); clearFind(); $("findq").blur(); }
+$("findq").addEventListener('input', function(){ runFind($("findq").value); });
+$("findq").addEventListener('keydown', function(e){ e.stopPropagation();
+  if(e.key==='Enter'){ e.preventDefault(); stepFind(e.shiftKey?-1:1); }
+  else if(e.key==='Escape'){ e.preventDefault(); closeFind(); } });
+$("fnext").addEventListener('click', function(){ stepFind(1); });
+$("fprev").addEventListener('click', function(){ stepFind(-1); });
+$("fclose").addEventListener('click', closeFind);
+
+// Esc/Ctrl-F globales. Prioridad de Esc: find → modal → interrumpir.
+window.addEventListener('keydown', (e)=>{
+  if((e.ctrlKey||e.metaKey) && (e.key==='f'||e.key==='F')){ e.preventDefault(); openFind(); return; }
+  if(e.key==='Escape'){
+    if($("ctxmenu")){ closeCtxMenu(); return; }
+    if($("findbar").classList.contains('on')){ closeFind(); return; }
+    if($("modalbg").classList.contains('on')){ closeModal(); return; }
+    interrupt();
+  }
+});
 </script>
 </body>
 </html>`;

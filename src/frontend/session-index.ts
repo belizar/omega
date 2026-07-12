@@ -24,6 +24,9 @@ export interface IndexEntry {
   /** ¿Omega creó el worktree (true) o solo se enganchó a uno tuyo (false, attach)?
    *  Un worktree prestado nunca se borra. */
   owned: boolean;
+  /** Archivada: sigue en el índice (revivible), pero el sidebar la esconde por
+   *  default para no bloatear la UI. NO es borrar — es "sacar de la vista". */
+  archived?: boolean;
   createdAt: number;
   lastActive: number;
 }
@@ -84,6 +87,22 @@ export class SessionIndex {
     if (!e) return;
     e.lastActive = lastActive;
     if (title) e.title = title;
+    this.#save();
+  }
+
+  /** Renombra una entrada (persiste). El nombre legible que ve el sidebar. */
+  rename(id: string, title: string): void {
+    const e = this.#entries.get(id);
+    if (!e) return;
+    e.title = title;
+    this.#save();
+  }
+
+  /** Archiva/desarchiva (persiste). Archivada = escondida del sidebar, no borrada. */
+  setArchived(id: string, archived: boolean): void {
+    const e = this.#entries.get(id);
+    if (!e) return;
+    e.archived = archived;
     this.#save();
   }
 
