@@ -83,7 +83,7 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
   header .dotc.on { background:var(--ok); box-shadow:0 0 8px var(--ok); }
 
   main { flex:1; overflow-y:auto; }
-  .thread { max-width:820px; margin:0 auto; padding:22px 18px 8px; display:flex; flex-direction:column; gap:14px; }
+  .thread { max-width:820px; margin:0 auto; padding:22px 18px 28px; display:flex; flex-direction:column; gap:14px; }
 
   .msg { display:flex; flex-direction:column; gap:5px; }
   .msg .who { font-family:var(--mono); font-size:10.5px; letter-spacing:0.14em; text-transform:uppercase; color:var(--faint); }
