@@ -243,8 +243,9 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
 
   /* Tabs de la sesión (Activity / Diff …) — modelo Linear */
   .tabs { display:flex; gap:2px; padding:0 14px; background:var(--surface); border-bottom:1px solid var(--border); }
-  .tab { font-family:var(--mono); font-size:12px; color:var(--dim); background:none; border:none; border-bottom:2px solid transparent;
-         padding:9px 13px; cursor:pointer; }
+  /* reset explícito del estilo global de <button> (radius/height/weight/bg) */
+  .tab { font-family:var(--mono); font-size:12px; color:var(--dim); background:none; border:none; border-radius:0;
+         border-bottom:2px solid transparent; height:auto; padding:10px 14px; margin-bottom:-1px; font-weight:400; cursor:pointer; }
   .tab:hover { color:var(--ink); }
   .tab.active { color:var(--tool); border-bottom-color:var(--tool); }
 
