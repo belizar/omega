@@ -352,8 +352,8 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
     </div>
     <div class="diffpanel" id="filespanel">
       <div class="diffbar">
-        <span class="fscrumb" id="fscrumb"></span>
-        <button class="rf" id="filesrefresh" type="button">↻</button>
+        <span class="fscrumb">árbol del workspace</span>
+        <button class="rf" id="filesrefresh" type="button">↻ refrescar</button>
       </div>
       <div class="difflayout">
         <div class="difffiles" id="filestree"></div>
@@ -633,7 +633,7 @@ function setTab(name){
   $("filespanel").classList.toggle('on', name === 'files');
   document.querySelectorAll('#tabs .tab').forEach(function(t){ t.classList.toggle('active', t.getAttribute('data-tab')===name); });
   if(name === 'diff') loadDiff();
-  if(name === 'files') loadFiles('');
+  if(name === 'files') loadFiles();
 }
 
 async function loadDiff(){
@@ -707,52 +707,56 @@ function renderPatch(patch){
   return frag;
 }
 
-// ── File explorer ──
-let fsPath = ''; // dir actual (relativo al cwd del workspace)
-async function loadFiles(path){
-  fsPath = path || '';
+// ── File explorer (árbol lazy expandible, tipo VSCode) ──
+let fsTree = [];        // nodos raíz: {name, type, path, size, expanded, children}
+let fsSelected = null;  // path del archivo abierto (para el highlight)
+
+// Trae las entradas de un dir y las envuelve en nodos del árbol (children lazy).
+async function fetchDir(path){
+  const r = await fetch(q('/files') + '&path=' + encodeURIComponent(path || ''));
+  if(!r.ok) throw new Error('HTTP ' + r.status);
+  const d = await r.json();
+  return d.entries.map(function(e){
+    return { name: e.name, type: e.type, path: (path ? path + '/' : '') + e.name, size: e.size, expanded: false, children: null };
+  });
+}
+
+async function loadFiles(){
   $("filestree").innerHTML = '<div class="diffempty">cargando…</div>';
-  try {
-    const r = await fetch(q('/files') + '&path=' + encodeURIComponent(fsPath));
-    if(!r.ok){ $("filestree").innerHTML = '<div class="diffempty">no se pudo listar (HTTP ' + r.status + ')</div>'; return; }
-    renderFiles(await r.json());
-  } catch(_){ $("filestree").innerHTML = '<div class="diffempty">error de red</div>'; }
+  try { fsTree = await fetchDir(''); renderTree(); }
+  catch(_){ $("filestree").innerHTML = '<div class="diffempty">no se pudo listar</div>'; }
 }
-function renderCrumb(path){
-  const cr = $("fscrumb"); cr.innerHTML = '';
-  const root = document.createElement('span'); root.className = 'seg'; root.textContent = '/'; root.onclick = function(){ loadFiles(''); };
-  cr.appendChild(root);
-  let acc = '';
-  (path ? path.split('/') : []).forEach(function(seg, i, arr){
-    acc = acc ? acc + '/' + seg : seg;
-    const s = document.createElement('span'); const full = acc;
-    if(i < arr.length - 1){ s.className = 'seg'; s.onclick = function(){ loadFiles(full); }; }
-    s.textContent = seg;
-    cr.appendChild(document.createTextNode(' / ')); cr.appendChild(s);
-  });
-}
-function renderFiles(d){
-  renderCrumb(d.path);
-  const tree = $("filestree"); tree.innerHTML = '';
-  // ".." para subir, si no estás en la raíz.
-  if(d.path){
-    const up = document.createElement('div'); up.className = 'fsrow dir';
-    up.innerHTML = '<span class="ic">↑</span><span class="nm">..</span>';
-    up.onclick = function(){ loadFiles(d.path.split('/').slice(0, -1).join('/')); };
-    tree.appendChild(up);
+
+// Expande/colapsa un dir IN-PLACE (carga sus hijos la primera vez). No pierde
+// el resto del árbol — es lo que lo hace un árbol y no navegación por columnas.
+async function toggleDir(node){
+  if(!node.expanded && node.children === null){
+    try { node.children = await fetchDir(node.path); } catch(_){ node.children = []; }
   }
-  if(!d.entries.length){ tree.appendChild(Object.assign(document.createElement('div'), { className:'diffempty', textContent:'(vacío)' })); return; }
-  d.entries.forEach(function(e){
-    const rel = d.path ? d.path + '/' + e.name : e.name;
-    const row = document.createElement('div'); row.className = 'fsrow ' + e.type;
-    row.innerHTML = '<span class="ic">' + (e.type==='dir'?'▸':'·') + '</span><span class="nm">' + esc(e.name) + '</span>'
-      + (e.type==='file' ? '<span class="sz">' + fmtSize(e.size) + '</span>' : '');
-    row.onclick = function(){
-      if(e.type === 'dir'){ loadFiles(rel); }
-      else { document.querySelectorAll('#filestree .fsrow').forEach(function(x){ x.classList.remove('sel'); }); row.classList.add('sel'); loadFile(rel); }
-    };
-    tree.appendChild(row);
-  });
+  node.expanded = !node.expanded;
+  renderTree();
+}
+
+function renderTree(){
+  const tree = $("filestree"); tree.innerHTML = '';
+  if(!fsTree.length){ tree.innerHTML = '<div class="diffempty">(vacío)</div>'; return; }
+  const walk = function(nodes, depth){
+    nodes.forEach(function(n){
+      const row = document.createElement('div');
+      row.className = 'fsrow ' + n.type + (n.path === fsSelected ? ' sel' : '');
+      row.style.paddingLeft = (10 + depth * 15) + 'px'; // indentación por profundidad
+      const chev = n.type === 'dir' ? (n.expanded ? '▾' : '▸') : '·';
+      row.innerHTML = '<span class="ic">' + chev + '</span><span class="nm">' + esc(n.name) + '</span>'
+        + (n.type === 'file' ? '<span class="sz">' + fmtSize(n.size) + '</span>' : '');
+      row.onclick = function(){
+        if(n.type === 'dir'){ toggleDir(n); }
+        else { fsSelected = n.path; renderTree(); loadFile(n.path); }
+      };
+      tree.appendChild(row);
+      if(n.type === 'dir' && n.expanded && n.children){ walk(n.children, depth + 1); } // recursivo
+    });
+  };
+  walk(fsTree, 0);
 }
 function fmtSize(n){ return n < 1024 ? n + 'b' : n < 1048576 ? (n/1024).toFixed(0) + 'k' : (n/1048576).toFixed(1) + 'M'; }
 async function loadFile(path){
@@ -1113,7 +1117,7 @@ updateBellUi();
 document.querySelectorAll('#tabs .tab').forEach(function(t){ t.addEventListener('click', function(){ setTab(t.getAttribute('data-tab')); }); });
 $("diffrefresh").addEventListener('click', loadDiff);
 $("diffbase").addEventListener('keydown', function(e){ e.stopPropagation(); if(e.key==='Enter'){ e.preventDefault(); loadDiff(); } });
-$("filesrefresh").addEventListener('click', function(){ loadFiles(fsPath); });
+$("filesrefresh").addEventListener('click', function(){ loadFiles(); });
 
 // Boot: descubrí las sesiones, elegí la default, abrí su stream + el SSE global.
 (async function(){ await loadSessions(); openES(); openGlobalES(); })();
