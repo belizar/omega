@@ -167,6 +167,18 @@ export class ServeMode implements FrontendMode {
           if (applied === null) return this.#json(res, 400, { error: "título vacío o sesión desconocida" });
           this.#json(res, 200, { id: sessionId, title: applied });
         } },
+      { method: "POST", path: "/reorder", handler: async ({ req, res }) => {
+          // Reordenar el sidebar (drag). Body { ids: [...] } en el orden nuevo.
+          const body = await this.#readBody(req);
+          try {
+            const ids = JSON.parse(body || "{}").ids;
+            if (!Array.isArray(ids)) return void res.writeHead(400).end();
+            m.reorder(ids.filter((x: unknown): x is string => typeof x === "string"));
+            res.writeHead(204).end();
+          } catch {
+            res.writeHead(400).end();
+          }
+        } },
       { method: "POST", path: "/archive", handler: async ({ req, res, sessionId }) => {
           // Archivar/desarchivar: escondida del sidebar, NO borrada. Body {archived}.
           const body = await this.#readBody(req);

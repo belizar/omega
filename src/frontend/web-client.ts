@@ -192,6 +192,13 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
                           border:1px solid var(--border); color:var(--dim); font-size:15px; cursor:pointer; border-radius:6px; padding:0; }
   .sb-item .acts .kebab:hover { color:var(--tool); border-color:var(--tool); background:color-mix(in srgb,var(--tool) 14%,transparent); }
   .sb-item.archived { opacity:.5; }
+  /* Necesita atención (terminó o te preguntó): se comunica por COLOR, no por posición */
+  .sb-item.att { background:color-mix(in srgb,var(--warn) 11%,transparent); border-color:color-mix(in srgb,var(--warn) 45%,transparent); }
+  .sb-item.att .pdot { background:var(--warn); box-shadow:0 0 7px var(--warn); }
+  .sb-item.att .nm { color:var(--ink); }
+  /* Drag-and-drop para reordenar */
+  .sb-item.dragging { opacity:.4; }
+  .sb-item.dragover { box-shadow:inset 0 2px 0 var(--tool); }
 
   /* Menú contextual (click derecho o kebab) — acciones del workspace, estilo cmux */
   .ctxmenu { position:fixed; z-index:50; min-width:212px; background:var(--surface); border:1px solid var(--border);
@@ -602,13 +609,14 @@ function setTab(name){
 }
 
 async function loadDiff(){
-  const list = $("difflist"); list.innerHTML = '<div class="diffempty">cargando…</div>';
+  $("difffiles").innerHTML = '<div class="diffempty">cargando…</div>';
+  $("diffview").innerHTML = '';
   const base = $("diffbase").value.trim();
   try {
     const r = await fetch(q('/diff') + (base ? '&base=' + encodeURIComponent(base) : ''));
-    if(!r.ok){ list.innerHTML = '<div class="diffempty">no se pudo cargar el diff (HTTP ' + r.status + ')</div>'; return; }
+    if(!r.ok){ $("difffiles").innerHTML = '<div class="diffempty">no se pudo cargar (HTTP ' + r.status + ')</div>'; return; }
     renderDiff(await r.json());
-  } catch(_){ list.innerHTML = '<div class="diffempty">error de red cargando el diff</div>'; }
+  } catch(_){ $("difffiles").innerHTML = '<div class="diffempty">error de red cargando el diff</div>'; }
 }
 
 let diffData = null;
@@ -673,7 +681,7 @@ function renderPatch(patch){
 
 // ── Notificaciones globales (SSE /events/all: atención de TODAS las sesiones) ──
 function updateBadge(){ document.title = (attention.size ? '(' + attention.size + ') ' : '') + 'Ω omega'; }
-function clearAttention(id){ if(attention.delete(id)) updateBadge(); }
+function clearAttention(id){ if(attention.delete(id)){ updateBadge(); renderSessions(lastList); } }
 function updateBellUi(){
   $("bell").textContent = notifsEnabled ? '🔔' : '🔕';
   $("bell").title = notifsEnabled ? 'notificaciones activadas (click para silenciar)' : 'activar notificaciones del browser';
@@ -732,11 +740,21 @@ function projName(p){ const a = String(p||'').split('/'); return a[a.length-1] |
 function renderRow(s){
   const it = document.createElement('div');
   const stCls = (s.live && s.status) ? (' st-' + s.status) : '';
-  it.className = 'sb-item' + (s.id===current ? ' active' : '') + (s.live ? '' : ' dormant') + (s.archived ? ' archived' : '') + stCls;
+  // .att = necesita tu atención (terminó o preguntó) — color, no posición.
+  const att = attention.has(s.id) ? ' att' : '';
+  it.className = 'sb-item' + (s.id===current ? ' active' : '') + (s.live ? '' : ' dormant') + (s.archived ? ' archived' : '') + att + stCls;
   it.dataset.sid = s.id;
   it.onclick = function(){ selectSession(s.id); };
   // Click derecho → menú contextual de acciones del workspace (estilo cmux).
   it.oncontextmenu = function(e){ e.preventDefault(); e.stopPropagation(); openCtxMenu(e.clientX, e.clientY, s); };
+
+  // Drag-and-drop para reordenar (click and hold).
+  it.draggable = true;
+  it.ondragstart = function(e){ dragId = s.id; it.classList.add('dragging'); if(e.dataTransfer) e.dataTransfer.effectAllowed = 'move'; };
+  it.ondragend = function(){ it.classList.remove('dragging'); document.querySelectorAll('.sb-item.dragover').forEach(function(x){ x.classList.remove('dragover'); }); };
+  it.ondragover = function(e){ if(dragId && dragId!==s.id){ e.preventDefault(); it.classList.add('dragover'); } };
+  it.ondragleave = function(){ it.classList.remove('dragover'); };
+  it.ondrop = function(e){ e.preventDefault(); it.classList.remove('dragover'); if(dragId && dragId!==s.id) reorderSessions(dragId, s.id); dragId = null; };
 
   const nm = document.createElement('div'); nm.className='nm';
   const dot = document.createElement('span'); dot.className='pdot';
@@ -795,6 +813,19 @@ async function archiveSession(id, archived){
   loadSessions(true);
 }
 
+// Reordena: mueve la sesión arrastrada a la posición del target. Optimista
+// (re-render ya) + persiste el orden nuevo en el server; el poll ya lo trae.
+async function reorderSessions(fromId, toId){
+  const ids = lastList.map(function(s){ return s.id; });
+  const fi = ids.indexOf(fromId), ti = ids.indexOf(toId);
+  if(fi < 0 || ti < 0) return;
+  ids.splice(ti, 0, ids.splice(fi, 1)[0]);      // mover from → antes de to
+  const byId = {}; lastList.forEach(function(s){ byId[s.id] = s; });
+  lastList = ids.map(function(id){ return byId[id]; });
+  renderSessions(lastList);                       // optimista
+  try { await fetch('/reorder', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ ids }) }); } catch(_){}
+}
+
 // ── Menú contextual del workspace (click derecho o kebab ⋯) ──
 function closeCtxMenu(){ const m = $("ctxmenu"); if(m) m.remove(); }
 function openCtxMenu(x, y, s, alignRight){
@@ -840,6 +871,7 @@ $("sblist").addEventListener('scroll', closeCtxMenu);
 let sbFilter = '';       // texto del buscador de workspaces
 let showArchived = false; // toggle "ver archivadas"
 let lastList = [];        // última lista del server (para re-filtrar sin fetch)
+let dragId = null;        // id de la sesión que estás arrastrando (reorder)
 
 // ¿La sesión matchea el buscador? (título · proyecto · branch, case-insensitive)
 function matchFilter(s){

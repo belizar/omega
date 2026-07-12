@@ -503,11 +503,19 @@ export class SessionManager {
         archived: !!e.archived,
       });
     }
-    // vivas primero, después dormidas por lastActive desc
-    return infos.sort((a, b) => {
-      if (a.live !== b.live) return a.live ? -1 : 1;
-      return (b.lastActive ?? 0) - (a.lastActive ?? 0);
-    });
+    // Orden ESTABLE: manual (`order`) si lo hay, si no por createdAt (creación).
+    // NO por live/lastActive → seleccionar una sesión no la mueve de lugar; su
+    // estado se comunica por color, no por posición.
+    const key = (s: SessionInfo): number => {
+      const e = this.#index.get(s.id);
+      return e?.order ?? e?.createdAt ?? 0;
+    };
+    return infos.sort((a, b) => key(a) - key(b));
+  }
+
+  /** Reordena el sidebar (drag-and-drop): persiste el nuevo orden de los ids. */
+  reorder(ids: string[]): void {
+    this.#index.reorder(ids);
   }
 
   #liveInfo(h: SessionHandle): SessionInfo {
