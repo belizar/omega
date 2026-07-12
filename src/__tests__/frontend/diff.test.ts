@@ -72,6 +72,19 @@ describe("computeDiff", () => {
     expect(d.files.find((f) => f.path === "a.txt")!.status).toBe("deleted");
   });
 
+  it("excluye .omega/ (estado propio de omega, no código del agente)", async () => {
+    const { mkdir } = await import("fs/promises");
+    await mkdir(join(dir, ".omega", "sessions"), { recursive: true });
+    await writeFile(join(dir, ".omega", "sessions", "s.json"), "x".repeat(500) + "\n", "utf-8");
+    await writeFile(join(dir, ".omega", "mcp.json"), "{}\n", "utf-8");
+    await writeFile(join(dir, "real.ts"), "export const y = 2;\n", "utf-8"); // cambio real
+
+    const d = await computeDiff(dir);
+    const paths = d.files.map((f) => f.path);
+    expect(paths).toContain("real.ts");
+    expect(paths.some((p) => p.startsWith(".omega/"))).toBe(false); // omega no se ve
+  });
+
   it("repo sin cambios → lista vacía, totales en cero", async () => {
     const d = await computeDiff(dir);
     expect(d.files).toHaveLength(0);

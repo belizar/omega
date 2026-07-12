@@ -241,33 +241,40 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
   .tab:hover { color:var(--ink); }
   .tab.active { color:var(--tool); border-bottom-color:var(--tool); }
 
-  /* Panel de Diff */
-  .diffpanel { display:none; max-width:980px; margin:0 auto; padding:16px 18px 40px; }
-  .diffpanel.on { display:block; }
-  .diffbar { display:flex; align-items:center; gap:10px; margin-bottom:13px; font-family:var(--mono); font-size:12px; color:var(--dim); }
-  .diffbar input { flex:1; max-width:280px; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:7px 10px;
+  /* Panel de Diff — two-pane: lista de archivos (izq) + diff del elegido (der) */
+  .diffpanel { display:none; flex-direction:column; height:calc(100vh - 96px); padding:14px 16px; }
+  .diffpanel.on { display:flex; }
+  .diffbar { display:flex; align-items:center; gap:10px; margin-bottom:12px; font-family:var(--mono); font-size:12px; color:var(--dim); flex:none; }
+  .diffbar input { flex:0 1 300px; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:7px 10px;
                    color:var(--ink); font-family:var(--mono); font-size:12px; }
   .diffbar input:focus { outline:none; border-color:var(--tool); box-shadow:0 0 0 3px rgba(52,205,216,.12); }
   .diffbar .rf { background:var(--surface2); border:1px solid var(--border); color:var(--dim); border-radius:8px; padding:7px 11px; cursor:pointer; font-family:var(--mono); font-size:12px; }
   .diffbar .rf:hover { border-color:var(--tool); color:var(--tool); }
   .difftot { margin-left:auto; } .difftot .ad { color:var(--ok); } .difftot .de { color:var(--err); }
 
-  .dfile { border:1px solid var(--border); border-radius:9px; margin-bottom:10px; overflow:hidden; }
-  .dfile > summary { list-style:none; cursor:pointer; display:flex; align-items:center; gap:9px; padding:9px 11px; background:var(--surface); font-family:var(--mono); font-size:12.5px; }
-  .dfile > summary::-webkit-details-marker { display:none; }
-  .dfile .st { font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; padding:1px 6px; border-radius:4px; flex:none; }
-  .dfile .st.added { color:var(--ok); background:color-mix(in srgb,var(--ok) 16%,transparent); }
-  .dfile .st.modified { color:var(--warn); background:color-mix(in srgb,var(--warn) 16%,transparent); }
-  .dfile .st.deleted { color:var(--err); background:color-mix(in srgb,var(--err) 16%,transparent); }
-  .dfile .st.renamed { color:var(--human); background:color-mix(in srgb,var(--human) 16%,transparent); }
-  .dfile .pth { color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .dfile .cnt { margin-left:auto; font-size:11px; flex:none; } .dfile .cnt .ad{color:var(--ok);} .dfile .cnt .de{color:var(--err);}
-  .dfile pre { margin:0; font-family:var(--mono); font-size:12px; line-height:1.5; overflow-x:auto; background:var(--bg); border-top:1px solid var(--border); }
-  .dfile .ln { display:block; padding:0 11px; white-space:pre; min-height:1.5em; }
-  .dfile .ln.add { background:color-mix(in srgb,var(--ok) 13%,transparent); }
-  .dfile .ln.del { background:color-mix(in srgb,var(--err) 13%,transparent); }
-  .dfile .ln.hnk { color:var(--faint); background:var(--surface); }
-  .dfile .ln.ctx { color:var(--dim); }
+  .difflayout { flex:1; min-height:0; display:flex; border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+  .difffiles { width:300px; flex:none; overflow-y:auto; border-right:1px solid var(--border); background:var(--surface); }
+  .diffview { flex:1; min-width:0; overflow:auto; background:var(--bg); }
+
+  .dfrow { display:flex; align-items:center; gap:8px; padding:6px 11px; cursor:pointer; font-family:var(--mono); font-size:12px;
+           border-left:2px solid transparent; }
+  .dfrow:hover { background:var(--surface2); }
+  .dfrow.sel { background:var(--surface2); border-left-color:var(--tool); }
+  .dfrow .st { font-size:11px; font-weight:700; width:14px; text-align:center; flex:none; }
+  .dfrow .st.added { color:var(--ok); } .dfrow .st.modified { color:var(--warn); }
+  .dfrow .st.deleted { color:var(--err); } .dfrow .st.renamed { color:var(--human); }
+  .dfrow .pth { flex:1; min-width:0; color:var(--dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .dfrow.sel .pth { color:var(--ink); }
+  .dfrow .cnt { flex:none; font-size:10.5px; } .dfrow .cnt .ad{color:var(--ok);} .dfrow .cnt .de{color:var(--err);}
+
+  .diffview .vhd { position:sticky; top:0; z-index:1; padding:9px 13px; background:var(--surface); border-bottom:1px solid var(--border);
+                   font-family:var(--mono); font-size:12px; color:var(--ink); }
+  .diffview pre { margin:0; font-family:var(--mono); font-size:12px; line-height:1.5; }
+  .diffview .ln { display:block; padding:0 13px; white-space:pre; min-height:1.5em; }
+  .diffview .ln.add { background:color-mix(in srgb,var(--ok) 13%,transparent); }
+  .diffview .ln.del { background:color-mix(in srgb,var(--err) 13%,transparent); }
+  .diffview .ln.hnk { color:var(--faint); background:var(--surface); }
+  .diffview .ln.ctx { color:var(--dim); }
   .diffempty { color:var(--faint); font-family:var(--mono); font-size:12px; padding:26px; text-align:center; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
@@ -316,7 +323,10 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
         <button class="rf" id="diffrefresh" type="button">↻ refrescar</button>
         <span class="difftot" id="difftot"></span>
       </div>
-      <div id="difflist"></div>
+      <div class="difflayout">
+        <div class="difffiles" id="difffiles"></div>
+        <div class="diffview" id="diffview"></div>
+      </div>
     </div>
   </main>
   <form id="form">
@@ -601,30 +611,44 @@ async function loadDiff(){
   } catch(_){ list.innerHTML = '<div class="diffempty">error de red cargando el diff</div>'; }
 }
 
+let diffData = null;
+const STSYM = { added:'A', modified:'M', deleted:'D', renamed:'R' };
 function renderDiff(d){
-  const list = $("difflist"); list.innerHTML = '';
+  diffData = d;
+  const files = $("difffiles"), view = $("diffview");
+  files.innerHTML = ''; view.innerHTML = '';
   $("difftot").innerHTML = d.files.length
     ? d.files.length + ' archivo' + (d.files.length>1?'s':'') + ' · <span class="ad">+' + d.totals.additions + '</span> <span class="de">−' + d.totals.deletions + '</span>'
     : '';
   if(!d.files.length){
-    list.innerHTML = '<div class="diffempty">' + (d.base ? 'sin cambios vs ' + esc(d.base) : 'no hay cambios sin commitear en este workspace') + '</div>';
+    files.innerHTML = '<div class="diffempty">' + (d.base ? 'sin cambios vs ' + esc(d.base) : 'sin cambios sin commitear') + '</div>';
     return;
   }
-  const open = d.files.length <= 6; // pocos archivos → abiertos; muchos → colapsados
-  for(const f of d.files){
-    const det = document.createElement('details'); det.className='dfile'; det.open = open;
-    const sum = document.createElement('summary');
+  d.files.forEach(function(f, i){
     const path = f.oldPath ? (f.oldPath + ' → ' + f.path) : f.path;
-    sum.innerHTML = '<span class="st ' + f.status + '">' + f.status[0] + '</span>'
+    const row = document.createElement('div'); row.className = 'dfrow'; row.dataset.i = i; row.title = path;
+    row.innerHTML = '<span class="st ' + f.status + '">' + (STSYM[f.status]||'?') + '</span>'
       + '<span class="pth">' + esc(path) + '</span>'
       + '<span class="cnt"><span class="ad">+' + f.additions + '</span> <span class="de">−' + f.deletions + '</span></span>';
-    det.appendChild(sum);
-    const pre = document.createElement('pre');
-    if(f.binary){ const l=document.createElement('span'); l.className='ln ctx'; l.textContent='  (archivo binario)'; pre.appendChild(l); }
-    else pre.appendChild(renderPatch(f.patch));
-    det.appendChild(pre);
-    list.appendChild(det);
-  }
+    row.onclick = function(){ selectFile(i); };
+    files.appendChild(row);
+  });
+  selectFile(0); // el primer archivo abierto por default
+}
+
+function selectFile(i){
+  const f = diffData && diffData.files[i];
+  if(!f) return;
+  document.querySelectorAll('#difffiles .dfrow').forEach(function(r){ r.classList.toggle('sel', Number(r.dataset.i) === i); });
+  const view = $("diffview"); view.innerHTML = '';
+  const hd = document.createElement('div'); hd.className = 'vhd';
+  hd.textContent = (f.oldPath ? f.oldPath + ' → ' + f.path : f.path) + '  (+' + f.additions + ' −' + f.deletions + ')';
+  view.appendChild(hd);
+  const pre = document.createElement('pre');
+  if(f.binary){ const l=document.createElement('span'); l.className='ln ctx'; l.textContent='  (archivo binario)'; pre.appendChild(l); }
+  else pre.appendChild(renderPatch(f.patch));
+  view.appendChild(pre);
+  view.scrollTop = 0;
 }
 
 // Pinta un parche unificado línea por línea. Salta el header del archivo (diff

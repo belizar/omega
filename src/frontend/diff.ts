@@ -56,9 +56,12 @@ const STATUS: Record<string, DiffFile["status"]> = {
  */
 export async function computeDiff(cwd: string, base?: string): Promise<DiffResult> {
   const range = base ? [`${base}...HEAD`] : ["HEAD"];
+  // Excluimos `.omega/` — es el estado propio de omega en el worktree (transcripts,
+  // commands, config), NO cambios de código del agente. Si no, ahoga el diff.
+  const paths = ["--", ".", ":(exclude).omega"];
 
   // Conteos por archivo: "adds\tdels\tpath" (o "-\t-\t" si es binario).
-  const numstat = await git(cwd, ["diff", "--numstat", ...range]);
+  const numstat = await git(cwd, ["diff", "--numstat", ...range, ...paths]);
   const counts = new Map<string, { additions: number; deletions: number; binary: boolean }>();
   for (const line of numstat.split("\n")) {
     if (!line.trim()) continue;
@@ -69,7 +72,7 @@ export async function computeDiff(cwd: string, base?: string): Promise<DiffResul
   }
 
   // Estado por archivo: "M\tpath" | "A\tpath" | "R100\told\tnew" | ...
-  const nameStatus = await git(cwd, ["diff", "--name-status", ...range]);
+  const nameStatus = await git(cwd, ["diff", "--name-status", ...range, ...paths]);
   const meta = new Map<string, { status: DiffFile["status"]; oldPath?: string }>();
   for (const line of nameStatus.split("\n")) {
     if (!line.trim()) continue;
@@ -83,7 +86,7 @@ export async function computeDiff(cwd: string, base?: string): Promise<DiffResul
   }
 
   // Parche unificado completo, partido por archivo ("diff --git a/… b/…").
-  const full = await git(cwd, ["diff", ...range]);
+  const full = await git(cwd, ["diff", ...range, ...paths]);
   const patches = splitPatches(full);
 
   const files: DiffFile[] = [];
@@ -102,7 +105,7 @@ export async function computeDiff(cwd: string, base?: string): Promise<DiffResul
 
   // Archivos nuevos sin trackear (solo en el modo working-tree). Se ven como added.
   if (!base) {
-    const untracked = (await git(cwd, ["ls-files", "--others", "--exclude-standard"]))
+    const untracked = (await git(cwd, ["ls-files", "--others", "--exclude-standard", ...paths]))
       .split("\n")
       .map((s) => s.trim())
       .filter(Boolean);
