@@ -8,6 +8,7 @@ import { DaemonClient } from "./daemon-client.js";
 import { writeDaemonInfo, clearDaemonInfo } from "./daemon-info.js";
 import { WEB_CLIENT_HTML } from "./web-client.js";
 import { HookRunner } from "../hooks.js";
+import { computeDiff } from "./diff.js";
 import type { FrontendMode } from "./mode.js";
 
 const execFileAsync = promisify(execFile);
@@ -181,6 +182,19 @@ export class ServeMode implements FrontendMode {
           const fromWorktrees = await m.importExisting(this.#scanRoots());
           const orphans = await m.rescan();
           this.#json(res, 200, { imported: fromWorktrees + orphans });
+        } },
+      { method: "GET", path: "/diff", handler: async ({ res, sessionId, q }) => {
+          // Diff del workspace de la sesión. Fuente: sin `base` = cambios sin
+          // commitear (lo que tocó el agente); `?base=main` = una branch/PR.
+          // cwdOf (no revive): anda para vivas y dormidas.
+          const cwd = m.cwdOf(sessionId);
+          if (!cwd) return this.#json(res, 404, { error: `sesión ${sessionId} desconocida` });
+          const base = q.get("base")?.trim() || undefined;
+          try {
+            this.#json(res, 200, await computeDiff(cwd, base));
+          } catch (err) {
+            this.#json(res, 500, { error: err instanceof Error ? err.message : String(err) });
+          }
         } },
       { method: "POST", path: "/reveal", handler: ({ res, sessionId }) => {
           // cwdOf (no revive): anda para vivas y dormidas. Solo abre un cwd conocido.
