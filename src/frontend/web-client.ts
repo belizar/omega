@@ -233,6 +233,42 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
   .findbar .fbtn:hover { border-color:var(--tool); color:var(--tool); }
   mark.find { background:color-mix(in srgb,var(--warn) 32%,transparent); color:inherit; border-radius:2px; }
   mark.find.cur { background:var(--warn); color:#1a1300; }
+
+  /* Tabs de la sesión (Activity / Diff …) — modelo Linear */
+  .tabs { display:flex; gap:2px; padding:0 14px; background:var(--surface); border-bottom:1px solid var(--border); }
+  .tab { font-family:var(--mono); font-size:12px; color:var(--dim); background:none; border:none; border-bottom:2px solid transparent;
+         padding:9px 13px; cursor:pointer; }
+  .tab:hover { color:var(--ink); }
+  .tab.active { color:var(--tool); border-bottom-color:var(--tool); }
+
+  /* Panel de Diff */
+  .diffpanel { display:none; max-width:980px; margin:0 auto; padding:16px 18px 40px; }
+  .diffpanel.on { display:block; }
+  .diffbar { display:flex; align-items:center; gap:10px; margin-bottom:13px; font-family:var(--mono); font-size:12px; color:var(--dim); }
+  .diffbar input { flex:1; max-width:280px; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:7px 10px;
+                   color:var(--ink); font-family:var(--mono); font-size:12px; }
+  .diffbar input:focus { outline:none; border-color:var(--tool); box-shadow:0 0 0 3px rgba(52,205,216,.12); }
+  .diffbar .rf { background:var(--surface2); border:1px solid var(--border); color:var(--dim); border-radius:8px; padding:7px 11px; cursor:pointer; font-family:var(--mono); font-size:12px; }
+  .diffbar .rf:hover { border-color:var(--tool); color:var(--tool); }
+  .difftot { margin-left:auto; } .difftot .ad { color:var(--ok); } .difftot .de { color:var(--err); }
+
+  .dfile { border:1px solid var(--border); border-radius:9px; margin-bottom:10px; overflow:hidden; }
+  .dfile > summary { list-style:none; cursor:pointer; display:flex; align-items:center; gap:9px; padding:9px 11px; background:var(--surface); font-family:var(--mono); font-size:12.5px; }
+  .dfile > summary::-webkit-details-marker { display:none; }
+  .dfile .st { font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; padding:1px 6px; border-radius:4px; flex:none; }
+  .dfile .st.added { color:var(--ok); background:color-mix(in srgb,var(--ok) 16%,transparent); }
+  .dfile .st.modified { color:var(--warn); background:color-mix(in srgb,var(--warn) 16%,transparent); }
+  .dfile .st.deleted { color:var(--err); background:color-mix(in srgb,var(--err) 16%,transparent); }
+  .dfile .st.renamed { color:var(--human); background:color-mix(in srgb,var(--human) 16%,transparent); }
+  .dfile .pth { color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .dfile .cnt { margin-left:auto; font-size:11px; flex:none; } .dfile .cnt .ad{color:var(--ok);} .dfile .cnt .de{color:var(--err);}
+  .dfile pre { margin:0; font-family:var(--mono); font-size:12px; line-height:1.5; overflow-x:auto; background:var(--bg); border-top:1px solid var(--border); }
+  .dfile .ln { display:block; padding:0 11px; white-space:pre; min-height:1.5em; }
+  .dfile .ln.add { background:color-mix(in srgb,var(--ok) 13%,transparent); }
+  .dfile .ln.del { background:color-mix(in srgb,var(--err) 13%,transparent); }
+  .dfile .ln.hnk { color:var(--faint); background:var(--surface); }
+  .dfile .ln.ctx { color:var(--dim); }
+  .diffempty { color:var(--faint); font-family:var(--mono); font-size:12px; padding:26px; text-align:center; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
@@ -260,6 +296,10 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
     <span class="om">Ω</span><span class="nm">omega</span>
     <span class="st"><button class="hbtn" id="bell" title="activar notificaciones">🔕</button><button class="hbtn" id="reveal" title="abrir la carpeta de la sesión en el explorador">carpeta ↗</button><span class="dotc" id="dot"></span><span id="stat">conectando…</span></span>
   </header>
+  <div class="tabs" id="tabs">
+    <button class="tab active" data-tab="activity">Activity</button>
+    <button class="tab" data-tab="diff">Diff</button>
+  </div>
   <main id="main">
     <div class="findbar" id="findbar">
       <input type="text" id="findq" placeholder="buscar en la conversación…" autocomplete="off">
@@ -270,6 +310,14 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
     </div>
     <div class="thread" id="thread"></div>
     <div class="thinking" id="thinking"><span class="sp"></span><span id="thinkLbl">Pensando…</span><button type="button" class="stopbtn" id="stop">■ detener · Esc</button></div>
+    <div class="diffpanel" id="diffpanel">
+      <div class="diffbar">
+        <input type="text" id="diffbase" placeholder="cambios sin commitear · o una rama/PR: main" autocomplete="off">
+        <button class="rf" id="diffrefresh" type="button">↻ refrescar</button>
+        <span class="difftot" id="difftot"></span>
+      </div>
+      <div id="difflist"></div>
+    </div>
   </main>
   <form id="form">
     <div class="inbar">
@@ -525,8 +573,78 @@ function selectSession(id, force){
   current = id;
   clearAttention(id); // entrar a una sesión = ya la viste, sacala del badge
   resetThread();
+  setTab('activity'); // al entrar a una sesión, arrancás en el chat
   openES();
   loadSessions(true); // fuerza el render para mover el highlight a la nueva
+}
+
+// ── Tabs de la sesión (Activity / Diff) ──
+let activeTab = 'activity';
+function setTab(name){
+  activeTab = name;
+  const isDiff = name === 'diff';
+  $("thread").style.display = isDiff ? 'none' : '';
+  $("diffpanel").classList.toggle('on', isDiff);
+  $("form").style.display = isDiff ? 'none' : '';
+  if(isDiff) $("thinking").classList.remove('on'); // el spinner no va en la vista diff
+  document.querySelectorAll('#tabs .tab').forEach(function(t){ t.classList.toggle('active', t.getAttribute('data-tab')===name); });
+  if(isDiff) loadDiff();
+}
+
+async function loadDiff(){
+  const list = $("difflist"); list.innerHTML = '<div class="diffempty">cargando…</div>';
+  const base = $("diffbase").value.trim();
+  try {
+    const r = await fetch(q('/diff') + (base ? '&base=' + encodeURIComponent(base) : ''));
+    if(!r.ok){ list.innerHTML = '<div class="diffempty">no se pudo cargar el diff (HTTP ' + r.status + ')</div>'; return; }
+    renderDiff(await r.json());
+  } catch(_){ list.innerHTML = '<div class="diffempty">error de red cargando el diff</div>'; }
+}
+
+function renderDiff(d){
+  const list = $("difflist"); list.innerHTML = '';
+  $("difftot").innerHTML = d.files.length
+    ? d.files.length + ' archivo' + (d.files.length>1?'s':'') + ' · <span class="ad">+' + d.totals.additions + '</span> <span class="de">−' + d.totals.deletions + '</span>'
+    : '';
+  if(!d.files.length){
+    list.innerHTML = '<div class="diffempty">' + (d.base ? 'sin cambios vs ' + esc(d.base) : 'no hay cambios sin commitear en este workspace') + '</div>';
+    return;
+  }
+  const open = d.files.length <= 6; // pocos archivos → abiertos; muchos → colapsados
+  for(const f of d.files){
+    const det = document.createElement('details'); det.className='dfile'; det.open = open;
+    const sum = document.createElement('summary');
+    const path = f.oldPath ? (f.oldPath + ' → ' + f.path) : f.path;
+    sum.innerHTML = '<span class="st ' + f.status + '">' + f.status[0] + '</span>'
+      + '<span class="pth">' + esc(path) + '</span>'
+      + '<span class="cnt"><span class="ad">+' + f.additions + '</span> <span class="de">−' + f.deletions + '</span></span>';
+    det.appendChild(sum);
+    const pre = document.createElement('pre');
+    if(f.binary){ const l=document.createElement('span'); l.className='ln ctx'; l.textContent='  (archivo binario)'; pre.appendChild(l); }
+    else pre.appendChild(renderPatch(f.patch));
+    det.appendChild(pre);
+    list.appendChild(det);
+  }
+}
+
+// Pinta un parche unificado línea por línea. Salta el header del archivo (diff
+// --git / index / --- / +++) hasta el primer hunk (@@).
+function renderPatch(patch){
+  const frag = document.createDocumentFragment();
+  let started = false;
+  for(const line of String(patch).split('\n')){
+    if(!started){ if(line.startsWith('@@')) started = true; else continue; }
+    const span = document.createElement('span');
+    let cls = 'ln ';
+    if(line.startsWith('@@')) cls += 'hnk';
+    else if(line.startsWith('+')) cls += 'add';
+    else if(line.startsWith('-')) cls += 'del';
+    else cls += 'ctx';
+    span.className = cls;
+    span.textContent = line.length ? line : ' ';
+    frag.appendChild(span);
+  }
+  return frag;
 }
 
 // ── Notificaciones globales (SSE /events/all: atención de TODAS las sesiones) ──
@@ -845,6 +963,11 @@ $("bell").addEventListener('click', async function(){
   catch(_){ alert('Permiso concedido, pero el SO no mostró la notificación de prueba. Revisá Ajustes → Notificaciones → Arc en macOS.'); }
 });
 updateBellUi();
+
+// Tabs + diff.
+document.querySelectorAll('#tabs .tab').forEach(function(t){ t.addEventListener('click', function(){ setTab(t.getAttribute('data-tab')); }); });
+$("diffrefresh").addEventListener('click', loadDiff);
+$("diffbase").addEventListener('keydown', function(e){ e.stopPropagation(); if(e.key==='Enter'){ e.preventDefault(); loadDiff(); } });
 
 // Boot: descubrí las sesiones, elegí la default, abrí su stream + el SSE global.
 (async function(){ await loadSessions(); openES(); openGlobalES(); })();
