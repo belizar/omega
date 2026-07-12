@@ -765,15 +765,11 @@ function renderRow(s){
   nm.appendChild(dot); nm.appendChild(tt);
 
   const meta = document.createElement('div'); meta.className='meta';
-  if(s.live){
-    const word = s.status==='running' ? 'corriendo…'
-               : s.status==='waiting' ? 'esperás vos'
-               : (s.isolated ? '⎇ aislada' : '· compartida');
-    meta.innerHTML = '<span class="s">' + word + '</span>';
-    if(s.clients) meta.innerHTML += ' · ' + s.clients + ' ◉';
-  } else {
-    meta.textContent = '⦿ dormida' + (s.branch ? ' · ' + s.branch : '');
-  }
+  // La branch es la identidad del workspace; el ESTADO (corriendo/esperás/dormida)
+  // lo comunica el color del dot, no texto. Compartida (sin worktree) no tiene branch.
+  const where = s.branch ? '⎇ ' + esc(s.branch) : (s.isolated ? '⎇ aislada' : '· compartida');
+  meta.innerHTML = '<span class="s">' + where + '</span>';
+  if(s.live && s.clients) meta.innerHTML += ' · ' + s.clients + ' ◉';
   it.appendChild(nm); it.appendChild(meta);
 
   // Kebab (⋯): mismo menú que el click derecho, para quien no piensa en click-derecho.
