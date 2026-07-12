@@ -297,6 +297,22 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
   .fsrow .sz { flex:none; font-size:10px; color:var(--faint); }
   #fileview .vhd { position:sticky; top:0; z-index:1; padding:9px 13px; background:var(--surface); border-bottom:1px solid var(--border); font-family:var(--mono); font-size:12px; color:var(--ink); }
   #fileview pre { margin:0; padding:10px 13px; font-family:var(--mono); font-size:12px; line-height:1.5; white-space:pre; color:var(--ink); }
+
+  /* Guide (review guiado) — stepper */
+  .gstep { display:flex; align-items:flex-start; gap:9px; padding:9px 11px; cursor:pointer; font-family:var(--mono); font-size:12px; border-left:2px solid transparent; }
+  .gstep:hover { background:var(--surface2); }
+  .gstep.sel { background:var(--surface2); border-left-color:var(--tool); }
+  .gstep .n { flex:none; width:20px; height:20px; line-height:19px; text-align:center; border-radius:5px; background:var(--surface2); color:var(--dim); font-size:11px; }
+  .gstep.done .n { background:color-mix(in srgb,var(--ok) 22%,transparent); color:var(--ok); }
+  .gstep .gt { flex:1; min-width:0; color:var(--ink); line-height:1.45; }
+  .gstep .chk { flex:none; width:15px; height:15px; accent-color:var(--ok); margin-top:2px; cursor:pointer; }
+  #guidedetail .gd { padding:16px 18px; max-width:760px; }
+  #guidedetail .gd h4 { font-family:var(--mono); font-size:14px; color:#fff; margin:0 0 10px; }
+  #guidedetail .gd .rat { font-family:var(--sans); font-size:14px; color:var(--ink); line-height:1.6; margin-bottom:18px; white-space:pre-wrap; }
+  #guidedetail .gd .flabel { font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--faint); margin-bottom:6px; }
+  #guidedetail .gd .gf { font-family:var(--mono); font-size:12px; color:var(--tool); padding:3px 0; cursor:pointer; }
+  #guidedetail .gd .gf:hover { text-decoration:underline; }
+  .guideempty { color:var(--faint); font-family:var(--mono); font-size:12px; padding:26px; text-align:center; line-height:1.7; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
@@ -327,6 +343,7 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
   <div class="tabs" id="tabs">
     <button class="tab active" data-tab="activity">Activity</button>
     <button class="tab" data-tab="diff">Diff</button>
+    <button class="tab" data-tab="guide">Guide</button>
     <button class="tab" data-tab="files">Files</button>
   </div>
   <main id="main">
@@ -348,6 +365,17 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
       <div class="difflayout">
         <div class="difffiles" id="difffiles"></div>
         <div class="diffview" id="diffview"></div>
+      </div>
+    </div>
+    <div class="diffpanel" id="guidepanel">
+      <div class="diffbar">
+        <input type="text" id="guidebase" placeholder="cambios sin commitear · o una rama/PR: main" autocomplete="off">
+        <button class="rf" id="guidegen" type="button">✦ generar guía</button>
+        <span class="difftot" id="guideprog"></span>
+      </div>
+      <div class="difflayout">
+        <div class="difffiles" id="guidesteps"></div>
+        <div class="diffview" id="guidedetail"></div>
       </div>
     </div>
     <div class="diffpanel" id="filespanel">
@@ -549,6 +577,7 @@ let lastTool = null;
 let current = null;   // id de la sesión activa
 let es = null;        // EventSource de la sesión activa
 let findMatches = [], findIdx = -1; // estado del buscador in-convo (declarado acá para evitar TDZ desde resetThread)
+let guideData = null, guideReviewed = null, guideStepSel = 0; // estado de la Guide (reset en resetThread)
 let ges = null;       // EventSource GLOBAL (/events/all): atención de todas las sesiones
 let notifsEnabled = localStorage.getItem('omega.notifs') === '1';
 const attention = new Set(); // ids de sesiones que te reclaman (badge + resalte)
@@ -608,7 +637,7 @@ function openES(){
 
 // Limpia el hilo al cambiar de sesión (los eventos pasados no se re-emiten: el
 // hub no bufferea historial; ves la sesión desde el próximo evento).
-function resetThread(){ thread.innerHTML=''; curAsst=null; lastTool=null; $("thinking").classList.remove('on'); findMatches=[]; findIdx=-1; if($("findbar").classList.contains('on')) $("fcount").textContent='0 / 0'; }
+function resetThread(){ thread.innerHTML=''; curAsst=null; lastTool=null; $("thinking").classList.remove('on'); findMatches=[]; findIdx=-1; guideData=null; if($("findbar").classList.contains('on')) $("fcount").textContent='0 / 0'; }
 
 function selectSession(id, force){
   if(!force && id===current && es) return;
@@ -631,9 +660,11 @@ function setTab(name){
   if(!isActivity) $("thinking").classList.remove('on');
   $("diffpanel").classList.toggle('on', name === 'diff');
   $("filespanel").classList.toggle('on', name === 'files');
+  $("guidepanel").classList.toggle('on', name === 'guide');
   document.querySelectorAll('#tabs .tab').forEach(function(t){ t.classList.toggle('active', t.getAttribute('data-tab')===name); });
   if(name === 'diff') loadDiff();
   if(name === 'files') loadFiles();
+  if(name === 'guide'){ if(guideData) renderGuide(); else showGuideEmpty(); }
 }
 
 async function loadDiff(){
@@ -774,6 +805,76 @@ async function loadFile(path){
     if(!f.binary && window.hljs){ try { hljs.highlightElement(code); } catch(_){} }
     view.scrollTop = 0;
   } catch(_){ view.innerHTML = '<div class="diffempty">error de red</div>'; }
+}
+
+// ── Guide (review guiado — el agente arma pasos ordenados con el porqué) ──
+function showGuideEmpty(){
+  $("guidesteps").innerHTML = '<div class="guideempty">Generá una guía de review.<br>El agente lee el diff y lo parte en pasos ordenados con su porqué.<br><br>Vacío = cambios sin commitear · o poné una rama/PR arriba.</div>';
+  $("guidedetail").innerHTML = ''; $("guideprog").textContent = '';
+}
+async function genGuide(){
+  const base = $("guidebase").value.trim();
+  $("guidesteps").innerHTML = '<div class="guideempty">generando… el agente está leyendo el diff (unos segundos)</div>';
+  $("guidedetail").innerHTML = ''; $("guideprog").textContent = '';
+  try {
+    const r = await fetch(q('/review') + (base ? '&base=' + encodeURIComponent(base) : ''), { method:'POST' });
+    if(!r.ok){ $("guidesteps").innerHTML = '<div class="guideempty">no se pudo generar (HTTP ' + r.status + ')</div>'; return; }
+    const g = await r.json();
+    if(!g.steps || !g.steps.length){
+      $("guidesteps").innerHTML = '<div class="guideempty">' + (g.base ? 'sin cambios vs ' + esc(g.base) : 'no hay cambios sin commitear para revisar') + '</div>';
+      return;
+    }
+    guideData = g; guideReviewed = new Set(); guideStepSel = 0;
+    renderGuide();
+  } catch(_){ $("guidesteps").innerHTML = '<div class="guideempty">error de red generando la guía</div>'; }
+}
+function renderGuide(){
+  if(!guideData){ showGuideEmpty(); return; }
+  if(!guideReviewed) guideReviewed = new Set();
+  const box = $("guidesteps"); box.innerHTML = '';
+  guideData.steps.forEach(function(s, i){
+    const row = document.createElement('div');
+    row.className = 'gstep' + (i===guideStepSel?' sel':'') + (guideReviewed.has(i)?' done':'');
+    const chk = document.createElement('input'); chk.type='checkbox'; chk.className='chk'; chk.checked = guideReviewed.has(i);
+    chk.onclick = function(e){ e.stopPropagation(); if(chk.checked) guideReviewed.add(i); else guideReviewed.delete(i); renderGuide(); };
+    const n = document.createElement('span'); n.className='n'; n.textContent = String(i+1).padStart(2,'0');
+    const t = document.createElement('span'); t.className='gt'; t.textContent = s.title;
+    row.appendChild(chk); row.appendChild(n); row.appendChild(t);
+    row.onclick = function(){ guideStepSel = i; renderGuide(); };
+    box.appendChild(row);
+  });
+  $("guideprog").textContent = guideReviewed.size + ' / ' + guideData.steps.length + ' revisados';
+  renderStep(guideStepSel);
+}
+function renderStep(i){
+  const s = guideData && guideData.steps[i]; if(!s) return;
+  const v = $("guidedetail"); v.innerHTML = '';
+  const gd = document.createElement('div'); gd.className='gd';
+  const h = document.createElement('h4'); h.textContent = (i+1) + '. ' + s.title;
+  const rat = document.createElement('div'); rat.className='rat'; rat.textContent = s.rationale;
+  gd.appendChild(h); gd.appendChild(rat);
+  if(s.files && s.files.length){
+    const fl = document.createElement('div'); fl.className='flabel'; fl.textContent = 'archivos'; gd.appendChild(fl);
+    s.files.forEach(function(p){
+      const f = document.createElement('div'); f.className='gf'; f.textContent = p;
+      f.onclick = function(){ jumpToDiffFile(p); };
+      gd.appendChild(f);
+    });
+  }
+  v.appendChild(gd); v.scrollTop = 0;
+}
+// Click en un archivo de un paso → saltar al Diff (misma fuente) y seleccionarlo.
+function jumpToDiffFile(path){
+  $("diffbase").value = $("guidebase").value;
+  setTab('diff');
+  const trySelect = function(tries){
+    if(diffData && diffData.files.length){
+      const idx = diffData.files.findIndex(function(f){ return f.path === path; });
+      if(idx >= 0){ selectFile(idx); return; }
+    }
+    if(tries > 0) setTimeout(function(){ trySelect(tries - 1); }, 250);
+  };
+  trySelect(12);
 }
 
 // ── Notificaciones globales (SSE /events/all: atención de TODAS las sesiones) ──
@@ -1118,6 +1219,8 @@ document.querySelectorAll('#tabs .tab').forEach(function(t){ t.addEventListener(
 $("diffrefresh").addEventListener('click', loadDiff);
 $("diffbase").addEventListener('keydown', function(e){ e.stopPropagation(); if(e.key==='Enter'){ e.preventDefault(); loadDiff(); } });
 $("filesrefresh").addEventListener('click', function(){ loadFiles(); });
+$("guidegen").addEventListener('click', genGuide);
+$("guidebase").addEventListener('keydown', function(e){ e.stopPropagation(); if(e.key==='Enter'){ e.preventDefault(); genGuide(); } });
 
 // Boot: descubrí las sesiones, elegí la default, abrí su stream + el SSE global.
 (async function(){ await loadSessions(); openES(); openGlobalES(); })();
