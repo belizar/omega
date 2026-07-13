@@ -196,6 +196,9 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
   .sb-item.att { background:color-mix(in srgb,var(--warn) 11%,transparent); border-color:color-mix(in srgb,var(--warn) 45%,transparent); }
   .sb-item.att .pdot { background:var(--warn); box-shadow:0 0 7px var(--warn); }
   .sb-item.att .nm { color:var(--ink); }
+  /* Generando la guía (tarea de fondo) — dot pulsante */
+  .sb-item.gen .pdot { background:var(--tool); box-shadow:0 0 8px var(--tool); animation:pulse 1s ease-in-out infinite; }
+  .sb-item.gen .meta .s { color:var(--tool); }
   /* Drag-and-drop para reordenar */
   .sb-item.dragging { opacity:.4; }
   .sb-item.dragover { box-shadow:inset 0 2px 0 var(--tool); }
@@ -584,8 +587,10 @@ let lastTool = null;
 let current = null;   // id de la sesión activa
 let es = null;        // EventSource de la sesión activa
 let findMatches = [], findIdx = -1; // estado del buscador in-convo (declarado acá para evitar TDZ desde resetThread)
-let guideData = null, guideReviewed = null, guideStepSel = 0; // estado de la Guide (reset en resetThread)
-let guideDiffMap = {}; // path → archivo del diff (para mostrar el parche inline en cada paso)
+// Estado de la Guide POR SESIÓN (así sobrevive al navegar y no se pierde la
+// generación en curso). id → { data, diffMap, reviewed:Set, stepSel, generating }.
+const guides = {};
+function guideOf(id){ return guides[id] || (guides[id] = { data:null, diffMap:{}, reviewed:new Set(), stepSel:0, generating:false }); }
 let ges = null;       // EventSource GLOBAL (/events/all): atención de todas las sesiones
 let notifsEnabled = localStorage.getItem('omega.notifs') === '1';
 const attention = new Set(); // ids de sesiones que te reclaman (badge + resalte)
@@ -645,7 +650,7 @@ function openES(){
 
 // Limpia el hilo al cambiar de sesión (los eventos pasados no se re-emiten: el
 // hub no bufferea historial; ves la sesión desde el próximo evento).
-function resetThread(){ thread.innerHTML=''; curAsst=null; lastTool=null; $("thinking").classList.remove('on'); findMatches=[]; findIdx=-1; guideData=null; if($("findbar").classList.contains('on')) $("fcount").textContent='0 / 0'; }
+function resetThread(){ thread.innerHTML=''; curAsst=null; lastTool=null; $("thinking").classList.remove('on'); findMatches=[]; findIdx=-1; if($("findbar").classList.contains('on')) $("fcount").textContent='0 / 0'; }
 
 function selectSession(id, force){
   if(!force && id===current && es) return;
@@ -672,7 +677,7 @@ function setTab(name){
   document.querySelectorAll('#tabs .tab').forEach(function(t){ t.classList.toggle('active', t.getAttribute('data-tab')===name); });
   if(name === 'diff') loadDiff();
   if(name === 'files') loadFiles();
-  if(name === 'guide'){ if(guideData) renderGuide(); else showGuideEmpty(); }
+  if(name === 'guide') renderGuidePanel();
 }
 
 async function loadDiff(){
@@ -816,53 +821,69 @@ async function loadFile(path){
 }
 
 // ── Guide (review guiado — el agente arma pasos ordenados con el porqué) ──
+// URL de una ruta contra una sesión ESPECÍFICA (no la activa: genGuide sigue
+// apuntando a la sesión que la disparó aunque navegues a otra).
+function qs(id, p){ return p + '?session=' + encodeURIComponent(id); }
+
 function showGuideEmpty(){
   $("guidesteps").innerHTML = '<div class="guideempty">Generá una guía de review.<br>El agente lee el diff y lo parte en pasos ordenados con su porqué.<br><br>Vacío = cambios sin commitear · o poné una rama/PR arriba.</div>';
   $("guidedetail").innerHTML = ''; $("guideprog").textContent = '';
 }
+
+// Genera la guía de la sesión ACTUAL. Escribe en guides[sid] aunque navegues a
+// otra sesión mientras genera (el resultado no se pierde).
 async function genGuide(){
+  const sid = current;
+  const g = guideOf(sid);
   const base = $("guidebase").value.trim();
   const bq = base ? '&base=' + encodeURIComponent(base) : '';
-  $("guidesteps").innerHTML = '<div class="guideempty">generando… el agente está leyendo el diff (unos segundos)</div>';
-  $("guidedetail").innerHTML = ''; $("guideprog").textContent = '';
+  g.generating = true; g.data = null; g.error = null;
+  if(current === sid) renderGuidePanel();
+  loadSessions(true); // el sidebar marca la fila "generando"
   try {
-    // En paralelo: la guía (LLM) + el diff (para mostrar los parches inline).
     const [gr, dr] = await Promise.all([
-      fetch(q('/review') + bq, { method:'POST' }),
-      fetch(q('/diff') + bq),
+      fetch(qs(sid, '/review') + bq, { method:'POST' }),
+      fetch(qs(sid, '/diff') + bq),
     ]);
-    if(!gr.ok){ $("guidesteps").innerHTML = '<div class="guideempty">no se pudo generar (HTTP ' + gr.status + ')</div>'; return; }
-    const g = await gr.json();
-    guideDiffMap = {};
-    if(dr.ok){ const d = await dr.json(); (d.files||[]).forEach(function(f){ guideDiffMap[f.path] = f; }); }
-    if(!g.steps || !g.steps.length){
-      $("guidesteps").innerHTML = '<div class="guideempty">' + (g.base ? 'sin cambios vs ' + esc(g.base) : 'no hay cambios sin commitear para revisar') + '</div>';
-      return;
-    }
-    guideData = g; guideReviewed = new Set(); guideStepSel = 0;
-    renderGuide();
-  } catch(_){ $("guidesteps").innerHTML = '<div class="guideempty">error de red generando la guía</div>'; }
+    g.diffMap = {};
+    if(dr.ok){ const d = await dr.json(); (d.files||[]).forEach(function(f){ g.diffMap[f.path] = f; }); }
+    if(!gr.ok){ g.error = 'no se pudo generar (HTTP ' + gr.status + ')'; }
+    else { g.data = await gr.json(); g.reviewed = new Set(); g.stepSel = 0; }
+  } catch(_){ g.error = 'error de red generando la guía'; }
+  g.generating = false;
+  if(current === sid) renderGuidePanel();
+  loadSessions(true); // sacar el "generando" del sidebar
 }
-function renderGuide(){
-  if(!guideData){ showGuideEmpty(); return; }
-  if(!guideReviewed) guideReviewed = new Set();
+
+// Renderiza el panel de la Guide para la sesión ACTUAL (según su estado guardado).
+function renderGuidePanel(){
+  const g = guideOf(current);
+  if(g.generating){ $("guidesteps").innerHTML = '<div class="guideempty">generando… el agente está leyendo el diff (unos segundos)</div>'; $("guidedetail").innerHTML=''; $("guideprog").textContent=''; return; }
+  if(g.error){ $("guidesteps").innerHTML = '<div class="guideempty">' + esc(g.error) + '</div>'; $("guidedetail").innerHTML=''; return; }
+  if(!g.data){ showGuideEmpty(); return; }
+  if(!g.data.steps || !g.data.steps.length){ $("guidesteps").innerHTML = '<div class="guideempty">' + (g.data.base ? 'sin cambios vs ' + esc(g.data.base) : 'no hay cambios sin commitear para revisar') + '</div>'; $("guidedetail").innerHTML=''; return; }
+  renderGuide(g);
+}
+
+function renderGuide(g){
   const box = $("guidesteps"); box.innerHTML = '';
-  guideData.steps.forEach(function(s, i){
+  g.data.steps.forEach(function(s, i){
     const row = document.createElement('div');
-    row.className = 'gstep' + (i===guideStepSel?' sel':'') + (guideReviewed.has(i)?' done':'');
-    const chk = document.createElement('input'); chk.type='checkbox'; chk.className='chk'; chk.checked = guideReviewed.has(i);
-    chk.onclick = function(e){ e.stopPropagation(); if(chk.checked) guideReviewed.add(i); else guideReviewed.delete(i); renderGuide(); };
+    row.className = 'gstep' + (i===g.stepSel?' sel':'') + (g.reviewed.has(i)?' done':'');
+    const chk = document.createElement('input'); chk.type='checkbox'; chk.className='chk'; chk.checked = g.reviewed.has(i);
+    chk.onclick = function(e){ e.stopPropagation(); if(chk.checked) g.reviewed.add(i); else g.reviewed.delete(i); renderGuide(g); };
     const n = document.createElement('span'); n.className='n'; n.textContent = String(i+1).padStart(2,'0');
     const t = document.createElement('span'); t.className='gt'; t.textContent = s.title;
     row.appendChild(chk); row.appendChild(n); row.appendChild(t);
-    row.onclick = function(){ guideStepSel = i; renderGuide(); };
+    row.onclick = function(){ g.stepSel = i; renderGuide(g); };
     box.appendChild(row);
   });
-  $("guideprog").textContent = guideReviewed.size + ' / ' + guideData.steps.length + ' revisados';
-  renderStep(guideStepSel);
+  $("guideprog").textContent = g.reviewed.size + ' / ' + g.data.steps.length + ' revisados';
+  renderStep(g, g.stepSel);
 }
-function renderStep(i){
-  const s = guideData && guideData.steps[i]; if(!s) return;
+
+function renderStep(g, i){
+  const s = g.data && g.data.steps[i]; if(!s) return;
   const v = $("guidedetail"); v.innerHTML = '';
   const gd = document.createElement('div'); gd.className='gd';
   const h = document.createElement('h4'); h.textContent = (i+1) + '. ' + s.title;
@@ -870,7 +891,7 @@ function renderStep(i){
   gd.appendChild(h); gd.appendChild(rat);
   // Los cambios del paso, INLINE: por archivo, su parche coloreado (del diff).
   (s.files || []).forEach(function(p){
-    const f = guideDiffMap[p];
+    const f = g.diffMap[p];
     const block = document.createElement('div'); block.className = 'gfblock';
     const hdr = document.createElement('div'); hdr.className = 'gfhdr';
     hdr.innerHTML = '<span class="pth">' + esc(p) + '</span>'
@@ -952,7 +973,8 @@ function renderRow(s){
   const stCls = (s.live && s.status) ? (' st-' + s.status) : '';
   // .att = necesita tu atención (terminó o preguntó) — color, no posición.
   const att = attention.has(s.id) ? ' att' : '';
-  it.className = 'sb-item' + (s.id===current ? ' active' : '') + (s.live ? '' : ' dormant') + (s.archived ? ' archived' : '') + att + stCls;
+  const gen = (guides[s.id] && guides[s.id].generating) ? ' gen' : ''; // generando la guía (client-side, sin poll)
+  it.className = 'sb-item' + (s.id===current ? ' active' : '') + (s.live ? '' : ' dormant') + (s.archived ? ' archived' : '') + att + gen + stCls;
   it.dataset.sid = s.id;
   it.onclick = function(){ selectSession(s.id); };
   // Click derecho → menú contextual de acciones del workspace (estilo cmux).
@@ -976,7 +998,9 @@ function renderRow(s){
   const meta = document.createElement('div'); meta.className='meta';
   // La branch es la identidad del workspace; el ESTADO (corriendo/esperás/dormida)
   // lo comunica el color del dot, no texto. Compartida (sin worktree) no tiene branch.
-  const where = s.branch ? '⎇ ' + esc(s.branch) : (s.isolated ? '⎇ aislada' : '· compartida');
+  const where = (guides[s.id] && guides[s.id].generating)
+    ? '⟳ generando guía…'
+    : (s.branch ? '⎇ ' + esc(s.branch) : (s.isolated ? '⎇ aislada' : '· compartida'));
   meta.innerHTML = '<span class="s">' + where + '</span>';
   if(s.live && s.clients) meta.innerHTML += ' · ' + s.clients + ' ◉';
   it.appendChild(nm); it.appendChild(meta);
