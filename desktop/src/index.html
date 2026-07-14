@@ -38,8 +38,19 @@
       <code>omega serve --port 4477</code>
     </div>
     <script>
-      // El daemon lo spawnea Rust (setup) y navega esta ventana a localhost:4477
-      // cuando responde. Si tarda demasiado, mostramos el fallback manual.
+      // El daemon lo spawnea Rust (setup con find_omega). ESTA pantalla es la que
+      // navega: poll-eamos localhost:4477 indefinidamente y saltamos apenas
+      // responde. Antes dependíamos de un timer fijo de Rust (~20s) → si el daemon
+      // tardaba más, la app quedaba pegada. Ahora se auto-cura sin importar cuánto
+      // tarde el arranque. fetch no-cors: resuelve (opaco) si el server está vivo.
+      var DAEMON = "http://localhost:4477";
+      function poll() {
+        fetch(DAEMON + "/sessions", { mode: "no-cors" })
+          .then(function () { window.location.href = DAEMON; })
+          .catch(function () { setTimeout(poll, 500); });
+      }
+      poll();
+      // Fallback manual solo si tras 9s todavía no saltó.
       setTimeout(function () { document.getElementById("hint").classList.add("show"); }, 9000);
     </script>
   </body>

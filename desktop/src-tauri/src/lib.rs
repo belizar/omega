@@ -8,6 +8,31 @@ fn port_open(port: u16) -> bool {
     std::net::TcpStream::connect(("127.0.0.1", port)).is_ok()
 }
 
+/// Encuentra el binario `omega`. Lanzada desde Finder, la app hereda un PATH
+/// mínimo (/usr/bin:/bin:…) SIN /opt/homebrew/bin → `Command::new("omega")`
+/// fallaría. Buscamos en ubicaciones conocidas; si nada, caemos al PATH (que sí
+/// tiene omega cuando la app se lanza desde una terminal).
+fn find_omega() -> String {
+    if let Ok(p) = std::env::var("OMEGA_BIN") {
+        if !p.is_empty() {
+            return p;
+        }
+    }
+    let home = std::env::var("HOME").unwrap_or_default();
+    let candidates = [
+        "/opt/homebrew/bin/omega".to_string(),
+        "/usr/local/bin/omega".to_string(),
+        format!("{home}/.local/bin/omega"),
+        format!("{home}/.npm-global/bin/omega"),
+    ];
+    for c in candidates {
+        if std::path::Path::new(&c).exists() {
+            return c;
+        }
+    }
+    "omega".to_string()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -18,11 +43,12 @@ pub fn run() {
             // ventana): `omega serve stop` lo baja. Si ya hay uno (lo levantaste
             // vos), nos enganchamos a ese.
             if !port_open(PORT) {
-                if let Err(e) = Command::new("omega")
+                let bin = find_omega();
+                if let Err(e) = Command::new(&bin)
                     .args(["serve", "--port", &PORT.to_string()])
                     .spawn()
                 {
-                    eprintln!("omega desktop: no se pudo spawnear el daemon: {e}");
+                    eprintln!("omega desktop: no se pudo spawnear el daemon ({bin}): {e}");
                 }
             }
 
