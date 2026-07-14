@@ -1,5 +1,7 @@
 import { execFile } from "child_process";
+import { readFileSync } from "fs";
 import { createServer, IncomingMessage, ServerResponse } from "http";
+import { createRequire } from "module";
 import { Duplex } from "stream";
 import { promisify } from "util";
 import { WebSocket, WebSocketServer } from "ws";
@@ -17,6 +19,21 @@ import { TerminalManager } from "./terminal-manager.js";
 import type { FrontendMode } from "../modes/mode.js";
 
 const execFileAsync = promisify(execFile);
+
+/** Resolvés relativo a ESTE módulo (no al cwd, que es el workspace) → encuentra
+ *  el node_modules de omega ande corra el daemon. */
+const requireFromHere = createRequire(import.meta.url);
+
+/**
+ * Assets de xterm servidos por el DAEMON (no CDN). Para funcionalidad interactiva
+ * core como el terminal, depender de jsdelivr en runtime es frágil (CDN caído,
+ * offline, red que lo bloquea) → sin terminal. Los servimos local desde
+ * node_modules; mermaid/hljs siguen en CDN porque degradan a texto plano. */
+const VENDOR: Record<string, { pkg: string; type: string }> = {
+  "/vendor/xterm.js": { pkg: "@xterm/xterm/lib/xterm.js", type: "application/javascript; charset=utf-8" },
+  "/vendor/xterm.css": { pkg: "@xterm/xterm/css/xterm.css", type: "text/css; charset=utf-8" },
+  "/vendor/addon-fit.js": { pkg: "@xterm/addon-fit/lib/addon-fit.js", type: "application/javascript; charset=utf-8" },
+};
 
 /** Lo que recibe cada handler de ruta: request, response, query y —si la ruta lo
  *  pide— la sesión ya resuelta. */
@@ -60,6 +77,8 @@ export class ServeMode implements FrontendMode {
   #terminals = new TerminalManager();
   /** WS server sin listener propio: engancha el `upgrade` del server http. */
   #wss = new WebSocketServer({ noServer: true });
+  /** Assets de xterm leídos una vez y cacheados en memoria. */
+  #vendorCache = new Map<string, Buffer>();
 
   constructor(core: CoreServices, port: number) {
     this.#core = core;
@@ -165,6 +184,9 @@ export class ServeMode implements FrontendMode {
   #buildRoutes(m: SessionManager): Route[] {
     return [
       { method: "GET", path: "/", handler: ({ res }) => this.#serveClient(res) },
+      { method: "GET", path: "/vendor/xterm.js", handler: ({ res }) => this.#serveVendor(res, "/vendor/xterm.js") },
+      { method: "GET", path: "/vendor/xterm.css", handler: ({ res }) => this.#serveVendor(res, "/vendor/xterm.css") },
+      { method: "GET", path: "/vendor/addon-fit.js", handler: ({ res }) => this.#serveVendor(res, "/vendor/addon-fit.js") },
       { method: "GET", path: "/sessions", handler: ({ res }) =>
           this.#json(res, 200, { sessions: m.listAll(), default: this.#defaultId }) },
       { method: "POST", path: "/sessions", handler: (c) => this.#createSession(c, m) },
@@ -315,6 +337,24 @@ export class ServeMode implements FrontendMode {
   #serveClient(res: ServerResponse): void {
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     res.end(WEB_CLIENT_HTML);
+  }
+
+  /** Sirve un asset de xterm desde node_modules (leído una vez, cacheado). */
+  #serveVendor(res: ServerResponse, path: string): void {
+    const spec = VENDOR[path];
+    if (!spec) return void res.writeHead(404).end();
+    try {
+      let buf = this.#vendorCache.get(path);
+      if (!buf) {
+        buf = readFileSync(requireFromHere.resolve(spec.pkg));
+        this.#vendorCache.set(path, buf);
+      }
+      res.writeHead(200, { "Content-Type": spec.type, "Cache-Control": "public, max-age=86400" });
+      res.end(buf);
+    } catch (err) {
+      logger.error("vendor asset no resuelto", { path, err: String(err) });
+      res.writeHead(404).end();
+    }
   }
 
   async #createSession({ req, res }: RouteCtx, m: SessionManager): Promise<void> {
