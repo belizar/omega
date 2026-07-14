@@ -1,6 +1,8 @@
 import { execFile } from "child_process";
 import { createServer, IncomingMessage, ServerResponse } from "http";
+import { Duplex } from "stream";
 import { promisify } from "util";
+import { WebSocket, WebSocketServer } from "ws";
 import { CoreServices } from "../../core.js";
 import { logger } from "../../logger.js";
 import { CreateSessionOpts, SessionHandle, SessionManager, SessionMode } from "./session-manager.js";
@@ -11,6 +13,7 @@ import { HookRunner } from "../../hooks.js";
 import { computeDiff } from "../workspace/diff.js";
 import { listDir, readFileContent } from "../workspace/files.js";
 import { generateReview } from "../workspace/review.js";
+import { TerminalManager } from "./terminal-manager.js";
 import type { FrontendMode } from "../modes/mode.js";
 
 const execFileAsync = promisify(execFile);
@@ -53,6 +56,10 @@ export class ServeMode implements FrontendMode {
   #defaultId = "";
   #baseDir = "";
   #routes: Route[] = [];
+  /** PTYs interactivos por sesión (tab Terminal). Persistentes tipo tmux. */
+  #terminals = new TerminalManager();
+  /** WS server sin listener propio: engancha el `upgrade` del server http. */
+  #wss = new WebSocketServer({ noServer: true });
 
   constructor(core: CoreServices, port: number) {
     this.#core = core;
@@ -101,6 +108,11 @@ export class ServeMode implements FrontendMode {
       });
     });
 
+    // WebSocket para la tab Terminal: SSE+POST no sirve (cada tecla por POST
+    // metería latencia). El PTY lo spawnea el DAEMON en el cwd del workspace y se
+    // streamea bidireccional. Enganchamos el `upgrade` del mismo server http.
+    server.on("upgrade", (req, socket, head) => this.#handleUpgrade(req, socket, head));
+
     // 127.0.0.1 a propósito: NO 0.0.0.0. El agente corre bash/edit.
     await new Promise<void>((resolve) => {
       server.listen(this.#port, "127.0.0.1", () => resolve());
@@ -133,6 +145,7 @@ export class ServeMode implements FrontendMode {
     const shutdown = async (): Promise<void> => {
       logger.info("serve shutdown");
       clearDaemonInfo(); // borramos el registro: ya no hay daemon que encontrar.
+      this.#terminals.killAll(); // no dejar shells huérfanas
       await manager.disposeAll();
       server.close();
       process.exit(0);
@@ -157,6 +170,9 @@ export class ServeMode implements FrontendMode {
       { method: "POST", path: "/sessions", handler: (c) => this.#createSession(c, m) },
       { method: "DELETE", path: "/sessions", handler: async ({ res, sessionId }) => {
           // Dormir (detach): para el loop, NO destruye nada. Cerrar ≠ borrar.
+          // El PTY sí se mata: es proceso vivo, no estado rehidratable (tmux-like
+          // pero atado a la sesión — al cerrarla, la shell se va).
+          this.#terminals.kill(sessionId);
           await m.detach(sessionId);
           res.writeHead(204).end();
         } },
@@ -381,6 +397,59 @@ export class ServeMode implements FrontendMode {
     } catch {
       res.writeHead(400).end();
     }
+  }
+
+  // ── Terminal (WebSocket) ────────────────────────────────────────────
+
+  /** Handshake WS de la tab Terminal: `GET /terminal?session=<id>` con upgrade.
+   *  Resuelve el cwd sin revivir (anda para vivas y dormidas); si no existe,
+   *  cortamos el socket. El PTY se crea/reusa en el puente. */
+  #handleUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer): void {
+    const url = new URL(req.url ?? "/", "http://localhost");
+    if (url.pathname !== "/terminal") {
+      socket.destroy();
+      return;
+    }
+    const sessionId = url.searchParams.get("session") ?? this.#defaultId;
+    const cwd = this.#manager.cwdOf(sessionId);
+    if (!cwd) {
+      socket.destroy();
+      return;
+    }
+    this.#wss.handleUpgrade(req, socket, head, (ws) => this.#bridgeTerminal(ws, sessionId, cwd));
+  }
+
+  /** Puente WS ⇄ PTY. Al conectar: replay del scrollback (reconexión tipo tmux).
+   *  Bidireccional: onData del PTY → WS; mensajes del cliente → write/resize. El
+   *  cierre del WS NO mata el PTY (persistente) — solo baja el refcount. */
+  #bridgeTerminal(ws: WebSocket, sessionId: string, cwd: string): void {
+    const term = this.#terminals.getOrCreate(sessionId, cwd);
+    this.#terminals.attach(sessionId);
+
+    // Replay: el cliente ve dónde quedó (su neovim, sus logs) al reconectar.
+    if (term.replay) ws.send(JSON.stringify({ t: "data", d: term.replay }));
+
+    const offData = term.onData((d) => {
+      if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ t: "data", d }));
+    });
+    const offExit = term.onExit(() => {
+      try { ws.close(); } catch { /* ya cerrado */ }
+    });
+
+    ws.on("message", (raw) => {
+      let msg: { t?: string; d?: string; cols?: number; rows?: number };
+      try { msg = JSON.parse(raw.toString()); } catch { return; }
+      if (msg.t === "data" && typeof msg.d === "string") term.write(msg.d);
+      else if (msg.t === "resize" && typeof msg.cols === "number" && typeof msg.rows === "number") {
+        term.resize(msg.cols, msg.rows);
+      }
+    });
+
+    ws.on("close", () => {
+      offData();
+      offExit();
+      this.#terminals.detach(sessionId);
+    });
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────

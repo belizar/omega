@@ -14,7 +14,8 @@
     "dev": "node --watch src/index.ts",
     "test": "vitest",
     "test:ui": "vitest --ui",
-    "test:coverage": "vitest --coverage"
+    "test:coverage": "vitest --coverage",
+    "postinstall": "node scripts/fix-node-pty.mjs"
   },
   "keywords": [],
   "author": "",
@@ -23,11 +24,14 @@
     "@faker-js/faker": "^10.4.0",
     "@types/dotenv": "^6.1.1",
     "@types/node": "^25.9.2",
+    "@types/ws": "^8.18.1",
     "@vitest/ui": "^4.1.8",
     "vitest": "^4.1.8"
   },
   "dependencies": {
     "dotenv": "^17.4.2",
-    "typescript": "^6.0.3"
+    "node-pty": "^1.1.0",
+    "typescript": "^6.0.3",
+    "ws": "^8.21.0"
   }
 }
