@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { createServer, Server } from "http";
-import { DaemonClient } from "../../frontend/daemon-client.js";
+import { DaemonClient } from "../../frontend/client/daemon-client.js";
 
 /** Un daemon de mentira: responde el contrato mínimo para probar el cliente. */
 function mockDaemon(): Promise<{ server: Server; port: number; got: any[] }> {

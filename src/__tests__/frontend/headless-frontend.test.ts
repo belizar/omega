@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { HeadlessFrontend } from "../../frontend/headless-frontend.js";
-import { TurnMetrics } from "../../frontend/frontend.js";
+import { HeadlessFrontend } from "../../frontend/frontends/headless-frontend.js";
+import { TurnMetrics } from "../../frontend/frontends/frontend.js";
 
 function makeFront(format: "json" | "text" = "json", prompt = "hacé algo") {
   const out: string[] = [];

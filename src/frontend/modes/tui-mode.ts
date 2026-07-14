@@ -1,23 +1,23 @@
-import { Context } from "../app-context.js";
-import { loadCustomCommands } from "../commands/custom.js";
-import { modalCommandsMap } from "../commands/index.js";
-import { CoreServices } from "../core.js";
-import { logger } from "../logger.js";
-import { Message } from "../message.js";
-import { TurnRunner } from "../turn-runner.js";
-import { preprocessImages, cleanupTurnTemps } from "../tools/vision-ask.js";
+import { Context } from "../../app-context.js";
+import { loadCustomCommands } from "../../commands/custom.js";
+import { modalCommandsMap } from "../../commands/index.js";
+import { CoreServices } from "../../core.js";
+import { logger } from "../../logger.js";
+import { Message } from "../../message.js";
+import { TurnRunner } from "../../turn-runner.js";
+import { preprocessImages, cleanupTurnTemps } from "../../tools/vision-ask.js";
 import {
   DisplayAssistantText,
   DisplayToolCall,
   DisplayToolResult,
-} from "../tui/components/display-text.js";
-import { LineEditor } from "../tui/components/line-editor.js";
-import { Spinner } from "../tui/components/spinner.js";
-import { expandFileMentions } from "../tui/file-mentions.js";
-import { collectHeroInfo } from "../tui/hero.js";
-import { AnsiRenderer } from "../tui/markdown/ansi-renderer.js";
-import { Screen } from "../tui/screen.js";
-import { TUIFrontend } from "./tui-frontend.js";
+} from "../../tui/components/display-text.js";
+import { LineEditor } from "../../tui/components/line-editor.js";
+import { Spinner } from "../../tui/components/spinner.js";
+import { expandFileMentions } from "../../tui/file-mentions.js";
+import { collectHeroInfo } from "../../tui/hero.js";
+import { AnsiRenderer } from "../../tui/markdown/ansi-renderer.js";
+import { Screen } from "../../tui/screen.js";
+import { TUIFrontend } from "../frontends/tui-frontend.js";
 import type { FrontendMode } from "./mode.js";
 
 /**
@@ -168,7 +168,7 @@ export class TuiMode implements FrontendMode {
           // Las imágenes todavía están en userContent — las capturamos ahora
           const imgBlocks = userContent.filter(
             (b) => typeof b === "object" && "type" in b && b.type === "image",
-          ) as unknown as import("../message.js").ImageMessage[];
+          ) as unknown as import("../../message.js").ImageMessage[];
           visionAskTool.addImages(imgBlocks);
         }
 

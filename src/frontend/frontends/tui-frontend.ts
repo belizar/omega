@@ -1,20 +1,20 @@
-import { Context } from "../app-context.js";
-import { dispatchCommand, listCommands, modalCommandsMap } from "../commands/index.js";
-import { STATUSLINE_KEY, resolveStatusline } from "../commands/statusline.js";
-import { RunnerEvent } from "../runner.js";
-import { printHero } from "../tui/hero.js";
-import { disableRawMode, enableRawMode } from "../tui/terminal.js";
+import { Context } from "../../app-context.js";
+import { dispatchCommand, listCommands, modalCommandsMap } from "../../commands/index.js";
+import { STATUSLINE_KEY, resolveStatusline } from "../../commands/statusline.js";
+import { RunnerEvent } from "../../runner.js";
+import { printHero } from "../../tui/hero.js";
+import { disableRawMode, enableRawMode } from "../../tui/terminal.js";
 import {
   DisplayAssistantText,
   DisplayToolCall,
   DisplayToolResult,
   toolBrief,
-} from "../tui/components/display-text.js";
-import { LineEditor } from "../tui/components/line-editor.js";
-import { Prompt } from "../tui/components/prompt.js";
-import { Spinner } from "../tui/components/spinner.js";
-import { Screen } from "../tui/screen.js";
-import { dim } from "../tui/theme.js";
+} from "../../tui/components/display-text.js";
+import { LineEditor } from "../../tui/components/line-editor.js";
+import { Prompt } from "../../tui/components/prompt.js";
+import { Spinner } from "../../tui/components/spinner.js";
+import { Screen } from "../../tui/screen.js";
+import { dim } from "../../tui/theme.js";
 import { basename } from "path";
 import { Frontend, FrontendInput, PastedImage, TurnMetrics } from "./frontend.js";
 

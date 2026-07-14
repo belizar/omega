@@ -1,10 +1,10 @@
-import { Context } from "../app-context.js";
-import { CliArgs } from "../cli-args.js";
-import { CoreServices } from "../core.js";
-import { TurnRunner } from "../turn-runner.js";
-import { Screen } from "../tui/screen.js";
-import { expandFileMentions } from "../tui/file-mentions.js";
-import { HeadlessFrontend } from "./headless-frontend.js";
+import { Context } from "../../app-context.js";
+import { CliArgs } from "../../cli-args.js";
+import { CoreServices } from "../../core.js";
+import { TurnRunner } from "../../turn-runner.js";
+import { Screen } from "../../tui/screen.js";
+import { expandFileMentions } from "../../tui/file-mentions.js";
+import { HeadlessFrontend } from "../frontends/headless-frontend.js";
 import type { FrontendMode } from "./mode.js";
 
 /** Lee todo stdin hasta EOF (para `-p -` o `-p` sin valor). */

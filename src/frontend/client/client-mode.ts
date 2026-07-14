@@ -1,24 +1,24 @@
 import { basename } from "path";
-import { CoreServices } from "../core.js";
-import { logger } from "../logger.js";
-import { InputComponent } from "../tui/component.js";
-import { Key } from "../tui/decodeKey.js";
+import { CoreServices } from "../../core.js";
+import { logger } from "../../logger.js";
+import { InputComponent } from "../../tui/component.js";
+import { Key } from "../../tui/decodeKey.js";
 import {
   DisplayAssistantText,
   DisplayToolCall,
   DisplayToolResult,
   toolBrief,
-} from "../tui/components/display-text.js";
-import { LineEditor } from "../tui/components/line-editor.js";
-import { SelectList } from "../tui/components/select-list.js";
-import { Spinner } from "../tui/components/spinner.js";
-import { AnsiRenderer } from "../tui/markdown/ansi-renderer.js";
-import { Screen } from "../tui/screen.js";
-import { disableRawMode, enableRawMode } from "../tui/terminal.js";
-import { dim } from "../tui/theme.js";
+} from "../../tui/components/display-text.js";
+import { LineEditor } from "../../tui/components/line-editor.js";
+import { SelectList } from "../../tui/components/select-list.js";
+import { Spinner } from "../../tui/components/spinner.js";
+import { AnsiRenderer } from "../../tui/markdown/ansi-renderer.js";
+import { Screen } from "../../tui/screen.js";
+import { disableRawMode, enableRawMode } from "../../tui/terminal.js";
+import { dim } from "../../tui/theme.js";
 import { DaemonClient, DaemonEvent } from "./daemon-client.js";
-import { SessionInfo } from "./session-manager.js";
-import type { FrontendMode } from "./mode.js";
+import { SessionInfo } from "../daemon/session-manager.js";
+import type { FrontendMode } from "../modes/mode.js";
 
 /** Item de la lista: una sesión, "+ nueva", o "salir". */
 type ListItem =

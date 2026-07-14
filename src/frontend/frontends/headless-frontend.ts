@@ -1,4 +1,4 @@
-import { RunnerEvent } from "../runner.js";
+import { RunnerEvent } from "../../runner.js";
 import { Frontend, FrontendInput, TurnMetrics } from "./frontend.js";
 
 export type HeadlessFormat = "json" | "text";

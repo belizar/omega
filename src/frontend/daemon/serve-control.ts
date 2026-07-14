@@ -1,4 +1,4 @@
-import { DaemonClient } from "./daemon-client.js";
+import { DaemonClient } from "../client/daemon-client.js";
 import { readDaemonInfo, clearDaemonInfo, isAlive, DaemonInfo } from "./daemon-info.js";
 
 /** Uptime legible: "3m", "2h 5m", "45s". */

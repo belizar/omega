@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { homedir } from "os";
 import { dirname, join } from "path";
-import { logger } from "../logger.js";
+import { logger } from "../../logger.js";
 
 /**
  * Una referencia liviana a una sesión, viva o dormida. El índice guarda esto

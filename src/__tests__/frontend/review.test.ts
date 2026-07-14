@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { generateReview } from "../../frontend/review.js";
-import type { DiffResult } from "../../frontend/diff.js";
+import { generateReview } from "../../frontend/workspace/review.js";
+import type { DiffResult } from "../../frontend/workspace/diff.js";
 import type { LLMProvider } from "../../providers/llm-provider.js";
 
 /** Provider fake: devuelve el texto dado como respuesta del LLM. */

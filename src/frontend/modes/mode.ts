@@ -1,8 +1,8 @@
-import { CliArgs } from "../cli-args.js";
-import { ClientMode } from "./client-mode.js";
-import { CoreServices } from "../core.js";
+import { CliArgs } from "../../cli-args.js";
+import { ClientMode } from "../client/client-mode.js";
+import { CoreServices } from "../../core.js";
 import { HeadlessMode } from "./headless-mode.js";
-import { ServeMode } from "./serve-mode.js";
+import { ServeMode } from "../daemon/serve-mode.js";
 import { TuiMode } from "./tui-mode.js";
 
 /**

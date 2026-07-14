@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { TUIFrontend } from "../../frontend/tui-frontend.js";
+import { TUIFrontend } from "../../frontend/frontends/tui-frontend.js";
 import type { RunnerEvent } from "../../runner.js";
 
 /** Stubs mínimos: registran las llamadas sin tocar la terminal real. */
