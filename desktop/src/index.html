@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ω Omega</title>
+    <style>
+      :root {
+        --bg: #0b0e13; --ink: #e7ecf3; --dim: #9aa8ba; --faint: #616e7f; --tool: #34cdd8;
+        --mono: ui-monospace, "SF Mono", Menlo, "Cascadia Code", Consolas, monospace;
+      }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; margin: 0; }
+      body {
+        background: var(--bg); color: var(--ink); font-family: var(--mono);
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 18px; user-select: none;
+      }
+      .om { font-size: 64px; color: var(--tool); line-height: 1; animation: pulse 1.6s ease-in-out infinite; }
+      .nm { letter-spacing: 0.4em; text-transform: uppercase; font-size: 13px; color: var(--ink); }
+      .st { font-size: 12px; color: var(--dim); display: flex; align-items: center; gap: 9px; }
+      .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--tool); animation: blink 1s ease-in-out infinite; }
+      .hint { position: fixed; bottom: 26px; font-size: 11px; color: var(--faint); text-align: center; line-height: 1.6;
+              opacity: 0; transition: opacity .4s; max-width: 460px; padding: 0 20px; }
+      .hint.show { opacity: 1; }
+      .hint code { color: var(--dim); }
+      @keyframes pulse { 0%,100% { opacity: .55; transform: scale(.97); } 50% { opacity: 1; transform: scale(1); } }
+      @keyframes blink { 0%,100% { opacity: .25; } 50% { opacity: 1; } }
+      @media (prefers-reduced-motion: reduce) { .om, .dot { animation: none; } }
+    </style>
+  </head>
+  <body>
+    <div class="om">Ω</div>
+    <div class="nm">omega</div>
+    <div class="st"><span class="dot"></span><span>arrancando el runtime…</span></div>
+    <div class="hint" id="hint">
+      Está tardando más de lo normal. Si no arranca, corré el daemon a mano:<br />
+      <code>omega serve --port 4477</code>
+    </div>
+    <script>
+      // El daemon lo spawnea Rust (setup) y navega esta ventana a localhost:4477
+      // cuando responde. Si tarda demasiado, mostramos el fallback manual.
+      setTimeout(function () { document.getElementById("hint").classList.add("show"); }, 9000);
+    </script>
+  </body>
+</html>
