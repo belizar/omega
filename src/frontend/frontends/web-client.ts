@@ -333,9 +333,11 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
 </style>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css">
-<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
+<!-- xterm servido por el daemon (no CDN): el terminal es funcionalidad core, no
+     puede depender de jsdelivr en runtime. Ver ruta /vendor en serve-mode. -->
+<link rel="stylesheet" href="/vendor/xterm.css">
+<script src="/vendor/xterm.js"></script>
+<script src="/vendor/addon-fit.js"></script>
 <script>
   // mermaid + highlight.js como assets del browser (CDN); si no cargan, los
   // bloques quedan como código plano. Node/Omega sigue zero-dep. Los tokens de
