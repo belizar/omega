@@ -284,6 +284,19 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
   .diffview .ln.hnk { color:var(--faint); background:var(--surface); }
   .diffview .ln.ctx { color:var(--dim); }
   .diffempty { color:var(--faint); font-family:var(--mono); font-size:12px; padding:26px; text-align:center; }
+
+  /* File explorer (reusa .diffpanel/.difflayout/.difffiles/.diffview) */
+  .fscrumb { flex:1; min-width:0; font-family:var(--mono); font-size:12px; color:var(--dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .fscrumb .seg { color:var(--tool); cursor:pointer; } .fscrumb .seg:hover { text-decoration:underline; }
+  .fsrow { display:flex; align-items:center; gap:8px; padding:5px 11px; cursor:pointer; font-family:var(--mono); font-size:12px; color:var(--ink); border-left:2px solid transparent; }
+  .fsrow:hover { background:var(--surface2); }
+  .fsrow.sel { background:var(--surface2); border-left-color:var(--tool); }
+  .fsrow .ic { width:13px; text-align:center; flex:none; color:var(--faint); }
+  .fsrow.dir .ic { color:var(--tool); }
+  .fsrow .nm { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .fsrow .sz { flex:none; font-size:10px; color:var(--faint); }
+  #fileview .vhd { position:sticky; top:0; z-index:1; padding:9px 13px; background:var(--surface); border-bottom:1px solid var(--border); font-family:var(--mono); font-size:12px; color:var(--ink); }
+  #fileview pre { margin:0; padding:10px 13px; font-family:var(--mono); font-size:12px; line-height:1.5; white-space:pre; color:var(--ink); }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
@@ -314,6 +327,7 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
   <div class="tabs" id="tabs">
     <button class="tab active" data-tab="activity">Activity</button>
     <button class="tab" data-tab="diff">Diff</button>
+    <button class="tab" data-tab="files">Files</button>
   </div>
   <main id="main">
     <div class="findbar" id="findbar">
@@ -334,6 +348,16 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
       <div class="difflayout">
         <div class="difffiles" id="difffiles"></div>
         <div class="diffview" id="diffview"></div>
+      </div>
+    </div>
+    <div class="diffpanel" id="filespanel">
+      <div class="diffbar">
+        <span class="fscrumb">árbol del workspace</span>
+        <button class="rf" id="filesrefresh" type="button">↻ refrescar</button>
+      </div>
+      <div class="difflayout">
+        <div class="difffiles" id="filestree"></div>
+        <div class="diffview" id="fileview"></div>
       </div>
     </div>
   </main>
@@ -596,17 +620,20 @@ function selectSession(id, force){
   loadSessions(true); // fuerza el render para mover el highlight a la nueva
 }
 
-// ── Tabs de la sesión (Activity / Diff) ──
+// ── Tabs de la sesión (Activity / Diff / Files) ──
 let activeTab = 'activity';
 function setTab(name){
   activeTab = name;
-  const isDiff = name === 'diff';
-  $("thread").style.display = isDiff ? 'none' : '';
-  $("diffpanel").classList.toggle('on', isDiff);
-  $("form").style.display = isDiff ? 'none' : '';
-  if(isDiff) $("thinking").classList.remove('on'); // el spinner no va en la vista diff
+  const isActivity = name === 'activity';
+  // El chat (thread + input) solo en Activity; los otros paneles son full.
+  $("thread").style.display = isActivity ? '' : 'none';
+  $("form").style.display = isActivity ? '' : 'none';
+  if(!isActivity) $("thinking").classList.remove('on');
+  $("diffpanel").classList.toggle('on', name === 'diff');
+  $("filespanel").classList.toggle('on', name === 'files');
   document.querySelectorAll('#tabs .tab').forEach(function(t){ t.classList.toggle('active', t.getAttribute('data-tab')===name); });
-  if(isDiff) loadDiff();
+  if(name === 'diff') loadDiff();
+  if(name === 'files') loadFiles();
 }
 
 async function loadDiff(){
@@ -678,6 +705,75 @@ function renderPatch(patch){
     frag.appendChild(span);
   }
   return frag;
+}
+
+// ── File explorer (árbol lazy expandible, tipo VSCode) ──
+let fsTree = [];        // nodos raíz: {name, type, path, size, expanded, children}
+let fsSelected = null;  // path del archivo abierto (para el highlight)
+
+// Trae las entradas de un dir y las envuelve en nodos del árbol (children lazy).
+async function fetchDir(path){
+  const r = await fetch(q('/files') + '&path=' + encodeURIComponent(path || ''));
+  if(!r.ok) throw new Error('HTTP ' + r.status);
+  const d = await r.json();
+  return d.entries.map(function(e){
+    return { name: e.name, type: e.type, path: (path ? path + '/' : '') + e.name, size: e.size, expanded: false, children: null };
+  });
+}
+
+async function loadFiles(){
+  $("filestree").innerHTML = '<div class="diffempty">cargando…</div>';
+  try { fsTree = await fetchDir(''); renderTree(); }
+  catch(_){ $("filestree").innerHTML = '<div class="diffempty">no se pudo listar</div>'; }
+}
+
+// Expande/colapsa un dir IN-PLACE (carga sus hijos la primera vez). No pierde
+// el resto del árbol — es lo que lo hace un árbol y no navegación por columnas.
+async function toggleDir(node){
+  if(!node.expanded && node.children === null){
+    try { node.children = await fetchDir(node.path); } catch(_){ node.children = []; }
+  }
+  node.expanded = !node.expanded;
+  renderTree();
+}
+
+function renderTree(){
+  const tree = $("filestree"); tree.innerHTML = '';
+  if(!fsTree.length){ tree.innerHTML = '<div class="diffempty">(vacío)</div>'; return; }
+  const walk = function(nodes, depth){
+    nodes.forEach(function(n){
+      const row = document.createElement('div');
+      row.className = 'fsrow ' + n.type + (n.path === fsSelected ? ' sel' : '');
+      row.style.paddingLeft = (10 + depth * 15) + 'px'; // indentación por profundidad
+      const chev = n.type === 'dir' ? (n.expanded ? '▾' : '▸') : '·';
+      row.innerHTML = '<span class="ic">' + chev + '</span><span class="nm">' + esc(n.name) + '</span>'
+        + (n.type === 'file' ? '<span class="sz">' + fmtSize(n.size) + '</span>' : '');
+      row.onclick = function(){
+        if(n.type === 'dir'){ toggleDir(n); }
+        else { fsSelected = n.path; renderTree(); loadFile(n.path); }
+      };
+      tree.appendChild(row);
+      if(n.type === 'dir' && n.expanded && n.children){ walk(n.children, depth + 1); } // recursivo
+    });
+  };
+  walk(fsTree, 0);
+}
+function fmtSize(n){ return n < 1024 ? n + 'b' : n < 1048576 ? (n/1024).toFixed(0) + 'k' : (n/1048576).toFixed(1) + 'M'; }
+async function loadFile(path){
+  const view = $("fileview"); view.innerHTML = '<div class="diffempty">cargando…</div>';
+  try {
+    const r = await fetch(q('/file') + '&path=' + encodeURIComponent(path));
+    if(!r.ok){ view.innerHTML = '<div class="diffempty">no se pudo abrir (HTTP ' + r.status + ')</div>'; return; }
+    const f = await r.json();
+    view.innerHTML = '';
+    const hd = document.createElement('div'); hd.className = 'vhd'; hd.textContent = f.path + (f.truncated ? '  (truncado)' : '');
+    view.appendChild(hd);
+    const pre = document.createElement('pre'); const code = document.createElement('code');
+    code.textContent = f.binary ? '(archivo binario)' : f.content;
+    pre.appendChild(code); view.appendChild(pre);
+    if(!f.binary && window.hljs){ try { hljs.highlightElement(code); } catch(_){} }
+    view.scrollTop = 0;
+  } catch(_){ view.innerHTML = '<div class="diffempty">error de red</div>'; }
 }
 
 // ── Notificaciones globales (SSE /events/all: atención de TODAS las sesiones) ──
@@ -1021,6 +1117,7 @@ updateBellUi();
 document.querySelectorAll('#tabs .tab').forEach(function(t){ t.addEventListener('click', function(){ setTab(t.getAttribute('data-tab')); }); });
 $("diffrefresh").addEventListener('click', loadDiff);
 $("diffbase").addEventListener('keydown', function(e){ e.stopPropagation(); if(e.key==='Enter'){ e.preventDefault(); loadDiff(); } });
+$("filesrefresh").addEventListener('click', function(){ loadFiles(); });
 
 // Boot: descubrí las sesiones, elegí la default, abrí su stream + el SSE global.
 (async function(){ await loadSessions(); openES(); openGlobalES(); })();
