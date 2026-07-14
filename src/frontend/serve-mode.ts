@@ -10,6 +10,7 @@ import { WEB_CLIENT_HTML } from "./web-client.js";
 import { HookRunner } from "../hooks.js";
 import { computeDiff } from "./diff.js";
 import { listDir, readFileContent } from "./files.js";
+import { generateReview } from "./review.js";
 import type { FrontendMode } from "./mode.js";
 
 const execFileAsync = promisify(execFile);
@@ -207,6 +208,26 @@ export class ServeMode implements FrontendMode {
             this.#json(res, 200, await computeDiff(cwd, base));
           } catch (err) {
             this.#json(res, 500, { error: err instanceof Error ? err.message : String(err) });
+          }
+        } },
+      { method: "POST", path: "/review", revive: true, handler: async ({ res, q, handle }) => {
+          // Review guiado: computa el diff y le pide al LLM la guía estructurada.
+          // Una llamada enfocada (sin tools, sin loop). Puede tardar unos segundos.
+          // revive:true → tenemos el frontend vivo para marcar la sesión "ocupada"
+          // (el sidebar la muestra corriendo, y avisa al terminar).
+          const base = q.get("base")?.trim() || undefined;
+          handle!.frontend.beginBackgroundTask();
+          try {
+            const diff = await computeDiff(handle!.workspace.cwd, base);
+            const guide = await generateReview(diff, this.#core.llmProvider, {
+              model: this.#core.config.model,
+              maxTokens: this.#core.config.maxTokens,
+            });
+            this.#json(res, 200, guide);
+          } catch (err) {
+            this.#json(res, 500, { error: err instanceof Error ? err.message : String(err) });
+          } finally {
+            handle!.frontend.endBackgroundTask();
           }
         } },
       { method: "GET", path: "/files", handler: ({ res, sessionId, q }) => {
