@@ -83,7 +83,7 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
   header .dotc.on { background:var(--ok); box-shadow:0 0 8px var(--ok); }
 
   main { flex:1; overflow-y:auto; }
-  .thread { max-width:820px; margin:0 auto; padding:22px 18px 8px; display:flex; flex-direction:column; gap:14px; }
+  .thread { max-width:820px; margin:0 auto; padding:22px 18px 28px; display:flex; flex-direction:column; gap:14px; }
 
   .msg { display:flex; flex-direction:column; gap:5px; }
   .msg .who { font-family:var(--mono); font-size:10.5px; letter-spacing:0.14em; text-transform:uppercase; color:var(--faint); }
@@ -192,6 +192,13 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
                           border:1px solid var(--border); color:var(--dim); font-size:15px; cursor:pointer; border-radius:6px; padding:0; }
   .sb-item .acts .kebab:hover { color:var(--tool); border-color:var(--tool); background:color-mix(in srgb,var(--tool) 14%,transparent); }
   .sb-item.archived { opacity:.5; }
+  /* Necesita atención (terminó o te preguntó): se comunica por COLOR, no por posición */
+  .sb-item.att { background:color-mix(in srgb,var(--warn) 11%,transparent); border-color:color-mix(in srgb,var(--warn) 45%,transparent); }
+  .sb-item.att .pdot { background:var(--warn); box-shadow:0 0 7px var(--warn); }
+  .sb-item.att .nm { color:var(--ink); }
+  /* Drag-and-drop para reordenar */
+  .sb-item.dragging { opacity:.4; }
+  .sb-item.dragover { box-shadow:inset 0 2px 0 var(--tool); }
 
   /* Menú contextual (click derecho o kebab) — acciones del workspace, estilo cmux */
   .ctxmenu { position:fixed; z-index:50; min-width:212px; background:var(--surface); border:1px solid var(--border);
@@ -233,6 +240,50 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
   .findbar .fbtn:hover { border-color:var(--tool); color:var(--tool); }
   mark.find { background:color-mix(in srgb,var(--warn) 32%,transparent); color:inherit; border-radius:2px; }
   mark.find.cur { background:var(--warn); color:#1a1300; }
+
+  /* Tabs de la sesión (Activity / Diff …) — modelo Linear */
+  .tabs { display:flex; gap:2px; padding:0 14px; background:var(--surface); border-bottom:1px solid var(--border); }
+  /* reset explícito del estilo global de <button> (radius/height/weight/bg) */
+  .tab { font-family:var(--mono); font-size:12px; color:var(--dim); background:none; border:none; border-radius:0;
+         border-bottom:2px solid transparent; height:auto; padding:10px 14px; margin-bottom:-1px; font-weight:400; cursor:pointer; }
+  .tab:hover { color:var(--ink); }
+  .tab.active { color:var(--tool); border-bottom-color:var(--tool); }
+
+  /* Panel de Diff — two-pane: lista de archivos (izq) + diff del elegido (der) */
+  .diffpanel { display:none; flex-direction:column; height:calc(100vh - 96px); padding:14px 16px; }
+  .diffpanel.on { display:flex; }
+  .diffbar { display:flex; align-items:center; gap:10px; margin-bottom:12px; font-family:var(--mono); font-size:12px; color:var(--dim); flex:none; }
+  .diffbar input { flex:0 1 300px; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:7px 10px;
+                   color:var(--ink); font-family:var(--mono); font-size:12px; }
+  .diffbar input:focus { outline:none; border-color:var(--tool); box-shadow:0 0 0 3px rgba(52,205,216,.12); }
+  .diffbar .rf { background:var(--surface2); border:1px solid var(--border); color:var(--dim); border-radius:8px; padding:7px 11px; cursor:pointer; font-family:var(--mono); font-size:12px; }
+  .diffbar .rf:hover { border-color:var(--tool); color:var(--tool); }
+  .difftot { margin-left:auto; } .difftot .ad { color:var(--ok); } .difftot .de { color:var(--err); }
+
+  .difflayout { flex:1; min-height:0; display:flex; border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+  .difffiles { width:300px; flex:none; overflow-y:auto; border-right:1px solid var(--border); background:var(--surface); }
+  .diffview { flex:1; min-width:0; overflow:auto; background:var(--bg); }
+
+  .dfrow { display:flex; align-items:center; gap:8px; padding:6px 11px; cursor:pointer; font-family:var(--mono); font-size:12px;
+           border-left:2px solid transparent; }
+  .dfrow:hover { background:var(--surface2); }
+  .dfrow.sel { background:var(--surface2); border-left-color:var(--tool); }
+  .dfrow .st { font-size:11px; font-weight:700; width:14px; text-align:center; flex:none; }
+  .dfrow .st.added { color:var(--ok); } .dfrow .st.modified { color:var(--warn); }
+  .dfrow .st.deleted { color:var(--err); } .dfrow .st.renamed { color:var(--human); }
+  .dfrow .pth { flex:1; min-width:0; color:var(--dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .dfrow.sel .pth { color:var(--ink); }
+  .dfrow .cnt { flex:none; font-size:10.5px; } .dfrow .cnt .ad{color:var(--ok);} .dfrow .cnt .de{color:var(--err);}
+
+  .diffview .vhd { position:sticky; top:0; z-index:1; padding:9px 13px; background:var(--surface); border-bottom:1px solid var(--border);
+                   font-family:var(--mono); font-size:12px; color:var(--ink); }
+  .diffview pre { margin:0; font-family:var(--mono); font-size:12px; line-height:1.5; }
+  .diffview .ln { display:block; padding:0 13px; white-space:pre; min-height:1.5em; }
+  .diffview .ln.add { background:color-mix(in srgb,var(--ok) 13%,transparent); }
+  .diffview .ln.del { background:color-mix(in srgb,var(--err) 13%,transparent); }
+  .diffview .ln.hnk { color:var(--faint); background:var(--surface); }
+  .diffview .ln.ctx { color:var(--dim); }
+  .diffempty { color:var(--faint); font-family:var(--mono); font-size:12px; padding:26px; text-align:center; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
@@ -260,6 +311,10 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
     <span class="om">Ω</span><span class="nm">omega</span>
     <span class="st"><button class="hbtn" id="bell" title="activar notificaciones">🔕</button><button class="hbtn" id="reveal" title="abrir la carpeta de la sesión en el explorador">carpeta ↗</button><span class="dotc" id="dot"></span><span id="stat">conectando…</span></span>
   </header>
+  <div class="tabs" id="tabs">
+    <button class="tab active" data-tab="activity">Activity</button>
+    <button class="tab" data-tab="diff">Diff</button>
+  </div>
   <main id="main">
     <div class="findbar" id="findbar">
       <input type="text" id="findq" placeholder="buscar en la conversación…" autocomplete="off">
@@ -270,6 +325,17 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
     </div>
     <div class="thread" id="thread"></div>
     <div class="thinking" id="thinking"><span class="sp"></span><span id="thinkLbl">Pensando…</span><button type="button" class="stopbtn" id="stop">■ detener · Esc</button></div>
+    <div class="diffpanel" id="diffpanel">
+      <div class="diffbar">
+        <input type="text" id="diffbase" placeholder="cambios sin commitear · o una rama/PR: main" autocomplete="off">
+        <button class="rf" id="diffrefresh" type="button">↻ refrescar</button>
+        <span class="difftot" id="difftot"></span>
+      </div>
+      <div class="difflayout">
+        <div class="difffiles" id="difffiles"></div>
+        <div class="diffview" id="diffview"></div>
+      </div>
+    </div>
   </main>
   <form id="form">
     <div class="inbar">
@@ -525,13 +591,98 @@ function selectSession(id, force){
   current = id;
   clearAttention(id); // entrar a una sesión = ya la viste, sacala del badge
   resetThread();
+  setTab('activity'); // al entrar a una sesión, arrancás en el chat
   openES();
   loadSessions(true); // fuerza el render para mover el highlight a la nueva
 }
 
+// ── Tabs de la sesión (Activity / Diff) ──
+let activeTab = 'activity';
+function setTab(name){
+  activeTab = name;
+  const isDiff = name === 'diff';
+  $("thread").style.display = isDiff ? 'none' : '';
+  $("diffpanel").classList.toggle('on', isDiff);
+  $("form").style.display = isDiff ? 'none' : '';
+  if(isDiff) $("thinking").classList.remove('on'); // el spinner no va en la vista diff
+  document.querySelectorAll('#tabs .tab').forEach(function(t){ t.classList.toggle('active', t.getAttribute('data-tab')===name); });
+  if(isDiff) loadDiff();
+}
+
+async function loadDiff(){
+  $("difffiles").innerHTML = '<div class="diffempty">cargando…</div>';
+  $("diffview").innerHTML = '';
+  const base = $("diffbase").value.trim();
+  try {
+    const r = await fetch(q('/diff') + (base ? '&base=' + encodeURIComponent(base) : ''));
+    if(!r.ok){ $("difffiles").innerHTML = '<div class="diffempty">no se pudo cargar (HTTP ' + r.status + ')</div>'; return; }
+    renderDiff(await r.json());
+  } catch(_){ $("difffiles").innerHTML = '<div class="diffempty">error de red cargando el diff</div>'; }
+}
+
+let diffData = null;
+const STSYM = { added:'A', modified:'M', deleted:'D', renamed:'R' };
+function renderDiff(d){
+  diffData = d;
+  const files = $("difffiles"), view = $("diffview");
+  files.innerHTML = ''; view.innerHTML = '';
+  $("difftot").innerHTML = d.files.length
+    ? d.files.length + ' archivo' + (d.files.length>1?'s':'') + ' · <span class="ad">+' + d.totals.additions + '</span> <span class="de">−' + d.totals.deletions + '</span>'
+    : '';
+  if(!d.files.length){
+    files.innerHTML = '<div class="diffempty">' + (d.base ? 'sin cambios vs ' + esc(d.base) : 'sin cambios sin commitear') + '</div>';
+    return;
+  }
+  d.files.forEach(function(f, i){
+    const path = f.oldPath ? (f.oldPath + ' → ' + f.path) : f.path;
+    const row = document.createElement('div'); row.className = 'dfrow'; row.dataset.i = i; row.title = path;
+    row.innerHTML = '<span class="st ' + f.status + '">' + (STSYM[f.status]||'?') + '</span>'
+      + '<span class="pth">' + esc(path) + '</span>'
+      + '<span class="cnt"><span class="ad">+' + f.additions + '</span> <span class="de">−' + f.deletions + '</span></span>';
+    row.onclick = function(){ selectFile(i); };
+    files.appendChild(row);
+  });
+  selectFile(0); // el primer archivo abierto por default
+}
+
+function selectFile(i){
+  const f = diffData && diffData.files[i];
+  if(!f) return;
+  document.querySelectorAll('#difffiles .dfrow').forEach(function(r){ r.classList.toggle('sel', Number(r.dataset.i) === i); });
+  const view = $("diffview"); view.innerHTML = '';
+  const hd = document.createElement('div'); hd.className = 'vhd';
+  hd.textContent = (f.oldPath ? f.oldPath + ' → ' + f.path : f.path) + '  (+' + f.additions + ' −' + f.deletions + ')';
+  view.appendChild(hd);
+  const pre = document.createElement('pre');
+  if(f.binary){ const l=document.createElement('span'); l.className='ln ctx'; l.textContent='  (archivo binario)'; pre.appendChild(l); }
+  else pre.appendChild(renderPatch(f.patch));
+  view.appendChild(pre);
+  view.scrollTop = 0;
+}
+
+// Pinta un parche unificado línea por línea. Salta el header del archivo (diff
+// --git / index / --- / +++) hasta el primer hunk (@@).
+function renderPatch(patch){
+  const frag = document.createDocumentFragment();
+  let started = false;
+  for(const line of String(patch).split('\n')){
+    if(!started){ if(line.startsWith('@@')) started = true; else continue; }
+    const span = document.createElement('span');
+    let cls = 'ln ';
+    if(line.startsWith('@@')) cls += 'hnk';
+    else if(line.startsWith('+')) cls += 'add';
+    else if(line.startsWith('-')) cls += 'del';
+    else cls += 'ctx';
+    span.className = cls;
+    span.textContent = line.length ? line : ' ';
+    frag.appendChild(span);
+  }
+  return frag;
+}
+
 // ── Notificaciones globales (SSE /events/all: atención de TODAS las sesiones) ──
 function updateBadge(){ document.title = (attention.size ? '(' + attention.size + ') ' : '') + 'Ω omega'; }
-function clearAttention(id){ if(attention.delete(id)) updateBadge(); }
+function clearAttention(id){ if(attention.delete(id)){ updateBadge(); renderSessions(lastList); } }
 function updateBellUi(){
   $("bell").textContent = notifsEnabled ? '🔔' : '🔕';
   $("bell").title = notifsEnabled ? 'notificaciones activadas (click para silenciar)' : 'activar notificaciones del browser';
@@ -590,11 +741,21 @@ function projName(p){ const a = String(p||'').split('/'); return a[a.length-1] |
 function renderRow(s){
   const it = document.createElement('div');
   const stCls = (s.live && s.status) ? (' st-' + s.status) : '';
-  it.className = 'sb-item' + (s.id===current ? ' active' : '') + (s.live ? '' : ' dormant') + (s.archived ? ' archived' : '') + stCls;
+  // .att = necesita tu atención (terminó o preguntó) — color, no posición.
+  const att = attention.has(s.id) ? ' att' : '';
+  it.className = 'sb-item' + (s.id===current ? ' active' : '') + (s.live ? '' : ' dormant') + (s.archived ? ' archived' : '') + att + stCls;
   it.dataset.sid = s.id;
   it.onclick = function(){ selectSession(s.id); };
   // Click derecho → menú contextual de acciones del workspace (estilo cmux).
   it.oncontextmenu = function(e){ e.preventDefault(); e.stopPropagation(); openCtxMenu(e.clientX, e.clientY, s); };
+
+  // Drag-and-drop para reordenar (click and hold).
+  it.draggable = true;
+  it.ondragstart = function(e){ dragId = s.id; it.classList.add('dragging'); if(e.dataTransfer) e.dataTransfer.effectAllowed = 'move'; };
+  it.ondragend = function(){ it.classList.remove('dragging'); document.querySelectorAll('.sb-item.dragover').forEach(function(x){ x.classList.remove('dragover'); }); };
+  it.ondragover = function(e){ if(dragId && dragId!==s.id){ e.preventDefault(); it.classList.add('dragover'); } };
+  it.ondragleave = function(){ it.classList.remove('dragover'); };
+  it.ondrop = function(e){ e.preventDefault(); it.classList.remove('dragover'); if(dragId && dragId!==s.id) reorderSessions(dragId, s.id); dragId = null; };
 
   const nm = document.createElement('div'); nm.className='nm';
   const dot = document.createElement('span'); dot.className='pdot';
@@ -604,15 +765,11 @@ function renderRow(s){
   nm.appendChild(dot); nm.appendChild(tt);
 
   const meta = document.createElement('div'); meta.className='meta';
-  if(s.live){
-    const word = s.status==='running' ? 'corriendo…'
-               : s.status==='waiting' ? 'esperás vos'
-               : (s.isolated ? '⎇ aislada' : '· compartida');
-    meta.innerHTML = '<span class="s">' + word + '</span>';
-    if(s.clients) meta.innerHTML += ' · ' + s.clients + ' ◉';
-  } else {
-    meta.textContent = '⦿ dormida' + (s.branch ? ' · ' + s.branch : '');
-  }
+  // La branch es la identidad del workspace; el ESTADO (corriendo/esperás/dormida)
+  // lo comunica el color del dot, no texto. Compartida (sin worktree) no tiene branch.
+  const where = s.branch ? '⎇ ' + esc(s.branch) : (s.isolated ? '⎇ aislada' : '· compartida');
+  meta.innerHTML = '<span class="s">' + where + '</span>';
+  if(s.live && s.clients) meta.innerHTML += ' · ' + s.clients + ' ◉';
   it.appendChild(nm); it.appendChild(meta);
 
   // Kebab (⋯): mismo menú que el click derecho, para quien no piensa en click-derecho.
@@ -651,6 +808,19 @@ function startRename(it, nm, tt, s){
 async function archiveSession(id, archived){
   try { await fetch('/archive?session=' + encodeURIComponent(id), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({archived}) }); } catch(_){}
   loadSessions(true);
+}
+
+// Reordena: mueve la sesión arrastrada a la posición del target. Optimista
+// (re-render ya) + persiste el orden nuevo en el server; el poll ya lo trae.
+async function reorderSessions(fromId, toId){
+  const ids = lastList.map(function(s){ return s.id; });
+  const fi = ids.indexOf(fromId), ti = ids.indexOf(toId);
+  if(fi < 0 || ti < 0) return;
+  ids.splice(ti, 0, ids.splice(fi, 1)[0]);      // mover from → antes de to
+  const byId = {}; lastList.forEach(function(s){ byId[s.id] = s; });
+  lastList = ids.map(function(id){ return byId[id]; });
+  renderSessions(lastList);                       // optimista
+  try { await fetch('/reorder', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ ids }) }); } catch(_){}
 }
 
 // ── Menú contextual del workspace (click derecho o kebab ⋯) ──
@@ -698,6 +868,7 @@ $("sblist").addEventListener('scroll', closeCtxMenu);
 let sbFilter = '';       // texto del buscador de workspaces
 let showArchived = false; // toggle "ver archivadas"
 let lastList = [];        // última lista del server (para re-filtrar sin fetch)
+let dragId = null;        // id de la sesión que estás arrastrando (reorder)
 
 // ¿La sesión matchea el buscador? (título · proyecto · branch, case-insensitive)
 function matchFilter(s){
@@ -845,6 +1016,11 @@ $("bell").addEventListener('click', async function(){
   catch(_){ alert('Permiso concedido, pero el SO no mostró la notificación de prueba. Revisá Ajustes → Notificaciones → Arc en macOS.'); }
 });
 updateBellUi();
+
+// Tabs + diff.
+document.querySelectorAll('#tabs .tab').forEach(function(t){ t.addEventListener('click', function(){ setTab(t.getAttribute('data-tab')); }); });
+$("diffrefresh").addEventListener('click', loadDiff);
+$("diffbase").addEventListener('keydown', function(e){ e.stopPropagation(); if(e.key==='Enter'){ e.preventDefault(); loadDiff(); } });
 
 // Boot: descubrí las sesiones, elegí la default, abrí su stream + el SSE global.
 (async function(){ await loadSessions(); openES(); openGlobalES(); })();

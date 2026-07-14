@@ -8,6 +8,7 @@ import { DaemonClient } from "./daemon-client.js";
 import { writeDaemonInfo, clearDaemonInfo } from "./daemon-info.js";
 import { WEB_CLIENT_HTML } from "./web-client.js";
 import { HookRunner } from "../hooks.js";
+import { computeDiff } from "./diff.js";
 import type { FrontendMode } from "./mode.js";
 
 const execFileAsync = promisify(execFile);
@@ -166,6 +167,18 @@ export class ServeMode implements FrontendMode {
           if (applied === null) return this.#json(res, 400, { error: "título vacío o sesión desconocida" });
           this.#json(res, 200, { id: sessionId, title: applied });
         } },
+      { method: "POST", path: "/reorder", handler: async ({ req, res }) => {
+          // Reordenar el sidebar (drag). Body { ids: [...] } en el orden nuevo.
+          const body = await this.#readBody(req);
+          try {
+            const ids = JSON.parse(body || "{}").ids;
+            if (!Array.isArray(ids)) return void res.writeHead(400).end();
+            m.reorder(ids.filter((x: unknown): x is string => typeof x === "string"));
+            res.writeHead(204).end();
+          } catch {
+            res.writeHead(400).end();
+          }
+        } },
       { method: "POST", path: "/archive", handler: async ({ req, res, sessionId }) => {
           // Archivar/desarchivar: escondida del sidebar, NO borrada. Body {archived}.
           const body = await this.#readBody(req);
@@ -181,6 +194,19 @@ export class ServeMode implements FrontendMode {
           const fromWorktrees = await m.importExisting(this.#scanRoots());
           const orphans = await m.rescan();
           this.#json(res, 200, { imported: fromWorktrees + orphans });
+        } },
+      { method: "GET", path: "/diff", handler: async ({ res, sessionId, q }) => {
+          // Diff del workspace de la sesión. Fuente: sin `base` = cambios sin
+          // commitear (lo que tocó el agente); `?base=main` = una branch/PR.
+          // cwdOf (no revive): anda para vivas y dormidas.
+          const cwd = m.cwdOf(sessionId);
+          if (!cwd) return this.#json(res, 404, { error: `sesión ${sessionId} desconocida` });
+          const base = q.get("base")?.trim() || undefined;
+          try {
+            this.#json(res, 200, await computeDiff(cwd, base));
+          } catch (err) {
+            this.#json(res, 500, { error: err instanceof Error ? err.message : String(err) });
+          }
         } },
       { method: "POST", path: "/reveal", handler: ({ res, sessionId }) => {
           // cwdOf (no revive): anda para vivas y dormidas. Solo abre un cwd conocido.

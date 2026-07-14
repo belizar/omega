@@ -253,6 +253,33 @@ describe("SessionManager", () => {
     expect(mgr.setArchived("no-existe", true)).toBe(false);
   });
 
+  it("listAll tiene orden ESTABLE (creación) — revivir no mueve la sesión", async () => {
+    const a = await mgr.create({ title: "a" });
+    const b = await mgr.create({ title: "b" });
+    const c = await mgr.create({ title: "c" });
+    expect(mgr.listAll().map((s) => s.id)).toEqual([a.id, b.id, c.id]);
+
+    // Dormir 'a' y revivirla NO la manda arriba ni abajo: sigue primera.
+    await mgr.detach(a.id);
+    await mgr.revive(a.id);
+    expect(mgr.listAll().map((s) => s.id)).toEqual([a.id, b.id, c.id]);
+  });
+
+  it("reorder persiste el nuevo orden del sidebar", async () => {
+    const a = await mgr.create({ title: "a" });
+    const b = await mgr.create({ title: "b" });
+    const c = await mgr.create({ title: "c" });
+
+    mgr.reorder([c.id, a.id, b.id]);
+    expect(mgr.listAll().map((s) => s.id)).toEqual([c.id, a.id, b.id]);
+
+    // Sobrevive a un reinicio del manager (order en el índice en disco).
+    await mgr.disposeAll();
+    const mgr2 = newMgr();
+    expect(mgr2.listAll().map((s) => s.id)).toEqual([c.id, a.id, b.id]);
+    await mgr2.disposeAll();
+  });
+
   it("una sesión que termina el turno / pide input emite atención al hub global", async () => {
     const hub = new NotificationHub();
     const got: AttentionEvent[] = [];

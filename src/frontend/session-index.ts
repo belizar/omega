@@ -27,6 +27,9 @@ export interface IndexEntry {
   /** Archivada: sigue en el índice (revivible), pero el sidebar la esconde por
    *  default para no bloatear la UI. NO es borrar — es "sacar de la vista". */
   archived?: boolean;
+  /** Orden manual en el sidebar (drag-and-drop). Si no está, se ordena por
+   *  createdAt (orden de creación estable). Reordenar reasigna 0..N. */
+  order?: number;
   createdAt: number;
   lastActive: number;
 }
@@ -104,6 +107,20 @@ export class SessionIndex {
     if (!e) return;
     e.archived = archived;
     this.#save();
+  }
+
+  /** Reordena: asigna `order` = posición según el arreglo de ids dado (los que no
+   *  aparezcan quedan como estén). Persiste una sola vez. */
+  reorder(ids: string[]): void {
+    let changed = false;
+    ids.forEach((id, i) => {
+      const e = this.#entries.get(id);
+      if (e && e.order !== i) {
+        e.order = i;
+        changed = true;
+      }
+    });
+    if (changed) this.#save();
   }
 
   remove(id: string): void {
