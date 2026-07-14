@@ -1,6 +1,6 @@
 import { spawn } from "child_process";
 import { get, request } from "http";
-import { SessionInfo } from "./session-manager.js";
+import { SessionInfo } from "../daemon/session-manager.js";
 
 /** Un evento del daemon (contrato web estable): {type, ...}. */
 export type DaemonEvent = { type: string; [k: string]: unknown };

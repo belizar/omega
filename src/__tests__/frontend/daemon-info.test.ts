@@ -9,7 +9,7 @@ import {
   clearDaemonInfo,
   isAlive,
   DaemonInfo,
-} from "../../frontend/daemon-info.js";
+} from "../../frontend/daemon/daemon-info.js";
 
 describe("daemon-info", () => {
   let dir: string;

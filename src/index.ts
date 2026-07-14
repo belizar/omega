@@ -1,7 +1,7 @@
 import { parseCliArgs } from "./cli-args.js";
 import { buildCore } from "./core.js";
-import { createMode } from "./frontend/mode.js";
-import { serveStatus, serveStop } from "./frontend/serve-control.js";
+import { createMode } from "./frontend/modes/mode.js";
+import { serveStatus, serveStop } from "./frontend/daemon/serve-control.js";
 import { logger } from "./logger.js";
 import { disableRawMode } from "./tui/terminal.js";
 

@@ -1,7 +1,7 @@
 import { Context } from "./app-context.js";
 import { resolveAgentModel, getProfileByName } from "./config.js";
 import { CoreServices } from "./core.js";
-import { Frontend } from "./frontend/frontend.js";
+import { Frontend } from "./frontend/frontends/frontend.js";
 import { logger } from "./logger.js";
 import { Runner } from "./runner.js";
 

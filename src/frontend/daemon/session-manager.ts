@@ -2,24 +2,24 @@ import { randomUUID } from "crypto";
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "fs";
 import { homedir } from "os";
 import { dirname, join, resolve } from "path";
-import { Context } from "../app-context.js";
-import { CoreServices, createAgentStack, SharedAgentDeps } from "../core.js";
-import { logger } from "../logger.js";
-import { Session } from "../session.js";
-import { ToolRegistry } from "../tools/tool-registry.js";
-import { TurnRunner } from "../turn-runner.js";
-import { Screen } from "../tui/screen.js";
+import { Context } from "../../app-context.js";
+import { CoreServices, createAgentStack, SharedAgentDeps } from "../../core.js";
+import { logger } from "../../logger.js";
+import { Session } from "../../session.js";
+import { ToolRegistry } from "../../tools/tool-registry.js";
+import { TurnRunner } from "../../turn-runner.js";
+import { Screen } from "../../tui/screen.js";
 import {
   attachWorkspace,
   createWorkspace,
   detectBranch,
   detectProject,
   Workspace,
-} from "../workspace.js";
+} from "../../workspace.js";
 import { SessionIndex } from "./session-index.js";
-import { LifecycleEvent, SessionStatus, WebFrontend } from "./web-frontend.js";
+import { LifecycleEvent, SessionStatus, WebFrontend } from "../frontends/web-frontend.js";
 import { NotificationHub, NotifSink } from "./notification-hub.js";
-import { HookRunner } from "../hooks.js";
+import { HookRunner } from "../../hooks.js";
 
 /** Una sesión viva hospedada por el server: su hub, su workspace y su loop. */
 export interface SessionHandle {

@@ -4,7 +4,7 @@ import { mkdtemp, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { promisify } from "util";
-import { computeDiff } from "../../frontend/diff.js";
+import { computeDiff } from "../../frontend/workspace/diff.js";
 
 const execFileAsync = promisify(execFile);
 const git = (cwd: string, args: string[]) => execFileAsync("git", args, { cwd });

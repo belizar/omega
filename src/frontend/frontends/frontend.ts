@@ -1,4 +1,4 @@
-import { RunnerEvent } from "../runner.js";
+import { RunnerEvent } from "../../runner.js";
 
 /** Imagen pegada por el usuario (Ctrl+V), aún sin procesar por visión. */
 export interface PastedImage {

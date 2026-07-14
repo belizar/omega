@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { WebFrontend, historyFromMessages } from "../../frontend/web-frontend.js";
+import { WebFrontend, historyFromMessages } from "../../frontend/frontends/web-frontend.js";
 import type { RunnerEvent } from "../../runner.js";
 import type { Message } from "../../message.js";
 

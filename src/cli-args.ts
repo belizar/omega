@@ -1,4 +1,4 @@
-import { HeadlessFormat } from "./frontend/headless-frontend.js";
+import { HeadlessFormat } from "./frontend/frontends/headless-frontend.js";
 
 export interface CliArgs {
   /** true si se pidió modo headless (`-p` / `--print`). */

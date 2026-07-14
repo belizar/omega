@@ -10,7 +10,7 @@ vi.mock("../../commands/index.js", () => ({
   listCommands: vi.fn().mockReturnValue([]),
 }));
 
-import { TUIFrontend } from "../../frontend/tui-frontend.js";
+import { TUIFrontend } from "../../frontend/frontends/tui-frontend.js";
 
 function makeFront(overrides: { screen?: any; lineEditor?: any } = {}) {
   const screen = {

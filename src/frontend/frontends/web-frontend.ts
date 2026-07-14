@@ -1,5 +1,5 @@
-import { Message, ToolMessage, ToolUseMessage } from "../message.js";
-import { RunnerEvent } from "../runner.js";
+import { Message, ToolMessage, ToolUseMessage } from "../../message.js";
+import { RunnerEvent } from "../../runner.js";
 import { Frontend, FrontendInput, TurnMetrics } from "./frontend.js";
 
 /** Un ítem del historial re-emitido al cliente que se conecta (mismo vocabulario

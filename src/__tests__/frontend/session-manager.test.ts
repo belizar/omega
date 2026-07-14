@@ -4,9 +4,9 @@ import { mkdtemp, mkdir, rm, writeFile, stat, realpath } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { promisify } from "util";
-import { SessionManager } from "../../frontend/session-manager.js";
-import { SessionIndex } from "../../frontend/session-index.js";
-import { NotificationHub, AttentionEvent } from "../../frontend/notification-hub.js";
+import { SessionManager } from "../../frontend/daemon/session-manager.js";
+import { SessionIndex } from "../../frontend/daemon/session-index.js";
+import { NotificationHub, AttentionEvent } from "../../frontend/daemon/notification-hub.js";
 import type { CoreServices } from "../../core.js";
 
 const execFileAsync = promisify(execFile);

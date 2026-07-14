@@ -1,17 +1,17 @@
 import { execFile } from "child_process";
 import { createServer, IncomingMessage, ServerResponse } from "http";
 import { promisify } from "util";
-import { CoreServices } from "../core.js";
-import { logger } from "../logger.js";
+import { CoreServices } from "../../core.js";
+import { logger } from "../../logger.js";
 import { CreateSessionOpts, SessionHandle, SessionManager, SessionMode } from "./session-manager.js";
-import { DaemonClient } from "./daemon-client.js";
+import { DaemonClient } from "../client/daemon-client.js";
 import { writeDaemonInfo, clearDaemonInfo } from "./daemon-info.js";
-import { WEB_CLIENT_HTML } from "./web-client.js";
-import { HookRunner } from "../hooks.js";
-import { computeDiff } from "./diff.js";
-import { listDir, readFileContent } from "./files.js";
-import { generateReview } from "./review.js";
-import type { FrontendMode } from "./mode.js";
+import { WEB_CLIENT_HTML } from "../frontends/web-client.js";
+import { HookRunner } from "../../hooks.js";
+import { computeDiff } from "../workspace/diff.js";
+import { listDir, readFileContent } from "../workspace/files.js";
+import { generateReview } from "../workspace/review.js";
+import type { FrontendMode } from "../modes/mode.js";
 
 const execFileAsync = promisify(execFile);
 

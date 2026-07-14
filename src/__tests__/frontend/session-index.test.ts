@@ -3,7 +3,7 @@ import { mkdtemp, rm, readFile } from "fs/promises";
 import { existsSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { SessionIndex, IndexEntry } from "../../frontend/session-index.js";
+import { SessionIndex, IndexEntry } from "../../frontend/daemon/session-index.js";
 
 function entry(over: Partial<IndexEntry> = {}): IndexEntry {
   return {

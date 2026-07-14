@@ -1,6 +1,6 @@
-import { AgentConfig } from "../agent-config.js";
-import { LLMProvider } from "../providers/llm-provider.js";
-import { ToolRegistry } from "../tools/tool-registry.js";
+import { AgentConfig } from "../../agent-config.js";
+import { LLMProvider } from "../../providers/llm-provider.js";
+import { ToolRegistry } from "../../tools/tool-registry.js";
 import { DiffResult } from "./diff.js";
 
 /** Un paso del review guiado: un grupo lógico de cambios con su porqué. */
