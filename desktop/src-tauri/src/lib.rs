@@ -44,10 +44,24 @@ pub fn run() {
             // vos), nos enganchamos a ese.
             if !port_open(PORT) {
                 let bin = find_omega();
-                if let Err(e) = Command::new(&bin)
-                    .args(["serve", "--port", &PORT.to_string()])
-                    .spawn()
-                {
+                let mut cmd = Command::new(&bin);
+                cmd.args(["serve", "--port", &PORT.to_string()]);
+                // El wrapper `omega` arranca con `#!/usr/bin/env node`. Lanzada
+                // desde Finder, la app hereda un PATH mínimo (/usr/bin:/bin) SIN
+                // node → `env node` falla y el daemon nunca arranca. `node` vive
+                // junto al binario (npm/homebrew), así que prepend su dir + los
+                // paths usuales al PATH del proceso hijo.
+                let mut path = String::new();
+                if let Some(dir) = std::path::Path::new(&bin).parent() {
+                    if !dir.as_os_str().is_empty() {
+                        path.push_str(&dir.to_string_lossy());
+                        path.push(':');
+                    }
+                }
+                path.push_str("/opt/homebrew/bin:/usr/local/bin:");
+                path.push_str(&std::env::var("PATH").unwrap_or_default());
+                cmd.env("PATH", path);
+                if let Err(e) = cmd.spawn() {
                     eprintln!("omega desktop: no se pudo spawnear el daemon ({bin}): {e}");
                 }
             }
@@ -56,7 +70,7 @@ pub fn run() {
             // estaba up, quedó en blanco. Esperamos a que responda y (re)navegamos.
             let handle = app.handle().clone();
             std::thread::spawn(move || {
-                for _ in 0..80 {
+                for _ in 0..240 {
                     if port_open(PORT) {
                         if let Some(w) = handle.get_webview_window("main") {
                             let _ = w.navigate(
