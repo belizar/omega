@@ -287,6 +287,13 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
   .diffview .ln.hnk { color:var(--faint); background:var(--surface); }
   .diffview .ln.ctx { color:var(--dim); }
   .diffempty { color:var(--faint); font-family:var(--mono); font-size:12px; padding:26px; text-align:center; }
+  /* Terminal: el host de xterm llena el panel; cada sesión su propio wrap (show/hide). */
+  .termbox { flex:1; min-height:0; position:relative; border:1px solid var(--border); border-radius:10px; overflow:hidden; background:#0a0d12; }
+  .termwrap { position:absolute; inset:8px 6px 8px 12px; }
+  .termbox .xterm, .termbox .xterm-viewport, .termbox .xterm-screen { height:100% !important; }
+  .termstat { margin-left:auto; font-family:var(--mono); font-size:11px; color:var(--faint); }
+  .termstat.live { color:var(--ok); }
+  .termstat.dead { color:var(--err); }
 
   /* File explorer (reusa .diffpanel/.difflayout/.difffiles/.diffview) */
   .fscrumb { flex:1; min-width:0; font-family:var(--mono); font-size:12px; color:var(--dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -326,6 +333,9 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
 </style>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css">
+<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
 <script>
   // mermaid + highlight.js como assets del browser (CDN); si no cargan, los
   // bloques quedan como código plano. Node/Omega sigue zero-dep. Los tokens de
@@ -355,6 +365,7 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
     <button class="tab" data-tab="diff">Diff</button>
     <button class="tab" data-tab="guide">Guide</button>
     <button class="tab" data-tab="files">Files</button>
+    <button class="tab" data-tab="terminal">Terminal</button>
   </div>
   <main id="main">
     <div class="findbar" id="findbar">
@@ -397,6 +408,13 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
         <div class="difffiles" id="filestree"></div>
         <div class="diffview" id="fileview"></div>
       </div>
+    </div>
+    <div class="diffpanel" id="terminalpanel">
+      <div class="diffbar">
+        <span class="difftot">shell interactiva · en el workspace de la sesión</span>
+        <span class="termstat" id="termstat"></span>
+      </div>
+      <div class="termbox" id="termbox"></div>
     </div>
   </main>
   <form id="form">
@@ -674,11 +692,76 @@ function setTab(name){
   $("diffpanel").classList.toggle('on', name === 'diff');
   $("filespanel").classList.toggle('on', name === 'files');
   $("guidepanel").classList.toggle('on', name === 'guide');
+  $("terminalpanel").classList.toggle('on', name === 'terminal');
   document.querySelectorAll('#tabs .tab').forEach(function(t){ t.classList.toggle('active', t.getAttribute('data-tab')===name); });
   if(name === 'diff') loadDiff();
   if(name === 'files') loadFiles();
   if(name === 'guide') renderGuidePanel();
+  if(name === 'terminal') openTerminal();
 }
+
+// ── Terminal (xterm.js sobre WS) ──
+// Estado por-sesión (como guides[]): cada workspace tiene su xterm + su WS. El PTY
+// vive en el DAEMON (persistente tipo tmux); acá solo pintamos y mandamos teclas.
+const terms = {};
+const TERM_THEME = { background:'#0a0d12', foreground:'#e7ecf3', cursor:'#34cdd8', cursorAccent:'#0a0d12',
+  selectionBackground:'rgba(52,205,216,.25)', black:'#0b0e13', brightBlack:'#616e7f' };
+
+function ensureTerm(sid){
+  let t = terms[sid];
+  if(t) return t;
+  const wrap = document.createElement('div'); wrap.className = 'termwrap'; wrap.style.display = 'none';
+  $("termbox").appendChild(wrap);
+  const term = new Terminal({ fontFamily:'ui-monospace,SFMono-Regular,Menlo,monospace', fontSize:12.5,
+    theme:TERM_THEME, cursorBlink:true, scrollback:5000, allowProposedApi:true });
+  const fit = window.FitAddon ? new FitAddon.FitAddon() : null;
+  if(fit) term.loadAddon(fit);
+  term.open(wrap);
+  t = terms[sid] = { term:term, fit:fit, wrap:wrap, ws:null };
+  // teclas → PTY; resize del emulador → PTY (para el reflow de neovim, etc.)
+  term.onData(function(d){ if(t.ws && t.ws.readyState===1) t.ws.send(JSON.stringify({ t:'data', d:d })); });
+  term.onResize(function(sz){ if(t.ws && t.ws.readyState===1) t.ws.send(JSON.stringify({ t:'resize', cols:sz.cols, rows:sz.rows })); });
+  return t;
+}
+
+function connectTerm(sid, t){
+  if(t.ws && (t.ws.readyState===0 || t.ws.readyState===1)) return; // ya vivo/conectando
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const ws = new WebSocket(proto + '//' + location.host + '/terminal?session=' + encodeURIComponent(sid));
+  t.ws = ws;
+  ws.onopen = function(){ setTermStat(sid, 'live'); if(t.fit){ try { t.fit.fit(); } catch(_){} } };
+  ws.onmessage = function(ev){ try { const m = JSON.parse(ev.data); if(m.t==='data') t.term.write(m.d); } catch(_){} };
+  ws.onclose = function(){ setTermStat(sid, 'dead'); };
+  ws.onerror = function(){ setTermStat(sid, 'dead'); };
+}
+
+function setTermStat(sid, state){
+  if(current !== sid) return;
+  const el = $("termstat"); if(!el) return;
+  el.className = 'termstat ' + state;
+  el.textContent = state === 'live' ? '● conectado' : '○ desconectado';
+}
+
+function openTerminal(){
+  const box = $("termbox");
+  if(!window.Terminal){ box.innerHTML = '<div class="diffempty">xterm.js no cargó (¿CDN bloqueado?) — la terminal necesita el asset del CDN.</div>'; return; }
+  const sid = current;
+  if(!sid) return;
+  // mostrar solo el wrap de esta sesión (los demás siguen vivos, ocultos)
+  Object.keys(terms).forEach(function(k){ if(terms[k].wrap) terms[k].wrap.style.display = (k===sid) ? 'block' : 'none'; });
+  const t = ensureTerm(sid);
+  t.wrap.style.display = 'block';
+  connectTerm(sid, t);
+  setTermStat(sid, (t.ws && t.ws.readyState===1) ? 'live' : 'dead');
+  setTimeout(function(){ if(t.fit){ try { t.fit.fit(); } catch(_){} } t.term.focus(); }, 0);
+}
+
+// Reflow al redimensionar la ventana (solo la terminal visible).
+window.addEventListener('resize', function(){
+  if(activeTab !== 'terminal' || !current) return;
+  const t = terms[current];
+  if(t && t.fit){ try { t.fit.fit(); } catch(_){} }
+});
 
 async function loadDiff(){
   $("difffiles").innerHTML = '<div class="diffempty">cargando…</div>';
