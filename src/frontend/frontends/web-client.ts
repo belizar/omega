@@ -265,6 +265,12 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
   .gstale { font-family:var(--mono); font-size:11px; padding:2px 8px; border-radius:5px; }
   .gstale.ok { color:var(--ok); }
   .gstale.old { color:var(--warn); background:color-mix(in srgb,var(--warn) 14%,transparent); }
+  #guidepanel .diffbar { flex-wrap:wrap; }
+  #guidelens { flex:1 1 220px; }
+  .gtog { display:flex; align-items:center; gap:6px; font-family:var(--mono); font-size:12px; color:var(--dim); cursor:pointer; white-space:nowrap; }
+  .gtog input { accent-color:var(--tool); }
+  .gstep.gdiag { border-top:1px dashed var(--border); }
+  .gstep.gdiag .n { color:var(--tool); }
   .difftot { margin-left:auto; } .difftot .ad { color:var(--ok); } .difftot .de { color:var(--err); }
 
   .difflayout { flex:1; min-height:0; display:flex; border:1px solid var(--border); border-radius:10px; overflow:hidden; }
@@ -396,8 +402,10 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
     </div>
     <div class="diffpanel" id="guidepanel">
       <div class="diffbar">
-        <input type="text" id="guidebase" placeholder="cambios sin commitear · o una rama/PR: main" autocomplete="off">
-        <button class="rf" id="guidegen" type="button">✦ generar guía</button>
+        <input type="text" id="guidebase" placeholder="base: sin commitear · o rama/PR" autocomplete="off">
+        <input type="text" id="guidelens" placeholder="lente: ángulo (ej. DDD, web…) · vacío = general" autocomplete="off">
+        <label class="gtog" title="pedir diagramas (secuencia/dominio) — gasta más tokens"><input type="checkbox" id="guidediag">diagramas</label>
+        <button class="rf" id="guidegen" type="button">✦ generar</button>
         <select class="rf gver" id="guidever" style="display:none" title="reviews guardadas de esta sesión"></select>
         <span class="gstale" id="guidestale"></span>
         <span class="difftot" id="guideprog"></span>
@@ -971,14 +979,17 @@ async function genGuide(){
   const sid = current;
   const g = guideOf(sid);
   const base = $("guidebase").value.trim();
-  const bq = base ? '&base=' + encodeURIComponent(base) : '';
+  const lens = $("guidelens").value.trim();
+  const diag = $("guidediag").checked;
+  const baseQ = base ? '&base=' + encodeURIComponent(base) : '';
+  const reviewQ = baseQ + (lens ? '&lens=' + encodeURIComponent(lens) : '') + (diag ? '&diagrams=1' : '');
   g.generating = true; g.data = null; g.error = null;
   if(current === sid) renderGuidePanel();
   loadSessions(true); // el sidebar marca la fila "generando"
   try {
     const [gr, dr] = await Promise.all([
-      fetch(qs(sid, '/review') + bq, { method:'POST' }),
-      fetch(qs(sid, '/diff') + bq),
+      fetch(qs(sid, '/review') + reviewQ, { method:'POST' }),
+      fetch(qs(sid, '/diff') + baseQ),
     ]);
     g.diffMap = {};
     if(dr.ok){ const d = await dr.json(); (d.files||[]).forEach(function(f){ g.diffMap[f.path] = f; }); }
@@ -1014,6 +1025,14 @@ function renderGuidePanel(){
 
 function renderGuide(g){
   const box = $("guidesteps"); box.innerHTML = '';
+  const diagrams = g.data.diagrams || [];
+  if(diagrams.length){
+    const row = document.createElement('div');
+    row.className = 'gstep gdiag' + (g.stepSel === -1 ? ' sel' : '');
+    row.innerHTML = '<span class="n">◇</span><span class="gt">Diagramas (' + diagrams.length + ')</span>';
+    row.onclick = function(){ g.stepSel = -1; renderGuide(g); };
+    box.appendChild(row);
+  }
   g.data.steps.forEach(function(s, i){
     const row = document.createElement('div');
     row.className = 'gstep' + (i===g.stepSel?' sel':'') + (g.reviewed.has(i)?' done':'');
@@ -1030,7 +1049,24 @@ function renderGuide(g){
   renderStep(g, g.stepSel);
 }
 
+// Vista de diagramas (stepSel === -1): renderiza los mermaid de la review.
+function renderDiagrams(g){
+  const v = $("guidedetail"); v.innerHTML = '';
+  const gd = document.createElement('div'); gd.className = 'gd';
+  (g.data.diagrams || []).forEach(function(d){
+    const h = document.createElement('h4'); h.textContent = d.title + (d.kind ? '  ·  ' + d.kind : '');
+    gd.appendChild(h);
+    // mismo formato que los mermaid del chat → hydrateMermaid() lo compila.
+    const wrap = document.createElement('div');
+    wrap.innerHTML = '<div class="mermaid-block" data-src="' + encodeURIComponent(d.mermaid) + '"><pre class="mmsrc"><code>' + esc(d.mermaid) + '</code></pre></div>';
+    gd.appendChild(wrap.firstChild);
+  });
+  v.appendChild(gd);
+  hydrateMermaid();
+}
+
 function renderStep(g, i){
+  if(i === -1){ renderDiagrams(g); return; }
   const s = g.data && g.data.steps[i]; if(!s) return;
   const v = $("guidedetail"); v.innerHTML = '';
   const gd = document.createElement('div'); gd.className='gd';
@@ -1409,6 +1445,7 @@ $("guidever").addEventListener('change', function(){
   if(g.versions[i]){ g.data = g.versions[i]; g.reviewed = new Set(); g.stepSel = 0; renderGuide(g); }
 });
 $("guidebase").addEventListener('keydown', function(e){ e.stopPropagation(); if(e.key==='Enter'){ e.preventDefault(); genGuide(); } });
+$("guidelens").addEventListener('keydown', function(e){ e.stopPropagation(); if(e.key==='Enter'){ e.preventDefault(); genGuide(); } });
 
 // Boot: descubrí las sesiones, elegí la default, abrí su stream + el SSE global.
 (async function(){ await loadSessions(); openES(); openGlobalES(); })();
