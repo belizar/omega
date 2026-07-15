@@ -261,6 +261,10 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
   .diffbar input:focus { outline:none; border-color:var(--tool); box-shadow:0 0 0 3px color-mix(in srgb,var(--tool) 14%,transparent); }
   .diffbar .rf { background:var(--surface2); border:1px solid var(--border); color:var(--dim); border-radius:8px; padding:7px 11px; cursor:pointer; font-family:var(--mono); font-size:12px; }
   .diffbar .rf:hover { border-color:var(--tool); color:var(--tool); }
+  .diffbar .gver { max-width:220px; }
+  .gstale { font-family:var(--mono); font-size:11px; padding:2px 8px; border-radius:5px; }
+  .gstale.ok { color:var(--ok); }
+  .gstale.old { color:var(--warn); background:color-mix(in srgb,var(--warn) 14%,transparent); }
   .difftot { margin-left:auto; } .difftot .ad { color:var(--ok); } .difftot .de { color:var(--err); }
 
   .difflayout { flex:1; min-height:0; display:flex; border:1px solid var(--border); border-radius:10px; overflow:hidden; }
@@ -394,6 +398,8 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
       <div class="diffbar">
         <input type="text" id="guidebase" placeholder="cambios sin commitear · o una rama/PR: main" autocomplete="off">
         <button class="rf" id="guidegen" type="button">✦ generar guía</button>
+        <select class="rf gver" id="guidever" style="display:none" title="reviews guardadas de esta sesión"></select>
+        <span class="gstale" id="guidestale"></span>
         <span class="difftot" id="guideprog"></span>
       </div>
       <div class="difflayout">
@@ -610,7 +616,7 @@ let findMatches = [], findIdx = -1; // estado del buscador in-convo (declarado a
 // Estado de la Guide POR SESIÓN (así sobrevive al navegar y no se pierde la
 // generación en curso). id → { data, diffMap, reviewed:Set, stepSel, generating }.
 const guides = {};
-function guideOf(id){ return guides[id] || (guides[id] = { data:null, diffMap:{}, reviewed:new Set(), stepSel:0, generating:false }); }
+function guideOf(id){ return guides[id] || (guides[id] = { data:null, diffMap:{}, reviewed:new Set(), stepSel:0, generating:false, versions:[], loaded:false }); }
 let ges = null;       // EventSource GLOBAL (/events/all): atención de todas las sesiones
 let notifsEnabled = localStorage.getItem('omega.notifs') === '1';
 const attention = new Set(); // ids de sesiones que te reclaman (badge + resalte)
@@ -913,6 +919,50 @@ function qs(id, p){ return p + '?session=' + encodeURIComponent(id); }
 function showGuideEmpty(){
   $("guidesteps").innerHTML = '<div class="guideempty">Generá una guía de review.<br>El agente lee el diff y lo parte en pasos ordenados con su porqué.<br><br>Vacío = cambios sin commitear · o poné una rama/PR arriba.</div>';
   $("guidedetail").innerHTML = ''; $("guideprog").textContent = '';
+  var sel = $("guidever"); if(sel) sel.style.display = 'none';
+  var b = $("guidestale"); if(b){ b.textContent = ''; b.className = 'gstale'; }
+}
+
+// Hidrata la Guide del disco: las reviews guardadas + el diffMap. Persistencia:
+// reabrís el tab (o el browser, o reiniciás el daemon) y tu review sigue ahí, sin
+// re-generar. Si hay varias, muestra la más nueva; el selector permite cambiar.
+async function loadGuideFromDisk(sid){
+  const g = guideOf(sid);
+  try {
+    const [rr, dr] = await Promise.all([ fetch(qs(sid, '/reviews')), fetch(qs(sid, '/diff')) ]);
+    if(rr.ok){ g.versions = (await rr.json()).reviews || []; }
+    g.diffMap = {};
+    if(dr.ok){ const d = await dr.json(); (d.files||[]).forEach(function(f){ g.diffMap[f.path] = f; }); }
+    if(!g.data && g.versions.length){ g.data = g.versions[0]; g.reviewed = new Set(); g.stepSel = 0; }
+  } catch(_){ /* sin persistencia disponible: se genera on-demand */ }
+  if(current === sid) renderGuidePanel();
+}
+
+function relAgo(ts){
+  const s = Math.max(1, Math.floor((Date.now() - ts) / 1000));
+  if(s < 60) return 'recién'; if(s < 3600) return Math.floor(s/60) + 'min';
+  if(s < 86400) return Math.floor(s/3600) + 'h'; return Math.floor(s/86400) + 'd';
+}
+function verLabel(v){
+  return (v.stale ? '⚠ ' : '● ') + relAgo(v.createdAt) + ' · '
+    + (v.lens ? ('“' + v.lens.slice(0,24) + '”') : (v.base ? ('vs ' + v.base) : 'sin commitear'));
+}
+// Pinta el selector de versiones + el badge de vigencia de la review mostrada.
+function renderGuideMeta(g){
+  const sel = $("guidever"), badge = $("guidestale");
+  const cur = (g.versions||[]).find(function(v){ return g.data && v.fingerprint === g.data.fingerprint && v.lens === g.data.lens; });
+  if(!g.versions || g.versions.length <= 1){ sel.style.display = 'none'; }
+  else {
+    sel.style.display = ''; sel.innerHTML = '';
+    g.versions.forEach(function(v, i){
+      const o = document.createElement('option'); o.value = String(i); o.textContent = verLabel(v);
+      if(cur && v === cur) o.selected = true;
+      sel.appendChild(o);
+    });
+  }
+  const stale = cur ? cur.stale : false;
+  badge.className = 'gstale ' + (stale ? 'old' : 'ok');
+  badge.textContent = g.data ? (stale ? '⚠ el código cambió — regenerá' : 'vigente') : '';
 }
 
 // Genera la guía de la sesión ACTUAL. Escribe en guides[sid] aunque navegues a
@@ -933,7 +983,11 @@ async function genGuide(){
     g.diffMap = {};
     if(dr.ok){ const d = await dr.json(); (d.files||[]).forEach(function(f){ g.diffMap[f.path] = f; }); }
     if(!gr.ok){ g.error = 'no se pudo generar (HTTP ' + gr.status + ')'; }
-    else { g.data = await gr.json(); g.reviewed = new Set(); g.stepSel = 0; }
+    else {
+      g.data = await gr.json(); g.reviewed = new Set(); g.stepSel = 0; g.loaded = true;
+      // refrescá las versiones guardadas (la recién generada ya está persistida)
+      try { const rr = await fetch(qs(sid, '/reviews')); if(rr.ok){ g.versions = (await rr.json()).reviews || []; } } catch(_){}
+    }
   } catch(_){ g.error = 'error de red generando la guía'; }
   g.generating = false;
   if(current === sid) renderGuidePanel();
@@ -943,6 +997,14 @@ async function genGuide(){
 // Renderiza el panel de la Guide para la sesión ACTUAL (según su estado guardado).
 function renderGuidePanel(){
   const g = guideOf(current);
+  if(!g.loaded && !g.generating){
+    // primera vez que abrís la Guide de esta sesión: traé lo persistido del disco.
+    g.loaded = true;
+    $("guidesteps").innerHTML = '<div class="guideempty">cargando reviews guardadas…</div>';
+    $("guidedetail").innerHTML = ''; $("guideprog").textContent = '';
+    loadGuideFromDisk(current);
+    return;
+  }
   if(g.generating){ $("guidesteps").innerHTML = '<div class="guideempty">generando… el agente está leyendo el diff (unos segundos)</div>'; $("guidedetail").innerHTML=''; $("guideprog").textContent=''; return; }
   if(g.error){ $("guidesteps").innerHTML = '<div class="guideempty">' + esc(g.error) + '</div>'; $("guidedetail").innerHTML=''; return; }
   if(!g.data){ showGuideEmpty(); return; }
@@ -964,6 +1026,7 @@ function renderGuide(g){
     box.appendChild(row);
   });
   $("guideprog").textContent = g.reviewed.size + ' / ' + g.data.steps.length + ' revisados';
+  renderGuideMeta(g);
   renderStep(g, g.stepSel);
 }
 
@@ -1341,6 +1404,10 @@ $("diffrefresh").addEventListener('click', loadDiff);
 $("diffbase").addEventListener('keydown', function(e){ e.stopPropagation(); if(e.key==='Enter'){ e.preventDefault(); loadDiff(); } });
 $("filesrefresh").addEventListener('click', function(){ loadFiles(); });
 $("guidegen").addEventListener('click', genGuide);
+$("guidever").addEventListener('change', function(){
+  const g = guideOf(current); const i = parseInt(this.value, 10);
+  if(g.versions[i]){ g.data = g.versions[i]; g.reviewed = new Set(); g.stepSel = 0; renderGuide(g); }
+});
 $("guidebase").addEventListener('keydown', function(e){ e.stopPropagation(); if(e.key==='Enter'){ e.preventDefault(); genGuide(); } });
 
 // Boot: descubrí las sesiones, elegí la default, abrí su stream + el SSE global.

@@ -15,6 +15,7 @@ import { HookRunner } from "../../hooks.js";
 import { computeDiff } from "../workspace/diff.js";
 import { listDir, readFileContent } from "../workspace/files.js";
 import { generateReview } from "../workspace/review.js";
+import { assembleReview, fingerprintDiff, gitHeadSha, listReviews, saveReview } from "../workspace/review-store.js";
 import { TerminalManager } from "./terminal-manager.js";
 import type { FrontendMode } from "../modes/mode.js";
 
@@ -254,18 +255,46 @@ export class ServeMode implements FrontendMode {
           // revive:true → tenemos el frontend vivo para marcar la sesión "ocupada"
           // (el sidebar la muestra corriendo, y avisa al terminar).
           const base = q.get("base")?.trim() || undefined;
+          const lens = q.get("lens")?.trim() || ""; // fase 2 (hoy siempre general)
+          const cwd = handle!.workspace.cwd;
           handle!.frontend.beginBackgroundTask();
           try {
-            const diff = await computeDiff(handle!.workspace.cwd, base);
-            const guide = await generateReview(diff, this.#core.llmProvider, {
+            const diff = await computeDiff(cwd, base);
+            const content = await generateReview(diff, this.#core.llmProvider, {
               model: this.#core.config.model,
               maxTokens: this.#core.config.maxTokens,
             });
-            this.#json(res, 200, guide);
+            const review = assembleReview(content, {
+              base: diff.base,
+              headSha: await gitHeadSha(cwd),
+              fingerprint: fingerprintDiff(diff),
+              lens,
+              createdAt: Date.now(),
+            });
+            if (diff.files.length > 0) saveReview(cwd, review); // no persistas "sin cambios"
+            this.#json(res, 200, review);
           } catch (err) {
             this.#json(res, 500, { error: err instanceof Error ? err.message : String(err) });
           } finally {
             handle!.frontend.endBackgroundTask();
+          }
+        } },
+      { method: "GET", path: "/reviews", handler: async ({ res, sessionId }) => {
+          // Reviews guardadas de la sesión + un flag `stale` por cada una: comparo
+          // su fingerprint con el del diff ACTUAL (por base) → sabés si sigue
+          // vigente o si el código cambió desde que la generaste. cwdOf: viva o dormida.
+          const cwd = m.cwdOf(sessionId);
+          if (!cwd) return this.#json(res, 404, { error: `sesión ${sessionId} desconocida` });
+          try {
+            const reviews = listReviews(cwd);
+            const current = new Map<string, string>();
+            for (const b of new Set(reviews.map((r) => r.base ?? ""))) {
+              current.set(b, fingerprintDiff(await computeDiff(cwd, b || undefined)));
+            }
+            const items = reviews.map((r) => ({ ...r, stale: r.fingerprint !== current.get(r.base ?? "") }));
+            this.#json(res, 200, { reviews: items });
+          } catch (err) {
+            this.#json(res, 500, { error: err instanceof Error ? err.message : String(err) });
           }
         } },
       { method: "GET", path: "/files", handler: ({ res, sessionId, q }) => {

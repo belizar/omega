@@ -12,10 +12,32 @@ export interface ReviewStep {
   files: string[];
 }
 
-export interface ReviewGuide {
+/** Un diagrama emitido por la review (mermaid), renderizado en el web. Fase 3. */
+export interface ReviewDiagram {
+  title: string;
+  kind: "sequence" | "class" | "flow" | "state";
+  mermaid: string;
+}
+
+/** Lo que produce el LLM: los pasos (+ diagramas, fase 3). El anclaje a git y la
+ *  metadata de persistencia los agrega el store alrededor. */
+export interface ReviewContent {
   steps: ReviewStep[];
+  diagrams: ReviewDiagram[];
+}
+
+/** Una review persistida: el contenido + su identidad (anclada al DIFF, no al
+ *  commit) y metadata. Ver docs/design/omega-guide-review.md. */
+export interface ReviewGuide extends ReviewContent {
   /** Contra qué se revisó (null = cambios sin commitear). */
   base: string | null;
+  /** Commit actual del workspace — solo para display ("vs main, en a3f21c"). */
+  headSha: string | null;
+  /** Hash del contenido del diff → identidad + detección de staleness. */
+  fingerprint: string;
+  /** El ángulo de la review (prompt libre). "" = general. Fase 2. */
+  lens: string;
+  createdAt: number;
 }
 
 const SYSTEM = `Sos un revisor de código senior. Te dan el diff de un cambio y armás una GUÍA DE REVIEW para que un humano lo revise fácil.
@@ -82,8 +104,8 @@ export async function generateReview(
   provider: LLMProvider,
   opts: { model: string; maxTokens: number },
   signal?: AbortSignal,
-): Promise<ReviewGuide> {
-  if (diff.files.length === 0) return { steps: [], base: diff.base };
+): Promise<ReviewContent> {
+  if (diff.files.length === 0) return { steps: [], diagrams: [] };
 
   const agent = new AgentConfig({
     systemPrompt: SYSTEM,
@@ -101,5 +123,5 @@ export async function generateReview(
     .join("");
 
   const { steps } = parseGuide(text);
-  return { steps, base: diff.base };
+  return { steps, diagrams: [] };
 }
