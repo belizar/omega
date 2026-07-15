@@ -23,7 +23,7 @@ import { ToolSearchTool } from "./tools/tool-search.js";
 import { WebFetchTool } from "./tools/web-fetch.js";
 import { WriteTool } from "./tools/write.js";
 import { cleanOldVisionTemps, VisionAskTool } from "./tools/vision-ask.js";
-import { loadMcpConfig } from "./mcp/client.js";
+import { WorkspaceContext } from "./workspace-context.js";
 
 // Carga la .env del cwd (overrides por proyecto) y, como fallback, la global
 // ~/.omega/.env. dotenv NO pisa vars ya seteadas, así que el cwd gana y la
@@ -79,6 +79,11 @@ export function createAgentStack(
   cwd: string,
   deps: SharedAgentDeps,
 ): { toolRegistry: ToolRegistry; agentConfig: AgentConfig } {
+  // Contexto del workspace: resuelve root + config en capas DEL CWD DE ESTA SESIÓN
+  // (no de process.cwd). Skills/MCP/commands salen de acá, no de defaults implícitos.
+  const ctx = new WorkspaceContext(cwd);
+  const skills = ctx.loadSkills();
+
   const bashTool = new BashTool({
     classifier: deps.classifier,
     defaultTimeoutMs: deps.config.bashTimeoutMs,
@@ -96,29 +101,25 @@ export function createAgentStack(
     .registerLocal(new EditTool(cwd))
     .registerLocal(new WriteTool(cwd))
     .registerLocal(new WebFetchTool())
-    // MCP: primero el .omega del worktree de ESTA sesión (cada proyecto sus
-    // servers), con fallback al global ~/.omega. Antes se cargaba de process.cwd
-    // (el cwd del daemon), que en el modelo multi-sesión no es el del worktree →
-    // los MCPs no aparecían. Fresh worktrees que omega crea no tienen .omega
-    // (gitignoreado) → caen al global.
-    .configureMcp(loadMcpConfig(join(cwd, ".omega")) ?? loadMcpConfig(join(homedir(), ".omega")));
+    // MCP del workspace (proyecto → fallback global), vía el contexto. Antes se
+    // cargaba de process.cwd (el cwd del daemon), no del worktree → no aparecían.
+    .configureMcp(ctx.loadMcp());
 
   if (deps.visionAskTool) {
     toolRegistry.registerLocal(deps.visionAskTool);
   }
 
   const agentConfig = new AgentConfig({
-    // Re-armado con el cwd de ESTA sesión: el contexto de proyecto (git/AGENT.md) y
-    // de MCP salen del worktree, no del cwd del daemon. (deps.systemPrompt es el
-    // default del proceso.)
-    systemPrompt: buildSystemPrompt(deps.config, deps.skills, cwd),
+    // Re-armado con el cwd de ESTA sesión: el contexto de proyecto (git/AGENT.md),
+    // los skills y los MCP salen del worktree, no del cwd del daemon.
+    systemPrompt: buildSystemPrompt(deps.config, skills, ctx.cwd),
     model: deps.config.model,
     maxTokens: deps.config.maxTokens,
     toolRegistry,
   });
   agentConfig.addTool(new ToolSearchTool(toolRegistry));
-  if (deps.skills.length > 0) {
-    agentConfig.addTool(new SkillTool(deps.skills));
+  if (skills.length > 0) {
+    agentConfig.addTool(new SkillTool(skills));
   }
 
   return { toolRegistry, agentConfig };
