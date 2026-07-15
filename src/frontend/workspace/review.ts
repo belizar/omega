@@ -40,14 +40,30 @@ export interface ReviewGuide extends ReviewContent {
   createdAt: number;
 }
 
-const SYSTEM = `Sos un revisor de código senior. Te dan el diff de un cambio y armás una GUÍA DE REVIEW para que un humano lo revise fácil.
+/** Arma el system prompt según la lente (ángulo) y si se piden diagramas. */
+function buildSystem(lens: string, diagrams: boolean): string {
+  const schema = diagrams
+    ? `{"steps":[{"title":"Título corto","rationale":"Qué cambia y por qué, 1-3 oraciones.","files":["path/al/archivo"]}],"diagrams":[{"title":"Título del diagrama","kind":"sequence","mermaid":"sequenceDiagram\\n  Cliente->>API: request\\n  API-->>Cliente: response"}]}`
+    : `{"steps":[{"title":"Título corto","rationale":"Qué cambia y por qué, 1-3 oraciones.","files":["path/al/archivo","otro/path"]}]}`;
 
-Partí el cambio en PASOS lógicos ordenados por dependencia (lo que hay que entender primero va primero — ej. una migración de DB o un tipo nuevo antes del código que lo usa). Cada paso agrupa archivos relacionados y explica el QUÉ cambia y el PORQUÉ, en prosa clara y concisa.
-
-Respondé SOLO con un objeto JSON válido (sin markdown, sin texto extra, sin \`\`\`), con esta forma exacta:
-{"steps":[{"title":"Título corto del paso","rationale":"Qué cambia y por qué, 1-3 oraciones.","files":["path/al/archivo","otro/path"]}]}
-
-Reglas: los "files" deben ser paths que aparecen en el diff. No inventes archivos. Ordená los pasos deps-primero. Respondé en español.`;
+  const parts = [
+    `Sos un revisor de código senior. Te dan el diff de un cambio y armás una GUÍA DE REVIEW para que un humano lo revise fácil.`,
+    `Partí el cambio en PASOS lógicos ordenados por dependencia (lo que hay que entender primero va primero — ej. una migración de DB o un tipo nuevo antes del código que lo usa). Cada paso agrupa archivos relacionados y explica el QUÉ cambia y el PORQUÉ, en prosa clara y concisa.`,
+  ];
+  if (lens.trim()) {
+    parts.push(
+      `ENFOQUE: revisá el cambio desde esta perspectiva concreta: "${lens.trim()}". Priorizá los pasos, el porqué y (si aplica) los diagramas relevantes a ese ángulo; podés dejar de lado lo que no toca esa mirada.`,
+    );
+  }
+  if (diagrams) {
+    parts.push(
+      `DIAGRAMAS: si un diagrama ayuda a entender el flujo o el modelo, incluí uno o más en "diagrams" (sintaxis mermaid válida). Usá sequenceDiagram para flujos (request/response, orquestación), classDiagram para modelo de dominio/tipos, flowchart para lógica. Solo si aporta — no fuerces diagramas triviales.`,
+    );
+  }
+  parts.push(`Respondé SOLO con un objeto JSON válido (sin markdown, sin texto extra, sin \`\`\`), con esta forma exacta:\n${schema}`);
+  parts.push(`Reglas: los "files" deben ser paths que aparecen en el diff. No inventes archivos. Ordená los pasos deps-primero. Respondé en español.`);
+  return parts.join("\n\n");
+}
 
 /** Cuánto texto de parche mandamos (tope para no reventar el context). */
 const MAX_PATCH_CHARS = 70_000;
@@ -74,8 +90,10 @@ function serializeDiff(diff: DiffResult): string {
   return parts.join("\n\n");
 }
 
-/** Saca ```json fences y ruido alrededor del JSON, y parsea. */
-function parseGuide(text: string): { steps: ReviewStep[] } {
+const DIAGRAM_KINDS = ["sequence", "class", "flow", "state"] as const;
+
+/** Saca ```json fences y ruido alrededor del JSON, y parsea steps + diagrams. */
+function parseGuide(text: string): ReviewContent {
   let t = text.trim();
   const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (fence) t = fence[1].trim();
@@ -91,7 +109,19 @@ function parseGuide(text: string): { steps: ReviewStep[] } {
         files: Array.isArray(s?.files) ? s.files.filter((f: unknown): f is string => typeof f === "string") : [],
       }))
     : [];
-  return { steps };
+  const diagrams: ReviewDiagram[] = Array.isArray(raw?.diagrams)
+    ? raw.diagrams
+        .map((d: Record<string, unknown>): ReviewDiagram => {
+          const kind = String(d?.kind ?? "");
+          return {
+            title: String(d?.title ?? "").trim() || "Diagrama",
+            kind: (DIAGRAM_KINDS as readonly string[]).includes(kind) ? (kind as ReviewDiagram["kind"]) : "sequence",
+            mermaid: String(d?.mermaid ?? "").trim(),
+          };
+        })
+        .filter((d: ReviewDiagram) => d.mermaid.length > 0)
+    : [];
+  return { steps, diagrams };
 }
 
 /**
@@ -102,15 +132,17 @@ function parseGuide(text: string): { steps: ReviewStep[] } {
 export async function generateReview(
   diff: DiffResult,
   provider: LLMProvider,
-  opts: { model: string; maxTokens: number },
+  opts: { model: string; maxTokens: number; lens?: string; diagrams?: boolean },
   signal?: AbortSignal,
 ): Promise<ReviewContent> {
   if (diff.files.length === 0) return { steps: [], diagrams: [] };
 
+  const wantsDiagrams = opts.diagrams ?? false;
   const agent = new AgentConfig({
-    systemPrompt: SYSTEM,
+    systemPrompt: buildSystem(opts.lens ?? "", wantsDiagrams),
     model: opts.model,
-    maxTokens: Math.max(opts.maxTokens, 3000),
+    // los diagramas gastan más tokens: subimos el piso cuando se piden.
+    maxTokens: Math.max(opts.maxTokens, wantsDiagrams ? 4500 : 3000),
     toolRegistry: new ToolRegistry(), // sin tools: queremos texto/JSON, no acciones
     temperature: 0.2, // determinístico-ish: un review no es creativo
   });
@@ -122,6 +154,5 @@ export async function generateReview(
     .map((b) => b.text)
     .join("");
 
-  const { steps } = parseGuide(text);
-  return { steps, diagrams: [] };
+  return parseGuide(text);
 }

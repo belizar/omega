@@ -255,7 +255,8 @@ export class ServeMode implements FrontendMode {
           // revive:true → tenemos el frontend vivo para marcar la sesión "ocupada"
           // (el sidebar la muestra corriendo, y avisa al terminar).
           const base = q.get("base")?.trim() || undefined;
-          const lens = q.get("lens")?.trim() || ""; // fase 2 (hoy siempre general)
+          const lens = q.get("lens")?.trim() || ""; // fase 2: el ángulo (prompt libre)
+          const wantsDiagrams = q.get("diagrams") === "1"; // fase 3
           const cwd = handle!.workspace.cwd;
           handle!.frontend.beginBackgroundTask();
           try {
@@ -263,6 +264,8 @@ export class ServeMode implements FrontendMode {
             const content = await generateReview(diff, this.#core.llmProvider, {
               model: this.#core.config.model,
               maxTokens: this.#core.config.maxTokens,
+              lens,
+              diagrams: wantsDiagrams,
             });
             const review = assembleReview(content, {
               base: diff.base,

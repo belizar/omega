@@ -3,11 +3,12 @@ import { generateReview } from "../../frontend/workspace/review.js";
 import type { DiffResult } from "../../frontend/workspace/diff.js";
 import type { LLMProvider } from "../../providers/llm-provider.js";
 
-/** Provider fake: devuelve el texto dado como respuesta del LLM. */
-function fakeProvider(text: string, onCall?: () => void): LLMProvider {
+/** Provider fake: devuelve el texto dado; onCall recibe el AgentConfig (para
+ *  inspeccionar el system prompt que armó generateReview). */
+function fakeProvider(text: string, onCall?: (agent: { systemPrompt?: string }) => void): LLMProvider {
   return {
-    call: async () => {
-      onCall?.();
+    call: async (_messages: unknown, agent: { systemPrompt?: string }) => {
+      onCall?.(agent);
       return {
         content: [{ type: "text", text }],
         stop_reason: "end_turn",
@@ -55,8 +56,39 @@ describe("generateReview", () => {
     expect(g.steps[0].files).toEqual([]); // "nope" (no-array) → []
   });
 
-  it("devuelve diagrams:[] (fase 1 — los diagramas son fase 3)", async () => {
+  it("sin diagrams en el JSON → diagrams:[]", async () => {
     const g = await generateReview(oneFileDiff, fakeProvider('{"steps":[{"title":"X","rationale":"y","files":[]}]}'), OPTS);
     expect(g.diagrams).toEqual([]);
+  });
+
+  it("parsea los diagramas (kind válido + descarta los sin mermaid)", async () => {
+    const p = fakeProvider('{"steps":[],"diagrams":[{"title":"Flujo","kind":"sequence","mermaid":"sequenceDiagram\\n A->>B: x"},{"title":"vacío","kind":"class","mermaid":""}]}');
+    const g = await generateReview(oneFileDiff, p, OPTS);
+    expect(g.diagrams).toHaveLength(1); // el vacío se descarta
+    expect(g.diagrams[0]).toMatchObject({ title: "Flujo", kind: "sequence" });
+    expect(g.diagrams[0].mermaid).toContain("sequenceDiagram");
+  });
+
+  it("kind desconocido → cae a 'sequence'", async () => {
+    const p = fakeProvider('{"steps":[],"diagrams":[{"title":"D","kind":"pizza","mermaid":"graph TD; A-->B"}]}');
+    const g = await generateReview(oneFileDiff, p, OPTS);
+    expect(g.diagrams[0].kind).toBe("sequence");
+  });
+
+  it("la lente se inyecta en el system prompt", async () => {
+    let sys = "";
+    const p = fakeProvider('{"steps":[]}', (agent) => { sys = agent.systemPrompt ?? ""; });
+    await generateReview(oneFileDiff, p, { ...OPTS, lens: "desde el punto de vista DDD" });
+    expect(sys).toContain("ENFOQUE");
+    expect(sys).toContain("desde el punto de vista DDD");
+  });
+
+  it("diagrams:true agrega la instrucción de diagramas al prompt; false no", async () => {
+    let withD = "", without = "";
+    await generateReview(oneFileDiff, fakeProvider('{"steps":[]}', (a) => { withD = a.systemPrompt ?? ""; }), { ...OPTS, diagrams: true });
+    await generateReview(oneFileDiff, fakeProvider('{"steps":[]}', (a) => { without = a.systemPrompt ?? ""; }), { ...OPTS, diagrams: false });
+    expect(withD).toContain("DIAGRAMAS");
+    expect(withD).toContain("diagrams");
+    expect(without).not.toContain("DIAGRAMAS");
   });
 });
