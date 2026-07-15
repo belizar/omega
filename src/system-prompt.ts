@@ -1,5 +1,7 @@
 import { existsSync, readFileSync } from "fs";
 import { execSync } from "child_process";
+import { homedir } from "os";
+import { join } from "path";
 import { ResolvedConfig } from "./config.js";
 import { loadMcpConfig } from "./mcp/client.js";
 import { buildCabinetContext } from "./cabinet.js";
@@ -71,14 +73,15 @@ Estilo:
 - La estructura es para legibilidad, no decoración: seguí conciso, sin relleno.`;
 
 /** Contexto del proyecto: rama git, repo y presencia de AGENT.md. */
-function loadProjectContext(): string {
+function loadProjectContext(cwd: string): string {
   const parts: string[] = [];
 
-  // Git info: rama y nombre del proyecto. stderr a /dev/null: si el cwd no es un
-  // repo (ej. el daemon arrancado desde un padre bare+worktree), git escupe
-  // "fatal: not a git repository" que si no ensucia la terminal.
+  // Git info: rama y nombre del proyecto — DEL cwd de la sesión (no del cwd del
+  // daemon). stderr a ignore: si el cwd no es un repo, git escupe "fatal: not a
+  // git repository" que si no ensucia la terminal.
   try {
     const branch = execSync("git branch --show-current", {
+      cwd,
       encoding: "utf-8",
       timeout: 2000,
       stdio: ["ignore", "pipe", "ignore"],
@@ -88,6 +91,7 @@ function loadProjectContext(): string {
 
   try {
     const remote = execSync("git remote get-url origin", {
+      cwd,
       encoding: "utf-8",
       timeout: 2000,
       stdio: ["ignore", "pipe", "ignore"],
@@ -97,8 +101,8 @@ function loadProjectContext(): string {
     if (match) parts.push(`Repo: ${match[1]}`);
   } catch { /* no remote */ }
 
-  // AGENT.md si existe
-  const agentPath = "AGENT.md";
+  // AGENT.md si existe (en el worktree de la sesión)
+  const agentPath = join(cwd, "AGENT.md");
   if (existsSync(agentPath)) {
     const content = readFileSync(agentPath, "utf-8").trim();
     if (content) {
@@ -112,9 +116,11 @@ function loadProjectContext(): string {
   return `\n\n## Contexto del proyecto\n\n${parts.map(p => `- ${p}`).join("\n")}\n\n${existsSync(agentPath) ? "Leé AGENT.md con read cuando necesites contexto de reglas y convenciones. " : ""}No asumas nada sobre el proyecto sin haberlo explorado.`;
 }
 
-/** Servidores MCP configurados, para que el agente los descubra con tool_search. */
-function loadMcpContext(): string {
-  const servers = loadMcpConfig(".omega");
+/** Servidores MCP configurados, para que el agente los descubra con tool_search.
+ *  Del worktree de la sesión, con fallback al global ~/.omega (igual que el
+ *  loading real de tools en core.ts). */
+function loadMcpContext(cwd: string): string {
+  const servers = loadMcpConfig(join(cwd, ".omega")) ?? loadMcpConfig(join(homedir(), ".omega"));
   if (!servers || Object.keys(servers).length === 0) return "";
   const names = Object.keys(servers).join(", ");
   return `\n\n## Servicios MCP disponibles\n\nTenés tools MCP configuradas para: ${names}.\nCuando el usuario mencione alguno de estos servicios, usá \`tool_search\` con el nombre del servicio para descubrir las tools disponibles y usalas directamente.`;
@@ -147,11 +153,11 @@ export function loadSkillsContext(skills: Skill[]): string {
  * Ensambla el system prompt completo: el base + los contextos dinámicos
  * (proyecto, MCP, cabinet, docs, skills). Se arma una vez al construir el core.
  */
-export function buildSystemPrompt(config: ResolvedConfig, skills: Skill[] = []): string {
+export function buildSystemPrompt(config: ResolvedConfig, skills: Skill[] = [], cwd: string = process.cwd()): string {
   return (
     SYSTEM_PROMPT +
-    loadProjectContext() +
-    loadMcpContext() +
+    loadProjectContext(cwd) +
+    loadMcpContext(cwd) +
     buildCabinetContext() +
     loadDocsContext(config.docsDir) +
     loadSkillsContext(skills)

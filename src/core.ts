@@ -96,16 +96,22 @@ export function createAgentStack(
     .registerLocal(new EditTool(cwd))
     .registerLocal(new WriteTool(cwd))
     .registerLocal(new WebFetchTool())
-    // MCP desde el .omega del server (relativo a process.cwd, no al worktree:
-    // .omega está gitignoreado y no viaja al checkout de la sesión).
-    .configureMcp(loadMcpConfig(".omega"));
+    // MCP: primero el .omega del worktree de ESTA sesión (cada proyecto sus
+    // servers), con fallback al global ~/.omega. Antes se cargaba de process.cwd
+    // (el cwd del daemon), que en el modelo multi-sesión no es el del worktree →
+    // los MCPs no aparecían. Fresh worktrees que omega crea no tienen .omega
+    // (gitignoreado) → caen al global.
+    .configureMcp(loadMcpConfig(join(cwd, ".omega")) ?? loadMcpConfig(join(homedir(), ".omega")));
 
   if (deps.visionAskTool) {
     toolRegistry.registerLocal(deps.visionAskTool);
   }
 
   const agentConfig = new AgentConfig({
-    systemPrompt: deps.systemPrompt,
+    // Re-armado con el cwd de ESTA sesión: el contexto de proyecto (git/AGENT.md) y
+    // de MCP salen del worktree, no del cwd del daemon. (deps.systemPrompt es el
+    // default del proceso.)
+    systemPrompt: buildSystemPrompt(deps.config, deps.skills, cwd),
     model: deps.config.model,
     maxTokens: deps.config.maxTokens,
     toolRegistry,
@@ -137,6 +143,8 @@ export async function buildCore(): Promise<CoreServices> {
   // name+description entran al system prompt; el body se carga con la tool `skill`.
   const skills = loadSkills();
 
+  // Prompt "default" (cwd del proceso). createAgentStack lo re-arma por-sesión con
+  // el cwd del worktree, así el contexto de proyecto/MCP es el correcto por sesión.
   const fullSystemPrompt = buildSystemPrompt(config, skills);
 
   // ── Clasificador de comandos ──────────────────────────────────────
