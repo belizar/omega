@@ -14,9 +14,9 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
   :root {
     --mono: ui-monospace,"SF Mono",Menlo,"Cascadia Code","JetBrains Mono",Consolas,monospace;
     --sans: system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
-    --bg:#0b0e13; --surface:#12171f; --surface2:#171d27; --border:#232b38;
-    --ink:#e7ecf3; --dim:#9aa8ba; --faint:#616e7f;
-    --tool:#34cdd8; --human:#6ea8ff; --output:#8b96a5; --ok:#4ec98a; --err:#f0706f; --warn:#e3b256;
+    --bg:#17181d; --surface:#1e2027; --surface2:#252831; --border:#343842;
+    --ink:#d2d3cf; --dim:#989a97; --faint:#6b6d6a;
+    --tool:#4ea9b0; --human:#6ea8ff; --output:#8b96a5; --ok:#4ec98a; --err:#f0706f; --warn:#e3b256;
   }
   * { box-sizing:border-box; }
   html,body { height:100%; margin:0; }
@@ -37,7 +37,7 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
   .sb-search { padding:8px 10px 0; }
   .sb-search input { width:100%; background:var(--bg); border:1px solid var(--border); border-radius:8px;
                      padding:6px 9px; color:var(--ink); font-family:var(--mono); font-size:11.5px; }
-  .sb-search input:focus { outline:none; border-color:var(--tool); box-shadow:0 0 0 3px rgba(52,205,216,.12); }
+  .sb-search input:focus { outline:none; border-color:var(--tool); box-shadow:0 0 0 3px color-mix(in srgb,var(--tool) 14%,transparent); }
   .sb-search input::placeholder { color:var(--faint); }
   .sb-hd .t { font-family:var(--mono); letter-spacing:0.2em; text-transform:uppercase; font-size:10.5px; color:var(--dim); }
   .sb-new { margin-left:auto; background:var(--surface2); color:var(--tool); border:1px solid var(--border);
@@ -153,9 +153,9 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
   textarea { flex:1; resize:none; background:var(--bg); color:var(--ink); border:1px solid var(--border);
              border-radius:10px; padding:11px 13px; font-family:var(--sans); font-size:15px; line-height:1.5;
              max-height:180px; }
-  textarea:focus { outline:none; border-color:var(--tool); box-shadow:0 0 0 3px rgba(52,205,216,.12); }
+  textarea:focus { outline:none; border-color:var(--tool); box-shadow:0 0 0 3px color-mix(in srgb,var(--tool) 14%,transparent); }
   textarea::placeholder { color:var(--faint); }
-  button { background:var(--tool); color:#05171a; border:none; border-radius:10px; padding:0 18px; height:44px;
+  button { background:var(--tool); color:var(--bg); border:none; border-radius:10px; padding:0 18px; height:44px;
            font-family:var(--mono); font-weight:700; font-size:14px; cursor:pointer; }
   button:disabled { opacity:.4; cursor:default; }
   .hint { max-width:820px; margin:7px auto 0; font-family:var(--mono); font-size:11px; color:var(--faint); }
@@ -175,7 +175,7 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
   .fields { display:flex; flex-direction:column; gap:9px; margin-bottom:14px; }
   .fields label { font-family:var(--mono); font-size:9.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--faint); display:block; margin-bottom:4px; }
   .fields input { width:100%; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:9px 11px; color:var(--ink); font-family:var(--mono); font-size:13px; }
-  .fields input:focus { outline:none; border-color:var(--tool); box-shadow:0 0 0 3px rgba(52,205,216,.12); }
+  .fields input:focus { outline:none; border-color:var(--tool); box-shadow:0 0 0 3px color-mix(in srgb,var(--tool) 14%,transparent); }
   .modal .acts { display:flex; gap:8px; justify-content:flex-end; }
   .modal .btn { font-family:var(--mono); font-size:12px; border-radius:8px; padding:8px 16px; cursor:pointer; border:1px solid var(--border2); background:var(--surface2); color:var(--dim); }
   .modal .btn:hover { border-color:var(--tool); }
@@ -236,7 +236,7 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
   .findbar.on { display:flex; }
   .findbar input { flex:1; max-width:340px; background:var(--bg); border:1px solid var(--border); border-radius:8px;
                    padding:6px 10px; color:var(--ink); font-family:var(--mono); font-size:13px; }
-  .findbar input:focus { outline:none; border-color:var(--tool); box-shadow:0 0 0 3px rgba(52,205,216,.12); }
+  .findbar input:focus { outline:none; border-color:var(--tool); box-shadow:0 0 0 3px color-mix(in srgb,var(--tool) 14%,transparent); }
   .findbar .fcount { font-family:var(--mono); font-size:11.5px; color:var(--dim); min-width:56px; }
   .findbar .fbtn { font-family:var(--mono); font-size:12px; color:var(--dim); background:var(--surface); border:1px solid var(--border);
                    border-radius:6px; width:28px; height:26px; cursor:pointer; }
@@ -258,7 +258,7 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
   .diffbar { display:flex; align-items:center; gap:10px; margin-bottom:12px; font-family:var(--mono); font-size:12px; color:var(--dim); flex:none; }
   .diffbar input { flex:0 1 300px; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:7px 10px;
                    color:var(--ink); font-family:var(--mono); font-size:12px; }
-  .diffbar input:focus { outline:none; border-color:var(--tool); box-shadow:0 0 0 3px rgba(52,205,216,.12); }
+  .diffbar input:focus { outline:none; border-color:var(--tool); box-shadow:0 0 0 3px color-mix(in srgb,var(--tool) 14%,transparent); }
   .diffbar .rf { background:var(--surface2); border:1px solid var(--border); color:var(--dim); border-radius:8px; padding:7px 11px; cursor:pointer; font-family:var(--mono); font-size:12px; }
   .diffbar .rf:hover { border-color:var(--tool); color:var(--tool); }
   .difftot { margin-left:auto; } .difftot .ad { color:var(--ok); } .difftot .de { color:var(--err); }
@@ -288,7 +288,7 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
   .diffview .ln.ctx { color:var(--dim); }
   .diffempty { color:var(--faint); font-family:var(--mono); font-size:12px; padding:26px; text-align:center; }
   /* Terminal: el host de xterm llena el panel; cada sesión su propio wrap (show/hide). */
-  .termbox { flex:1; min-height:0; position:relative; border:1px solid var(--border); border-radius:10px; overflow:hidden; background:#0a0d12; }
+  .termbox { flex:1; min-height:0; position:relative; border:1px solid var(--border); border-radius:10px; overflow:hidden; background:var(--bg); }
   .termwrap { position:absolute; inset:8px 6px 8px 12px; }
   .termbox .xterm, .termbox .xterm-viewport, .termbox .xterm-screen { height:100% !important; }
   .termstat { margin-left:auto; font-family:var(--mono); font-size:11px; color:var(--faint); }
@@ -706,8 +706,8 @@ function setTab(name){
 // Estado por-sesión (como guides[]): cada workspace tiene su xterm + su WS. El PTY
 // vive en el DAEMON (persistente tipo tmux); acá solo pintamos y mandamos teclas.
 const terms = {};
-const TERM_THEME = { background:'#0a0d12', foreground:'#e7ecf3', cursor:'#34cdd8', cursorAccent:'#0a0d12',
-  selectionBackground:'rgba(52,205,216,.25)', black:'#0b0e13', brightBlack:'#616e7f' };
+const TERM_THEME = { background:'#17181d', foreground:'#d2d3cf', cursor:'#4ea9b0', cursorAccent:'#17181d',
+  selectionBackground:'rgba(78,169,176,.25)', black:'#17181d', brightBlack:'#6b6d6a' };
 
 function ensureTerm(sid){
   let t = terms[sid];
