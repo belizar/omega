@@ -55,9 +55,8 @@ describe("generateReview", () => {
     expect(g.steps[0].files).toEqual([]); // "nope" (no-array) → []
   });
 
-  it("propaga el base del diff", async () => {
-    const withBase: DiffResult = { ...oneFileDiff, base: "main" };
-    const g = await generateReview(withBase, fakeProvider('{"steps":[]}'), OPTS);
-    expect(g.base).toBe("main");
+  it("devuelve diagrams:[] (fase 1 — los diagramas son fase 3)", async () => {
+    const g = await generateReview(oneFileDiff, fakeProvider('{"steps":[{"title":"X","rationale":"y","files":[]}]}'), OPTS);
+    expect(g.diagrams).toEqual([]);
   });
 });
