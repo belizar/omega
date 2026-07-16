@@ -180,6 +180,23 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
   .modal .btn { font-family:var(--mono); font-size:12px; border-radius:8px; padding:8px 16px; cursor:pointer; border:1px solid var(--border2); background:var(--surface2); color:var(--dim); }
   .modal .btn:hover { border-color:var(--tool); }
   .modal .btn.primary { background:var(--tool); color:var(--bg); border-color:var(--tool); font-weight:700; }
+  /* Modal MCP: más ancho, con editor de JSON crudo. */
+  .modal.mcpmodal { width:min(680px,94vw); }
+  .mcp-root { font-family:var(--mono); font-size:11px; color:var(--faint); margin-bottom:10px; word-break:break-all; }
+  .mcp-root b { color:var(--dim); }
+  .mcp-eff { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px; }
+  .mcp-eff:empty::before { content:"sin servers configurados"; font-family:var(--mono); font-size:11px; color:var(--faint); }
+  .mcp-chip { font-family:var(--mono); font-size:11px; padding:3px 9px; border-radius:6px; border:1px solid var(--border); color:var(--ink); display:flex; gap:6px; align-items:center; }
+  .mcp-chip .src { font-size:9px; letter-spacing:.05em; text-transform:uppercase; padding:1px 5px; border-radius:4px; }
+  .mcp-chip .src.project { background:color-mix(in srgb,var(--tool) 20%,transparent); color:var(--tool); }
+  .mcp-chip .src.global { background:var(--surface2); color:var(--faint); }
+  .mcp-scope { display:flex; gap:7px; margin-bottom:9px; }
+  .mscope { font-family:var(--mono); font-size:12px; color:var(--dim); background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:6px 12px; cursor:pointer; }
+  .mscope.sel { border-color:var(--tool); color:var(--tool); background:color-mix(in srgb,var(--tool) 10%,var(--surface2)); }
+  #mcpjson { width:100%; min-height:260px; background:var(--bg); border:1px solid var(--border); border-radius:9px; padding:11px 13px; color:var(--ink); font-family:var(--mono); font-size:12.5px; line-height:1.5; resize:vertical; white-space:pre; overflow-wrap:normal; overflow-x:auto; }
+  #mcpjson:focus { outline:none; border-color:var(--tool); box-shadow:0 0 0 3px color-mix(in srgb,var(--tool) 14%,transparent); }
+  .mcp-err { font-family:var(--mono); font-size:11px; color:var(--err); min-height:16px; margin:7px 0 4px; }
+  .mcp-err.ok { color:var(--ok); }
 
   /* Rename inline: el título del item se vuelve un input al doble-click */
   .sb-item .nm input { flex:1; min-width:0; background:var(--bg); border:1px solid var(--tool); border-radius:5px;
@@ -370,7 +387,7 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
   <div class="col">
   <header>
     <span class="om">Ω</span><span class="nm">omega</span>
-    <span class="st"><button class="hbtn" id="bell" title="activar notificaciones">🔕</button><button class="hbtn" id="reveal" title="abrir la carpeta de la sesión en el explorador">carpeta ↗</button><span class="dotc" id="dot"></span><span id="stat">conectando…</span></span>
+    <span class="st"><button class="hbtn" id="bell" title="activar notificaciones">🔕</button><button class="hbtn" id="mcpbtn" title="config MCP del proyecto">⚙ MCP</button><button class="hbtn" id="reveal" title="abrir la carpeta de la sesión en el explorador">carpeta ↗</button><span class="dotc" id="dot"></span><span id="stat">conectando…</span></span>
   </header>
   <div class="tabs" id="tabs">
     <button class="tab active" data-tab="activity">Activity</button>
@@ -462,6 +479,24 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
       <div class="acts">
         <button class="btn" id="m-cancel" type="button">cancelar</button>
         <button class="btn primary" id="m-create" type="button">crear</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-bg" id="mcpbg">
+    <div class="modal mcpmodal">
+      <h3>config MCP</h3>
+      <div class="mcp-root" id="mcproot"></div>
+      <div class="mcp-eff" id="mcpeff"></div>
+      <div class="mcp-scope" id="mcpscope">
+        <button class="mscope sel" data-scope="project" type="button">este proyecto</button>
+        <button class="mscope" data-scope="global" type="button">global (~/.omega)</button>
+      </div>
+      <textarea id="mcpjson" spellcheck="false" placeholder='{ "servers": { … } }'></textarea>
+      <div class="mcp-err" id="mcperr"></div>
+      <div class="acts">
+        <button class="btn" id="mcp-cancel" type="button">cerrar</button>
+        <button class="btn primary" id="mcp-save" type="button">guardar</button>
       </div>
     </div>
   </div>
@@ -1446,6 +1481,56 @@ $("guidever").addEventListener('change', function(){
 });
 $("guidebase").addEventListener('keydown', function(e){ e.stopPropagation(); if(e.key==='Enter'){ e.preventDefault(); genGuide(); } });
 $("guidelens").addEventListener('keydown', function(e){ e.stopPropagation(); if(e.key==='Enter'){ e.preventDefault(); genGuide(); } });
+
+// ── Config MCP (editor de JSON crudo, scope proyecto/global) ──
+var mcpData = null; var mcpScope = 'project';
+var MCP_TEMPLATE = '{\n  "servers": {\n    "ejemplo": {\n      "command": "npx",\n      "args": ["-y", "algun-mcp-server"],\n      "env": {}\n    }\n  }\n}\n';
+function renderMcpEff(){
+  var eff = $("mcpeff"); eff.innerHTML = '';
+  Object.keys((mcpData && mcpData.effective) || {}).forEach(function(name){
+    var src = mcpData.effective[name].source;
+    var c = document.createElement('span'); c.className = 'mcp-chip';
+    c.innerHTML = esc(name) + '<span class="src ' + src + '">' + src + '</span>';
+    eff.appendChild(c);
+  });
+}
+async function openMcp(){
+  if(!current) return;
+  $("mcperr").textContent = ''; $("mcperr").className = 'mcp-err';
+  $("mcproot").textContent = 'cargando…'; $("mcpeff").innerHTML = '';
+  $("mcpbg").classList.add('on');
+  try {
+    var r = await fetch(qs(current, '/mcp'));
+    if(!r.ok){ $("mcproot").textContent = 'no se pudo cargar (HTTP ' + r.status + ')'; return; }
+    mcpData = await r.json();
+  } catch(_){ $("mcproot").textContent = 'error de red'; return; }
+  $("mcproot").innerHTML = 'proyecto: <b>' + esc(mcpData.projectRoot || '?') + '</b>';
+  renderMcpEff();
+  setMcpScope('project');
+}
+function setMcpScope(scope){
+  mcpScope = scope;
+  document.querySelectorAll('#mcpscope .mscope').forEach(function(b){ b.classList.toggle('sel', b.getAttribute('data-scope')===scope); });
+  var raw = (mcpData && mcpData[scope]) ? mcpData[scope] : '';
+  $("mcpjson").value = raw || MCP_TEMPLATE;
+  $("mcperr").textContent = ''; $("mcperr").className = 'mcp-err';
+}
+async function saveMcp(){
+  var txt = $("mcpjson").value, parsed;
+  try { parsed = JSON.parse(txt); } catch(e){ $("mcperr").textContent = 'JSON inválido: ' + e.message; $("mcperr").className = 'mcp-err'; return; }
+  if(!parsed || typeof parsed.servers !== 'object' || Array.isArray(parsed.servers)){ $("mcperr").textContent = 'falta un objeto "servers"'; $("mcperr").className = 'mcp-err'; return; }
+  try {
+    var r = await fetch(qs(current, '/mcp') + '&scope=' + mcpScope, { method:'PUT', body: txt });
+    if(!r.ok){ var j = await r.json().catch(function(){ return {}; }); $("mcperr").textContent = j.error || ('HTTP ' + r.status); $("mcperr").className = 'mcp-err'; return; }
+    $("mcperr").textContent = 'guardado en ' + mcpScope + ' · cerrá/reabrí la sesión para que el agente los tome'; $("mcperr").className = 'mcp-err ok';
+    var gr = await fetch(qs(current, '/mcp')); if(gr.ok){ mcpData = await gr.json(); renderMcpEff(); }
+  } catch(_){ $("mcperr").textContent = 'error de red guardando'; $("mcperr").className = 'mcp-err'; }
+}
+$("mcpbtn").addEventListener('click', openMcp);
+$("mcp-cancel").addEventListener('click', function(){ $("mcpbg").classList.remove('on'); });
+$("mcpbg").addEventListener('click', function(e){ if(e.target === $("mcpbg")) $("mcpbg").classList.remove('on'); });
+$("mcp-save").addEventListener('click', saveMcp);
+document.querySelectorAll('#mcpscope .mscope').forEach(function(b){ b.addEventListener('click', function(){ setMcpScope(b.getAttribute('data-scope')); }); });
 
 // Boot: descubrí las sesiones, elegí la default, abrí su stream + el SSE global.
 (async function(){ await loadSessions(); openES(); openGlobalES(); })();
