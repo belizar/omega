@@ -1,11 +1,15 @@
 import { execFile } from "child_process";
-import { readFileSync } from "fs";
+import { readFileSync, writeFileSync, mkdirSync } from "fs";
 import { createServer, IncomingMessage, ServerResponse } from "http";
 import { createRequire } from "module";
+import { homedir } from "os";
+import { join } from "path";
 import { Duplex } from "stream";
 import { promisify } from "util";
 import { WebSocket, WebSocketServer } from "ws";
 import { CoreServices } from "../../core.js";
+import { WorkspaceContext } from "../../workspace-context.js";
+import { loadMcpConfig } from "../../mcp/client.js";
 import { logger } from "../../logger.js";
 import { CreateSessionOpts, SessionHandle, SessionManager, SessionMode } from "./session-manager.js";
 import { DaemonClient } from "../client/daemon-client.js";
@@ -329,6 +333,47 @@ export class ServeMode implements FrontendMode {
           this.#openInExplorer(cwd);
           res.writeHead(204).end();
         } },
+      { method: "GET", path: "/mcp", handler: ({ res, sessionId }) => {
+          // Config MCP de la sesión: el efectivo (merge, taggeado por origen) + el
+          // JSON crudo de cada scope, para editarlo. cwdOf: viva o dormida.
+          const cwd = m.cwdOf(sessionId);
+          if (!cwd) return this.#json(res, 404, { error: `sesión ${sessionId} desconocida` });
+          const ctx = new WorkspaceContext(cwd);
+          const projDir = join(ctx.projectRoot, ".omega");
+          const globDir = join(homedir(), ".omega");
+          const effective: Record<string, { source: string }> = {};
+          for (const name of Object.keys(loadMcpConfig(globDir) ?? {})) effective[name] = { source: "global" };
+          for (const name of Object.keys(loadMcpConfig(projDir) ?? {})) effective[name] = { source: "project" };
+          this.#json(res, 200, {
+            projectRoot: ctx.projectRoot,
+            effective,
+            project: this.#readRawFile(join(projDir, "mcp.json")),
+            global: this.#readRawFile(join(globDir, "mcp.json")),
+          });
+        } },
+      { method: "PUT", path: "/mcp", handler: async ({ req, res, sessionId, q }) => {
+          // Guarda el mcp.json crudo en el scope pedido (proyecto | global). Preserva
+          // el formato del usuario; valida que sea JSON con un objeto "servers".
+          const cwd = m.cwdOf(sessionId);
+          if (!cwd) return this.#json(res, 404, { error: `sesión ${sessionId} desconocida` });
+          const scope = q.get("scope") === "global" ? "global" : "project";
+          const body = await this.#readBody(req);
+          let parsed: unknown;
+          try { parsed = JSON.parse(body); } catch { return this.#json(res, 400, { error: "JSON inválido" }); }
+          const servers = (parsed as { servers?: unknown })?.servers;
+          if (!servers || typeof servers !== "object" || Array.isArray(servers)) {
+            return this.#json(res, 400, { error: 'el JSON debe tener un objeto "servers"' });
+          }
+          const ctx = new WorkspaceContext(cwd);
+          const dir = scope === "global" ? join(homedir(), ".omega") : join(ctx.projectRoot, ".omega");
+          try {
+            mkdirSync(dir, { recursive: true });
+            writeFileSync(join(dir, "mcp.json"), body, "utf8");
+            this.#json(res, 200, { saved: scope, path: join(dir, "mcp.json") });
+          } catch (err) {
+            this.#json(res, 500, { error: err instanceof Error ? err.message : String(err) });
+          }
+        } },
       { method: "GET", path: "/events/all", handler: (c) => this.#globalEvents(c) },
       { method: "GET", path: "/events", revive: true, handler: (c) => this.#events(c) },
       { method: "POST", path: "/interrupt", revive: true, handler: ({ res, handle }) => {
@@ -530,6 +575,15 @@ export class ServeMode implements FrontendMode {
    *  `projects` de ~/.omega/config.json. */
   #scanRoots(): string[] {
     return [this.#baseDir, ...this.#core.config.projects];
+  }
+
+  /** Lee un archivo como texto crudo; "" si no existe (para editores del cliente). */
+  #readRawFile(path: string): string {
+    try {
+      return readFileSync(path, "utf8");
+    } catch {
+      return "";
+    }
   }
 
   #readBody(req: IncomingMessage): Promise<string> {
