@@ -23,6 +23,7 @@ import { ToolSearchTool } from "./tools/tool-search.js";
 import { WebFetchTool } from "./tools/web-fetch.js";
 import { WriteTool } from "./tools/write.js";
 import { cleanOldVisionTemps, VisionAskTool } from "./tools/vision-ask.js";
+import { SessionsTool } from "./tools/sessions.js";
 import { WorkspaceContext } from "./workspace-context.js";
 
 // Carga la .env del cwd (overrides por proyecto) y, como fallback, la global
@@ -101,6 +102,7 @@ export function createAgentStack(
     .registerLocal(new EditTool(cwd))
     .registerLocal(new WriteTool(cwd))
     .registerLocal(new WebFetchTool())
+    .registerLocal(new SessionsTool()) // acceso read-only al corpus de sesiones (meta-sesión)
     // MCP del workspace (proyecto → fallback global), vía el contexto. Antes se
     // cargaba de process.cwd (el cwd del daemon), no del worktree → no aparecían.
     .configureMcp(ctx.loadMcp());
