@@ -333,6 +333,14 @@ export class ServeMode implements FrontendMode {
           this.#openInExplorer(cwd);
           res.writeHead(204).end();
         } },
+      { method: "GET", path: "/commands", handler: ({ res, sessionId }) => {
+          // Slash commands custom de la sesión (proyecto + global, vía el contexto).
+          // El cliente los expande y submitea; el daemon solo los lista.
+          const cwd = m.cwdOf(sessionId);
+          if (!cwd) return this.#json(res, 404, { error: `sesión ${sessionId} desconocida` });
+          const cmds = new WorkspaceContext(cwd).loadCommands();
+          this.#json(res, 200, { commands: Object.values(cmds) });
+        } },
       { method: "GET", path: "/mcp", handler: ({ res, sessionId }) => {
           // Config MCP de la sesión: el efectivo (merge, taggeado por origen) + el
           // JSON crudo de cada scope, para editarlo. cwdOf: viva o dormida.
