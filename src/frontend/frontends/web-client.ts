@@ -155,6 +155,19 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
              max-height:180px; }
   textarea:focus { outline:none; border-color:var(--tool); box-shadow:0 0 0 3px color-mix(in srgb,var(--tool) 14%,transparent); }
   textarea::placeholder { color:var(--faint); }
+  /* Command palette: dropdown sobre el input al tipear "/" */
+  .cmdpal { display:none; margin-bottom:8px; background:var(--surface); border:1px solid var(--border2); border-radius:10px; overflow:hidden; max-height:280px; overflow-y:auto; box-shadow:0 -8px 30px -18px rgba(0,0,0,.7); }
+  .cmdpal.on { display:block; }
+  .cmdrow { display:flex; align-items:baseline; gap:10px; padding:8px 12px; cursor:pointer; font-family:var(--mono); }
+  .cmdrow.sel { background:color-mix(in srgb,var(--tool) 12%,var(--surface)); }
+  .cmdrow .cn { color:var(--tool); font-size:13px; flex:none; }
+  .cmdrow .ca { color:var(--faint); font-size:11px; flex:none; }
+  .cmdrow .cd { color:var(--dim); font-size:12px; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family:var(--sans); }
+  .cmdrow .csrc { font-size:8.5px; letter-spacing:.05em; text-transform:uppercase; padding:1px 5px; border-radius:4px; flex:none; }
+  .cmdrow .csrc.project { background:color-mix(in srgb,var(--tool) 20%,transparent); color:var(--tool); }
+  .cmdrow .csrc.global { background:var(--surface2); color:var(--faint); }
+  .cmdrow .csrc.builtin { background:color-mix(in srgb,var(--human) 18%,transparent); color:var(--human); }
+  .cmdpal-empty { padding:10px 12px; font-family:var(--mono); font-size:11.5px; color:var(--faint); }
   button { background:var(--tool); color:var(--bg); border:none; border-radius:10px; padding:0 18px; height:44px;
            font-family:var(--mono); font-weight:700; font-size:14px; cursor:pointer; }
   button:disabled { opacity:.4; cursor:default; }
@@ -451,8 +464,9 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
     </div>
   </main>
   <form id="form">
+    <div class="cmdpal" id="cmdpal"></div>
     <div class="inbar">
-      <textarea id="input" rows="1" placeholder="Escribí una tarea…  (Enter para enviar, Shift+Enter salto de línea)"></textarea>
+      <textarea id="input" rows="1" placeholder="Escribí una tarea…  (/ para comandos · Enter envía · Shift+Enter salto)"></textarea>
       <button id="send" type="submit">enviar</button>
     </div>
     <div class="hint" id="hint">Ω omega · frontend web · localhost</div>
@@ -1537,16 +1551,94 @@ document.querySelectorAll('#mcpscope .mscope').forEach(function(b){ b.addEventLi
 
 // ── Input ────────────────────────────────────────────────────────
 const input = $("input");
-input.addEventListener('input', ()=>{ input.style.height='auto'; input.style.height=Math.min(input.scrollHeight,180)+'px'; });
-input.addEventListener('keydown', (e)=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); $("form").requestSubmit(); }});
-$("form").addEventListener('submit', async (e)=>{
+// ── Command palette (/) ──
+var CMD_BUILTINS = [
+  { name:'/clear', description:'limpiar la conversación (visual)', builtin:true, run:function(){ resetThread(); } },
+  { name:'/mcp', description:'config MCP del proyecto', builtin:true, run:function(){ openMcp(); } },
+  { name:'/diff', description:'ir a la tab Diff', builtin:true, run:function(){ setTab('diff'); } },
+  { name:'/guide', description:'ir a la tab Guide', builtin:true, run:function(){ setTab('guide'); } },
+  { name:'/files', description:'ir a la tab Files', builtin:true, run:function(){ setTab('files'); } },
+  { name:'/terminal', description:'ir a la tab Terminal', builtin:true, run:function(){ setTab('terminal'); } }
+];
+var cmdCache = {};
+async function loadCommands(sid){
+  if(!sid || cmdCache[sid]) return cmdCache[sid] || [];
+  cmdCache[sid] = [];
+  try { var r = await fetch(qs(sid, '/commands')); if(r.ok){ cmdCache[sid] = (await r.json()).commands || []; } } catch(_){}
+  return cmdCache[sid];
+}
+function allCommands(sid){ return CMD_BUILTINS.concat(cmdCache[sid] || []); }
+
+var palOpen = false, palItems = [], palSel = 0;
+function closePalette(){ palOpen = false; $("cmdpal").classList.remove('on'); }
+function updatePalette(){
+  var mm = input.value.match(/^\/(\S*)$/);
+  if(!mm){ closePalette(); return; }
+  if(!cmdCache[current]){ loadCommands(current).then(updatePalette); } // lazy load, re-render al volver
+  var qy = mm[1].toLowerCase();
+  palItems = allCommands(current).filter(function(c){ return c.name.slice(1).toLowerCase().indexOf(qy) === 0; });
+  palSel = Math.max(0, Math.min(palSel, palItems.length - 1));
+  renderPalette();
+  palOpen = true; $("cmdpal").classList.add('on');
+}
+function renderPalette(){
+  var box = $("cmdpal"); box.innerHTML = '';
+  if(!palItems.length){ box.innerHTML = '<div class="cmdpal-empty">sin comandos</div>'; return; }
+  palItems.forEach(function(c, i){
+    var row = document.createElement('div'); row.className = 'cmdrow' + (i===palSel?' sel':'');
+    var src = c.builtin ? 'builtin' : (c.source || 'global');
+    row.innerHTML = '<span class="cn">' + esc(c.name) + '</span>'
+      + (c.argumentHint ? '<span class="ca">' + esc(c.argumentHint) + '</span>' : '')
+      + '<span class="cd">' + esc(c.description || '') + '</span>'
+      + '<span class="csrc ' + src + '">' + src + '</span>';
+    row.onmousedown = function(e){ e.preventDefault(); pickCommand(c); };
+    box.appendChild(row);
+  });
+}
+function expandCmd(body, args){
+  return String(body || '').replace(/\$ARGUMENTS\b/g, args.join(' ')).replace(/\$([1-9])\b/g, function(_m, d){ return args[Number(d)-1] || ''; });
+}
+function pickCommand(c){
+  if(c.builtin){ closePalette(); input.value=''; input.style.height='auto'; c.run(); return; }
+  if(c.argumentHint){ input.value = c.name + ' '; closePalette(); input.focus(); return; } // esperá args
+  closePalette(); input.value=''; input.style.height='auto'; submitText(expandCmd(c.body, []));
+}
+function submitText(text){
+  text = String(text).trim(); if(!text) return;
+  addMsg('vos','user').textContent = text; scroll();
+  $("hint").textContent = 'Ω omega · frontend web · localhost';
+  fetch(q('/input'), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ text }) });
+}
+
+input.addEventListener('input', function(){ input.style.height='auto'; input.style.height=Math.min(input.scrollHeight,180)+'px'; updatePalette(); });
+input.addEventListener('blur', function(){ setTimeout(closePalette, 120); });
+input.addEventListener('keydown', function(e){
+  if(palOpen && palItems.length){
+    if(e.key==='ArrowDown'){ e.preventDefault(); palSel=(palSel+1)%palItems.length; renderPalette(); return; }
+    if(e.key==='ArrowUp'){ e.preventDefault(); palSel=(palSel-1+palItems.length)%palItems.length; renderPalette(); return; }
+    if(e.key==='Escape'){ e.preventDefault(); closePalette(); return; }
+    if(e.key==='Tab' || (e.key==='Enter' && !e.shiftKey)){ e.preventDefault(); pickCommand(palItems[palSel]); return; }
+  }
+  if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); $("form").requestSubmit(); }
+});
+$("form").addEventListener('submit', function(e){
   e.preventDefault();
-  const text = input.value.trim(); if(!text) return;
-  addMsg('vos','user').textContent = text;
-  input.value=''; input.style.height='auto'; $("hint").textContent='Ω omega · frontend web · localhost'; scroll();
-  await fetch(q('/input'), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({text}) });
+  var raw = input.value.trim(); if(!raw) return;
+  var mm = raw.match(/^\/(\S+)(?:\s+([\s\S]*))?$/); // ¿"/name args…"?
+  if(mm){
+    var c = allCommands(current).find(function(x){ return x.name === '/' + mm[1]; });
+    if(c){
+      closePalette(); input.value=''; input.style.height='auto';
+      if(c.builtin){ c.run(); return; }
+      var argsStr = (mm[2] || '').trim();
+      submitText(expandCmd(c.body, argsStr ? argsStr.split(/\s+/) : []));
+      return;
+    }
+  }
+  input.value=''; input.style.height='auto'; submitText(raw);
 });
 input.focus();
+if(current) loadCommands(current);
 
 // ── Interrupción: Esc o el botón "detener" cortan el turno en curso ──
 async function interrupt(){
