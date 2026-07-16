@@ -189,16 +189,28 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
   .fields label { font-family:var(--mono); font-size:9.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--faint); display:block; margin-bottom:4px; }
   .fields input { width:100%; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:9px 11px; color:var(--ink); font-family:var(--mono); font-size:13px; }
   .fields input:focus { outline:none; border-color:var(--tool); box-shadow:0 0 0 3px color-mix(in srgb,var(--tool) 14%,transparent); }
-  /* Browser de carpetas (modo attach) */
-  .browse { border:1px solid var(--border); border-radius:9px; overflow:hidden; max-height:230px; overflow-y:auto; background:var(--bg); }
-  .br-hd { padding:7px 11px; font-family:var(--mono); font-size:10.5px; color:var(--faint); border-bottom:1px solid var(--border); word-break:break-all; position:sticky; top:0; background:var(--surface); }
-  .br-row { display:flex; align-items:center; gap:8px; padding:7px 11px; cursor:pointer; font-family:var(--mono); font-size:12.5px; color:var(--ink); }
+  /* Browser de carpetas (modo attach/create) */
+  .browse { border:1px solid var(--border); border-radius:9px; overflow:hidden; background:var(--bg); display:flex; flex-direction:column; max-height:330px; }
+  .br-crumbs { padding:8px 11px; font-family:var(--mono); font-size:11.5px; color:var(--dim); border-bottom:1px solid var(--border); flex:none; display:flex; flex-wrap:wrap; align-items:center; gap:1px; }
+  .br-cr { color:var(--tool); cursor:pointer; } .br-cr:hover { text-decoration:underline; }
+  .br-sep { color:var(--faint); padding:0 2px; }
+  .br-recent { padding:7px 11px; display:flex; flex-wrap:wrap; gap:6px; align-items:center; border-bottom:1px solid var(--border); flex:none; }
+  .br-rlbl { font-family:var(--mono); font-size:9px; letter-spacing:.1em; text-transform:uppercase; color:var(--faint); }
+  .br-chip { font-family:var(--mono); font-size:11px; color:var(--dim); background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:2px 8px; cursor:pointer; }
+  .br-chip:hover { border-color:var(--tool); color:var(--tool); }
+  .br-list { overflow-y:auto; flex:1; min-height:90px; }
+  .br-row { display:flex; align-items:center; gap:8px; padding:8px 11px; cursor:pointer; font-family:var(--mono); font-size:12.5px; color:var(--ink); }
   .br-row:hover { background:var(--surface2); }
+  .br-row:hover .bgo { opacity:1; }
   .br-row.up { color:var(--dim); }
   .br-row .bn { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .br-row .bn::before { content:"📁 "; }
   .br-row.up .bn::before { content:""; }
   .br-row .brepo { font-size:8.5px; letter-spacing:.05em; text-transform:uppercase; padding:1px 5px; border-radius:4px; background:color-mix(in srgb,var(--tool) 20%,transparent); color:var(--tool); flex:none; }
+  .br-row .bgo { font-size:11px; color:var(--faint); flex:none; opacity:0; }
+  .br-empty { padding:14px; text-align:center; font-family:var(--mono); font-size:11px; color:var(--faint); }
+  .br-sel { padding:9px 11px; border-top:1px solid var(--border); background:var(--surface); font-family:var(--mono); font-size:11.5px; display:flex; align-items:center; gap:7px; flex:none; }
+  .br-sel .chk { color:var(--ok); } .br-sel .lbl { color:var(--faint); } .br-sel .pth { color:var(--ink); word-break:break-all; }
   .modal .acts { display:flex; gap:8px; justify-content:flex-end; }
   .modal .btn { font-family:var(--mono); font-size:12px; border-radius:8px; padding:8px 16px; cursor:pointer; border:1px solid var(--border2); background:var(--surface2); color:var(--dim); }
   .modal .btn:hover { border-color:var(--tool); }
@@ -1387,10 +1399,13 @@ function renderSessions(list){
 }
 
 let lastSig = '';
+var recentCwds = []; // cwds de sesiones existentes → atajos en el picker de carpetas
 async function loadSessions(force){
   try {
     const r = await fetch('/sessions'); const d = await r.json();
     if(!current) current = d.default;
+    recentCwds = []; var seen = {};
+    (d.sessions||[]).forEach(function(s){ if(s.cwd && !seen[s.cwd]){ seen[s.cwd]=1; recentCwds.push(s.cwd); } });
     // Solo re-renderizamos si algo cambió (o si se fuerza) — así el poll no
     // rompe el hover ni parpadea el sidebar cuando no pasó nada.
     const sig = current + '|' + showArchived + '|' + sbFilter + '|' + d.sessions.map(function(s){ return [s.id,s.live,s.status,s.clients,s.title,s.archived].join(','); }).join(';');
@@ -1427,16 +1442,37 @@ async function loadBrowse(path, boxId, targetId){
 }
 function renderBrowse(d, boxId, targetId){
   const box = document.getElementById(boxId); box.innerHTML = '';
-  const hd = document.createElement('div'); hd.className = 'br-hd'; hd.textContent = d.path; box.appendChild(hd);
-  if(d.parent){
-    const up = document.createElement('div'); up.className = 'br-row up'; up.innerHTML = '<span class="bn">⬆ ..</span>';
-    up.onclick = function(){ loadBrowse(d.parent, boxId, targetId); }; box.appendChild(up);
+  const home = d.home || '';
+  const go = function(p){ loadBrowse(p, boxId, targetId); };
+
+  // ── breadcrumb clickeable (~ = home) ──
+  const bc = document.createElement('div'); bc.className = 'br-crumbs';
+  const crumb = function(label, path){ const s=document.createElement('span'); s.className='br-cr'; s.textContent=label; s.onclick=function(){ go(path); }; return s; };
+  let rest = d.path;
+  if(home && (d.path === home || d.path.indexOf(home + '/') === 0)){ bc.appendChild(crumb('~', home)); rest = d.path.slice(home.length); }
+  let acc = (rest === d.path) ? '' : home;
+  rest.split('/').filter(Boolean).forEach(function(seg){ acc += '/' + seg; bc.appendChild(document.createTextNode(' ')); const sep=document.createElement('span'); sep.className='br-sep'; sep.textContent='/'; bc.appendChild(sep); bc.appendChild(crumb(seg, acc)); });
+  box.appendChild(bc);
+
+  // ── recientes (atajos a los worktrees de tus sesiones) ──
+  if(recentCwds.length){
+    const rc = document.createElement('div'); rc.className = 'br-recent';
+    const lbl = document.createElement('span'); lbl.className='br-rlbl'; lbl.textContent='recientes:'; rc.appendChild(lbl);
+    recentCwds.slice(0, 6).forEach(function(cwd){ const chip=document.createElement('span'); chip.className='br-chip'; chip.textContent=cwd.split('/').slice(-2).join('/'); chip.title=cwd; chip.onclick=function(){ go(cwd); }; rc.appendChild(chip); });
+    box.appendChild(rc);
   }
-  (d.entries||[]).forEach(function(e){
-    const row = document.createElement('div'); row.className = 'br-row';
-    row.innerHTML = '<span class="bn">' + esc(e.name) + '</span>' + (e.isRepo ? '<span class="brepo">repo</span>' : '');
-    row.onclick = function(){ loadBrowse(e.path, boxId, targetId); }; box.appendChild(row);
-  });
+
+  // ── lista de carpetas ──
+  const list = document.createElement('div'); list.className = 'br-list';
+  if(d.parent){ const up=document.createElement('div'); up.className='br-row up'; up.innerHTML='<span class="bn">.. subir</span>'; up.onclick=function(){ go(d.parent); }; list.appendChild(up); }
+  (d.entries||[]).forEach(function(e){ const row=document.createElement('div'); row.className='br-row'; row.innerHTML='<span class="bn">'+esc(e.name)+'</span>'+(e.isRepo?'<span class="brepo">repo</span>':'')+'<span class="bgo">abrir ›</span>'; row.onclick=function(){ go(e.path); }; list.appendChild(row); });
+  if(!(d.entries||[]).length && !d.parent) list.innerHTML = '<div class="br-empty">(sin subcarpetas)</div>';
+  box.appendChild(list);
+
+  // ── footer: qué carpeta se va a usar ──
+  const ft = document.createElement('div'); ft.className = 'br-sel';
+  ft.innerHTML = '<span class="chk">✓</span><span class="lbl">esta carpeta:</span> <span class="pth">' + esc(d.path) + '</span>';
+  box.appendChild(ft);
 }
 
 // Sugerencias para el modo attach: tus worktrees reales del repo.
