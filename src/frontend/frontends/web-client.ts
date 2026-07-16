@@ -189,6 +189,16 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
   .fields label { font-family:var(--mono); font-size:9.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--faint); display:block; margin-bottom:4px; }
   .fields input { width:100%; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:9px 11px; color:var(--ink); font-family:var(--mono); font-size:13px; }
   .fields input:focus { outline:none; border-color:var(--tool); box-shadow:0 0 0 3px color-mix(in srgb,var(--tool) 14%,transparent); }
+  /* Browser de carpetas (modo attach) */
+  .browse { border:1px solid var(--border); border-radius:9px; overflow:hidden; max-height:230px; overflow-y:auto; background:var(--bg); }
+  .br-hd { padding:7px 11px; font-family:var(--mono); font-size:10.5px; color:var(--faint); border-bottom:1px solid var(--border); word-break:break-all; position:sticky; top:0; background:var(--surface); }
+  .br-row { display:flex; align-items:center; gap:8px; padding:7px 11px; cursor:pointer; font-family:var(--mono); font-size:12.5px; color:var(--ink); }
+  .br-row:hover { background:var(--surface2); }
+  .br-row.up { color:var(--dim); }
+  .br-row .bn { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .br-row .bn::before { content:"📁 "; }
+  .br-row.up .bn::before { content:""; }
+  .br-row .brepo { font-size:8.5px; letter-spacing:.05em; text-transform:uppercase; padding:1px 5px; border-radius:4px; background:color-mix(in srgb,var(--tool) 20%,transparent); color:var(--tool); flex:none; }
   .modal .acts { display:flex; gap:8px; justify-content:flex-end; }
   .modal .btn { font-family:var(--mono); font-size:12px; border-radius:8px; padding:8px 16px; cursor:pointer; border:1px solid var(--border2); background:var(--surface2); color:var(--dim); }
   .modal .btn:hover { border-color:var(--tool); }
@@ -479,16 +489,17 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
     <div class="modal">
       <h3>nueva sesión</h3>
       <div class="modes" id="modes">
-        <div class="mode sel" data-mode="shared"><div class="mt">Compartida</div><div class="md">sobre el cwd del server</div></div>
+        <div class="mode sel" data-mode="attach"><div class="mt">Attach</div><div class="md">a un worktree/carpeta que ya existe — navegá abajo</div></div>
         <div class="mode" data-mode="create"><div class="mt">Worktree nuevo</div><div class="md">Omega crea una branch aislada</div></div>
-        <div class="mode" data-mode="attach"><div class="mt">Attach</div><div class="md">a un worktree/dir que ya existe (tree.sh)</div></div>
+        <div class="mode" data-mode="shared"><div class="mt">Compartida</div><div class="md">en el cwd del daemon (raro en multi-proyecto)</div></div>
       </div>
       <div class="fields" id="f-create" style="display:none">
         <div><label>branch (opcional)</label><input type="text" id="i-branch" placeholder="feat/mi-tarea"></div>
         <div><label>base (opcional)</label><input type="text" id="i-base" placeholder="main"></div>
       </div>
       <div class="fields" id="f-attach" style="display:none">
-        <div><label>ruta del worktree</label><input type="text" id="i-cwd" list="wtlist" placeholder="/Users/vos/Workspace/…/MED-2050" autocomplete="off"><datalist id="wtlist"></datalist></div>
+        <div><label>carpeta del worktree</label><input type="text" id="i-cwd" list="wtlist" placeholder="navegá abajo, o pegá el path" autocomplete="off"><datalist id="wtlist"></datalist></div>
+        <div class="browse" id="browse"></div>
       </div>
       <div class="acts">
         <button class="btn" id="m-cancel" type="button">cancelar</button>
@@ -1389,15 +1400,42 @@ async function loadSessions(force){
 setInterval(function(){ loadSessions(); }, 4000);
 
 // ── Modal de nueva sesión (compartida / worktree nuevo / attach) ──
-let modalMode = 'shared';
+let modalMode = 'attach';
 function syncModal(){
   const modes = document.querySelectorAll('#modes .mode');
   for(const el of modes) el.classList.toggle('sel', el.getAttribute('data-mode')===modalMode);
   $("f-create").style.display = modalMode==='create' ? 'flex' : 'none';
   $("f-attach").style.display = modalMode==='attach' ? 'flex' : 'none';
+  if(modalMode==='attach' && !$("browse").firstChild) loadBrowse(localStorage.getItem('omega.browse')||'');
 }
-function openModal(){ modalMode='shared'; syncModal(); loadWorktrees(); $("modalbg").classList.add('on'); }
+function openModal(){ modalMode='attach'; $("browse").innerHTML=''; syncModal(); loadWorktrees(); $("modalbg").classList.add('on'); }
 function closeModal(){ $("modalbg").classList.remove('on'); }
+
+// Browser de carpetas server-side para elegir el worktree: navegás y la carpeta
+// donde estás queda seleccionada (i-cwd). Recuerda el último path.
+async function loadBrowse(path){
+  try {
+    const r = await fetch('/browse' + (path ? '?path=' + encodeURIComponent(path) : ''));
+    if(!r.ok) return;
+    const d = await r.json();
+    $("i-cwd").value = d.path;
+    try { localStorage.setItem('omega.browse', d.path); } catch(_){}
+    renderBrowse(d);
+  } catch(_){}
+}
+function renderBrowse(d){
+  const box = $("browse"); box.innerHTML = '';
+  const hd = document.createElement('div'); hd.className = 'br-hd'; hd.textContent = d.path; box.appendChild(hd);
+  if(d.parent){
+    const up = document.createElement('div'); up.className = 'br-row up'; up.innerHTML = '<span class="bn">⬆ ..</span>';
+    up.onclick = function(){ loadBrowse(d.parent); }; box.appendChild(up);
+  }
+  (d.entries||[]).forEach(function(e){
+    const row = document.createElement('div'); row.className = 'br-row';
+    row.innerHTML = '<span class="bn">' + esc(e.name) + '</span>' + (e.isRepo ? '<span class="brepo">repo</span>' : '');
+    row.onclick = function(){ loadBrowse(e.path); }; box.appendChild(row);
+  });
+}
 
 // Sugerencias para el modo attach: tus worktrees reales del repo.
 async function loadWorktrees(){
