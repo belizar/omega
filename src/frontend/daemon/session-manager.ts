@@ -209,15 +209,19 @@ export class SessionManager {
     }
 
     if (mode === "create") {
+      // El repo donde crear el worktree: el elegido (opts.cwd), o el baseDir del
+      // daemon. En el modelo multi-proyecto el daemon corre sobre ~/Workspace (no
+      // es repo), así que sin repo elegido caería a compartido — por eso el picker.
+      const repoDir = opts.cwd ? resolve(opts.cwd) : this.#baseDir;
       const workspace = await createWorkspace({
-        baseDir: this.#baseDir,
+        baseDir: repoDir,
         sessionId,
         isolate: true,
         branch: opts.branch,
         base: opts.base,
         config: config.worktree,
       });
-      // createWorkspace cae a compartido si baseDir no es repo git → owned solo si aisló.
+      // createWorkspace cae a compartido si repoDir no es repo git → owned solo si aisló.
       return { workspace, owned: workspace.isolated };
     }
 

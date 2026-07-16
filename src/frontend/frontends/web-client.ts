@@ -494,6 +494,7 @@ export const WEB_CLIENT_HTML = String.raw`<!doctype html>
         <div class="mode" data-mode="shared"><div class="mt">Compartida</div><div class="md">en el cwd del daemon (raro en multi-proyecto)</div></div>
       </div>
       <div class="fields" id="f-create" style="display:none">
+        <div><label>repo (dónde crear el worktree)</label><input type="text" id="i-repo" placeholder="navegá a un repo abajo (los que dicen «repo»)" autocomplete="off"><div class="browse" id="browse-create"></div></div>
         <div><label>branch (opcional)</label><input type="text" id="i-branch" placeholder="feat/mi-tarea"></div>
         <div><label>base (opcional)</label><input type="text" id="i-base" placeholder="main"></div>
       </div>
@@ -1406,34 +1407,35 @@ function syncModal(){
   for(const el of modes) el.classList.toggle('sel', el.getAttribute('data-mode')===modalMode);
   $("f-create").style.display = modalMode==='create' ? 'flex' : 'none';
   $("f-attach").style.display = modalMode==='attach' ? 'flex' : 'none';
-  if(modalMode==='attach' && !$("browse").firstChild) loadBrowse(localStorage.getItem('omega.browse')||'');
+  if(modalMode==='attach' && !$("browse").firstChild) loadBrowse(localStorage.getItem('omega.browse')||'', 'browse', 'i-cwd');
+  if(modalMode==='create' && !$("browse-create").firstChild) loadBrowse(localStorage.getItem('omega.browse')||'', 'browse-create', 'i-repo');
 }
-function openModal(){ modalMode='attach'; $("browse").innerHTML=''; syncModal(); loadWorktrees(); $("modalbg").classList.add('on'); }
+function openModal(){ modalMode='attach'; $("browse").innerHTML=''; $("browse-create").innerHTML=''; syncModal(); loadWorktrees(); $("modalbg").classList.add('on'); }
 function closeModal(){ $("modalbg").classList.remove('on'); }
 
 // Browser de carpetas server-side para elegir el worktree: navegás y la carpeta
 // donde estás queda seleccionada (i-cwd). Recuerda el último path.
-async function loadBrowse(path){
+async function loadBrowse(path, boxId, targetId){
   try {
     const r = await fetch('/browse' + (path ? '?path=' + encodeURIComponent(path) : ''));
     if(!r.ok) return;
     const d = await r.json();
-    $("i-cwd").value = d.path;
+    document.getElementById(targetId).value = d.path;
     try { localStorage.setItem('omega.browse', d.path); } catch(_){}
-    renderBrowse(d);
+    renderBrowse(d, boxId, targetId);
   } catch(_){}
 }
-function renderBrowse(d){
-  const box = $("browse"); box.innerHTML = '';
+function renderBrowse(d, boxId, targetId){
+  const box = document.getElementById(boxId); box.innerHTML = '';
   const hd = document.createElement('div'); hd.className = 'br-hd'; hd.textContent = d.path; box.appendChild(hd);
   if(d.parent){
     const up = document.createElement('div'); up.className = 'br-row up'; up.innerHTML = '<span class="bn">⬆ ..</span>';
-    up.onclick = function(){ loadBrowse(d.parent); }; box.appendChild(up);
+    up.onclick = function(){ loadBrowse(d.parent, boxId, targetId); }; box.appendChild(up);
   }
   (d.entries||[]).forEach(function(e){
     const row = document.createElement('div'); row.className = 'br-row';
     row.innerHTML = '<span class="bn">' + esc(e.name) + '</span>' + (e.isRepo ? '<span class="brepo">repo</span>' : '');
-    row.onclick = function(){ loadBrowse(e.path); }; box.appendChild(row);
+    row.onclick = function(){ loadBrowse(e.path, boxId, targetId); }; box.appendChild(row);
   });
 }
 
@@ -1460,6 +1462,8 @@ $("m-create").addEventListener('click', doCreateSession);
 async function doCreateSession(){
   const payload = { mode: modalMode };
   if(modalMode==='create'){
+    const repo = $("i-repo").value.trim();
+    if(repo) payload.cwd = repo; // el repo donde crear el worktree
     payload.branch = $("i-branch").value.trim() || undefined;
     payload.base = $("i-base").value.trim() || undefined;
   }
