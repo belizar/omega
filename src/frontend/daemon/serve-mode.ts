@@ -1,9 +1,9 @@
 import { execFile } from "child_process";
-import { readFileSync, writeFileSync, mkdirSync } from "fs";
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from "fs";
 import { createServer, IncomingMessage, ServerResponse } from "http";
 import { createRequire } from "module";
 import { homedir } from "os";
-import { join } from "path";
+import { join, resolve, dirname, sep } from "path";
 import { Duplex } from "stream";
 import { promisify } from "util";
 import { WebSocket, WebSocketServer } from "ws";
@@ -332,6 +332,25 @@ export class ServeMode implements FrontendMode {
           if (!cwd) return this.#json(res, 404, { error: `sesión ${sessionId} desconocida` });
           this.#openInExplorer(cwd);
           res.writeHead(204).end();
+        } },
+      { method: "GET", path: "/browse", handler: ({ res, q }) => {
+          // Browser de carpetas server-side (para elegir el cwd de una sesión sin
+          // tipear el path). Solo dirs, dentro de HOME (seguridad). Flag isRepo para
+          // resaltar repos/worktrees.
+          const home = homedir();
+          const abs = resolve(q.get("path")?.trim() || home);
+          if (abs !== home && !abs.startsWith(home + sep)) {
+            return this.#json(res, 400, { error: "fuera del home" });
+          }
+          try {
+            const entries = readdirSync(abs, { withFileTypes: true })
+              .filter((e) => e.isDirectory() && !e.name.startsWith(".") && e.name !== "node_modules")
+              .map((e) => ({ name: e.name, path: join(abs, e.name), isRepo: existsSync(join(abs, e.name, ".git")) }))
+              .sort((a, b) => a.name.localeCompare(b.name));
+            this.#json(res, 200, { path: abs, parent: abs === home ? null : dirname(abs), home, entries });
+          } catch (err) {
+            this.#json(res, 400, { error: err instanceof Error ? err.message : String(err) });
+          }
         } },
       { method: "GET", path: "/commands", handler: ({ res, sessionId }) => {
           // Slash commands custom de la sesión (proyecto + global, vía el contexto).
